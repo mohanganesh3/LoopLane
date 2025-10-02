@@ -18,48 +18,58 @@ const axios = require('axios');
 exports.showPostRidePage = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
 
-    if (user.role !== 'RIDER') {
+    // Early exit if not a rider
+    if (user.role === 'DRIVER' || user.role !== 'RIDER') {
         req.flash('error', 'Only riders can post rides');
         return res.redirect('/user/dashboard');
     }
 
-    // Check if profile is complete
-    if (!user.vehicles || user.vehicles.length === 0) {
+    // Validate profile completeness
+    const hasVehicles = Array.isArray(user.vehicles) && user.vehicles.length > 0;
+    if (!hasVehicles) {
         req.flash('warning', 'Please complete your profile and add vehicle details first');
         return res.redirect('/user/complete-profile');
     }
 
-    // Check if documents are uploaded
-    if (!user.documents?.driverLicense?.frontImage || !user.documents?.governmentId?.frontImage) {
+    // Validate document upload
+    const licenseUploaded = user.documents?.driverLicense?.frontImage;
+    const idUploaded = user.documents?.governmentId?.frontImage;
+    if (!(licenseUploaded && idUploaded)) {
         req.flash('warning', 'Please upload your verification documents first');
         return res.redirect('/user/upload-documents');
     }
 
-    // Check if verified
-    if (user.verificationStatus !== 'VERIFIED') {
+    // Check verification status
+    const isVerified = user.verificationStatus === 'VERIFIED';
+    if (!isVerified) {
         return res.render('error', {
             title: 'Verification Pending',
             message: 'Your documents are under review. You can post rides once admin approves your verification.'
         });
     }
 
-    // Get approved vehicles
-    const approvedVehicles = user.vehicles.filter(v => v.status === 'APPROVED');
+    // Collect approved vehicles
+    const approvedVehicles = (user.vehicles || []).reduce((acc, v) => {
+        if (v.status === 'APPROVED') acc.push(v);
+        return acc;
+    }, []);
 
-    // If no approved vehicles, show error
-    if (approvedVehicles.length === 0) {
+    // If none approved
+    if (!approvedVehicles.length) {
         return res.render('error', {
             title: 'No Approved Vehicles',
             message: 'You need at least one approved vehicle to post rides. Please wait for admin to verify your vehicle, or contact support if this is taking too long.'
         });
     }
 
+    // Render post-ride page
     res.render('rides/post-ride', {
         title: 'Post a Ride - LANE Carpool',
         user,
         vehicles: approvedVehicles
     });
 });
+
 
 /**
  * Post a new ride
