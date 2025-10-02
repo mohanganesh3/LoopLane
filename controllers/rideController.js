@@ -178,46 +178,51 @@ exports.postRide = asyncHandler(async (req, res) => {
     }
 
     // Create ride with correct schema structure
-    const ride = await Ride.create({
-        rider: user._id,
-        vehicle: vehicle._id,
-        route: {
-            start: {
-                name: fromLocation,
-                address: originCoordinates.address || fromLocation,
-                coordinates: fromCoords
-            },
-            destination: {
-                name: toLocation,
-                address: destinationCoordinates.address || toLocation,
-                coordinates: toCoords
-            },
-            intermediateStops: stops ? [stops] : [],
-            geometry: geometry,
-            distance: distance,
-            duration: duration
+   // Step 1: Prepare the ride data
+const rideData = {
+    rider: user._id,
+    vehicle: vehicle._id,
+    route: {
+        start: {
+            name: fromLocation,
+            address: originCoordinates.address || fromLocation,
+            coordinates: fromCoords
         },
-        schedule: {
-            date: departureDate,
-            time: timeString,
-            departureDateTime: departureDate,
-            flexibleTiming: false
+        destination: {
+            name: toLocation,
+            address: destinationCoordinates.address || toLocation,
+            coordinates: toCoords
         },
-        pricing: {
-            pricePerSeat: parseFloat(pricePerSeat),
-            totalSeats: parseInt(availableSeats),
-            availableSeats: parseInt(availableSeats)
-        },
-        preferences: {
-            gender: ladiesOnly ? 'FEMALE_ONLY' : 'ANY',
-            autoAcceptBookings: instantBooking === 'true' || instantBooking === true || false,
-            smoking: smokingAllowed || false,
-            pets: petsAllowed || false,
-            luggage: luggageAllowed ? 'LARGE_LUGGAGE' : 'MEDIUM_BAG'
-        },
-        specialInstructions: notes || '',
-        status: 'ACTIVE'
-    });
+        intermediateStops: stops ? [stops] : [],
+        geometry: geometry,
+        distance: distance,
+        duration: duration
+    },
+    schedule: {
+        date: departureDate,
+        time: timeString,
+        departureDateTime: departureDate,
+        flexibleTiming: false
+    },
+    pricing: {
+        pricePerSeat: parseFloat(pricePerSeat),
+        totalSeats: parseInt(availableSeats),
+        availableSeats: parseInt(availableSeats)
+    },
+    preferences: {
+        gender: ladiesOnly ? 'FEMALE_ONLY' : 'ANY',
+        autoAcceptBookings: instantBooking === 'true' || instantBooking === true || false,
+        smoking: smokingAllowed || false,
+        pets: petsAllowed || false,
+        luggage: luggageAllowed ? 'LARGE_LUGGAGE' : 'MEDIUM_BAG'
+    },
+    specialInstructions: notes || '',
+    status: 'ACTIVE'
+};
+
+// Step 2: Create the ride
+const ride = await Ride.create(rideData);
+
 
     console.log('Ride created successfully:', ride._id);
 
