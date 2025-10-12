@@ -383,6 +383,17 @@ socket.on('location-update', (data) => {
     document.getElementById('statusText').innerHTML = '<i class="fas fa-circle text-green-500 animate-pulse mr-1"></i>Live';
 });
 
+// Backward compatibility: some emitters send 'driver-location'
+socket.on('driver-location', (data) => {
+    console.log('🚗 Driver location (compat) received:', data);
+    const { location } = data;
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+        updateCurrentLocation(location);
+        document.getElementById('liveStatus').className = 'px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800';
+        document.getElementById('statusText').innerHTML = '<i class="fas fa-circle text-green-500 animate-pulse mr-1"></i>Live';
+    }
+});
+
 socket.on('disconnect', () => {
     console.log('⚠️ Socket disconnected');
     document.getElementById('liveStatus').className = 'px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800';
@@ -409,38 +420,13 @@ document.getElementById('showRouteBtn').addEventListener('click', () => {
     }
 });
 
-// SOS button
+// SOS button - Use the global SOS system
 document.getElementById('sosBtn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to trigger an emergency SOS alert?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/sos/trigger', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                bookingId,
-                rideId,
-                location: currentMarker ? {
-                    coordinates: [
-                        currentMarker.getLatLng().lng,
-                        currentMarker.getLatLng().lat
-                    ]
-                } : null
-            })
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('SOS alert sent! Emergency contacts have been notified.');
-        } else {
-            alert('Failed to send SOS alert: ' + data.message);
-        }
-    } catch (error) {
-        console.error('Error sending SOS:', error);
-        alert('Failed to send SOS alert. Please call emergency services directly.');
+    // Use the triggerSOSAlert function from sos.js which handles location properly
+    if (typeof triggerSOSAlert === 'function') {
+        await triggerSOSAlert(rideId, bookingId);
+    } else {
+        alert('SOS system not available. Please refresh the page.');
     }
 });
 
@@ -453,8 +439,23 @@ setInterval(() => {
 }, 60000); // Update every minute
 
 // Initialize map on page load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Request all permissions upfront
+    const permissionManager = new PermissionManager();
+    
+    // Check if permissions already granted
+    const currentStatus = await permissionManager.checkPermissionStatus();
+    
+    if (!currentStatus.location.granted) {
+        // Show permission modal
+        await permissionManager.requestAllPermissions();
+    } else {
+        console.log('✅ Location permission already granted');
+    }
+    
+    // Initialize map regardless (will work better with permissions)
     initMap();
+    
     // Fix grey map (Leaflet needs a size invalidate after render)
     setTimeout(() => {
         try { map.invalidateSize(); } catch (e) {}

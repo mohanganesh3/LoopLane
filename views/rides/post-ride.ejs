@@ -721,22 +721,40 @@
             data.ladiesOnly = formData.get('ladiesOnly') === 'on';
 
             try {
-                const response = await fetch('/rides/post', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+                            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/rides/post', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
 
-                const result = await response.json();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    let result;
+                    try {
+                        result = JSON.parse(xhr.responseText);
+                    } catch (e) {
+                        console.error('Invalid JSON response', e);
+                        LANEApp.showAlert('Failed to post ride', 'error');
+                        return;
+                    }
 
-                if (response.ok) {
-                    LANEApp.showAlert('Ride posted successfully!', 'success');
-                    setTimeout(() => {
-                        window.location.href = '/rides/my-rides';
-                    }, 1500);
-                } else {
-                    LANEApp.showAlert(result.message || 'Failed to post ride', 'error');
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        LANEApp.showAlert('Ride posted successfully!', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/rides/my-rides';
+                        }, 1500);
+                    } else {
+                        LANEApp.showAlert(result.message || 'Failed to post ride', 'error');
+                    }
                 }
+            };
+
+            xhr.onerror = function() {
+                console.error('XHR request failed');
+    LANEApp.showAlert('Failed to post ride', 'error');
+};
+
+// Send JSON payload
+xhr.send(JSON.stringify(data));
+
             } catch (error) {
                 console.error('Error posting ride:', error);
                 LANEApp.showAlert('Failed to post ride', 'error');

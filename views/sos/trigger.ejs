@@ -443,7 +443,8 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
-    <script src="/js/sos.js"></script>
+    <script src="/js/permissions.js?v=<%= Date.now() %>"></script>
+    <script src="/js/sos.js?v=<%= Date.now() %>"></script>
     <script>
         let currentLocation = null;
         let selectedEmergencyType = 'SOS';
