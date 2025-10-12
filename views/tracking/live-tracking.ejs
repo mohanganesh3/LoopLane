@@ -383,6 +383,17 @@ socket.on('location-update', (data) => {
     document.getElementById('statusText').innerHTML = '<i class="fas fa-circle text-green-500 animate-pulse mr-1"></i>Live';
 });
 
+// Backward compatibility: some emitters send 'driver-location'
+socket.on('driver-location', (data) => {
+    console.log('🚗 Driver location (compat) received:', data);
+    const { location } = data;
+    if (location && typeof location.latitude === 'number' && typeof location.longitude === 'number') {
+        updateCurrentLocation(location);
+        document.getElementById('liveStatus').className = 'px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800';
+        document.getElementById('statusText').innerHTML = '<i class="fas fa-circle text-green-500 animate-pulse mr-1"></i>Live';
+    }
+});
+
 socket.on('disconnect', () => {
     console.log('⚠️ Socket disconnected');
     document.getElementById('liveStatus').className = 'px-3 py-1 rounded-full text-sm font-semibold bg-red-100 text-red-800';

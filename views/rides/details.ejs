@@ -2199,10 +2199,10 @@
             }
         }
 
-        // ============================================
-        // 🗺️ AUTOMATIC LOCATION TRACKING FOR DRIVERS
-        // ============================================
-        <% if (ride.rider._id.toString() === user._id.toString() && ride.status === 'IN_PROGRESS') { %>
+    // ============================================
+    // 🗺️ AUTOMATIC LOCATION TRACKING FOR DRIVERS
+    // ============================================
+    <% if (ride.rider._id.toString() === user._id.toString() && ['IN_PROGRESS','ACTIVE'].includes(ride.status)) { %>
         let locationWatchId = null;
         let lastLocationUpdate = null;
         const LOCATION_UPDATE_INTERVAL = 10000; // Update every 10 seconds
@@ -2370,7 +2370,7 @@
 
         // Start tracking when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚗 Ride is IN_PROGRESS - Starting automatic location tracking');
+            console.log('🚗 Ride is IN_PROGRESS/READY_FOR_PICKUP - Starting automatic location tracking');
             startLocationTracking();
         });
 
