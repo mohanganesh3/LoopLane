@@ -1,0 +1,22 @@
+<% if (results && results.length > 0) { %>
+  <ul class="ride-results-list">
+    <% results.forEach(function(result) { %>
+      <li class="ride-result-item">
+        <div>
+          <strong><%= result.ride.route?.start?.name || 'Pickup location' %></strong> to <strong><%= result.ride.route?.destination?.name || 'Destination' %></strong>
+        </div>
+        <div>
+          Date: <%= new Date(result.ride.schedule?.departureDateTime).toLocaleString() %>
+        </div>
+        <div>
+          Price: ₹<%= result.price || result.ride.pricing?.pricePerSeat || 0 %>
+        </div>
+        <div>
+          <a href="/rides/<%= result.ride._id %>" target="_blank">View Details</a>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+<% } else { %>
+  <div class="no-results">No rides found. Try adjusting your search criteria.</div>
+<% } %>

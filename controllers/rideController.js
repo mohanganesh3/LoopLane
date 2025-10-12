@@ -349,6 +349,11 @@ exports.searchRides = asyncHandler(async (req, res) => {
         'Expires': '0'
     });
 
+    // If AJAX request, render partial EJS for results
+    if (req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest') {
+        return res.render('rides/partials/searchResults', { results });
+    }
+    // Otherwise, send JSON (or render full page as needed)
     res.status(200).json({
         success: true,
         count: results.length,
