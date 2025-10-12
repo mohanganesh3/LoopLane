@@ -1,0 +1,365 @@
+================================================================================
+                    GROUP 39 - LOOPLANE PROJECT
+                         GIT COMMIT LOGS
+                    Mid-Review Submission - Oct 2025
+================================================================================
+
+PROJECT: LoopLane - Carpooling Platform
+REPOSITORY: CreaPrompt_Studio (https://github.com/mohanganesh3/CreaPrompt_Studio)
+BRANCH: main
+LOG PERIOD: September 12, 2025 - October 13, 2025
+
+================================================================================
+COMPLETE COMMIT HISTORY 
+================================================================================
+
+
+Commit: 8bf9f64
+Author: Sujal Bandi <sujalpcmb123@gmail.com>
+Date:   2025-10-13
+Title:  Merge pull request #9 from mohanganesh3/sujal
+Details: Merged AJAX ride search functionality into main branch
+
+Commit: 1228577
+Author: MohanGanesh <mohanganesh165577@gmail.com>
+Date:   2025-10-13
+Title:  Merge pull request #7 from mohanganesh3/mybranch
+Details: Integrated real-time tracking and SOS features
+
+Commit: 92e0662
+Author: MohanGanesh <mohanganesh165577@gmail.com>
+Date:   2025-10-13
+Title:  Merge branch 'main' into mybranch
+Details: Sync main branch changes before final merge
+
+Commit: 4c541f6
+Author: karthik1agisam <149920811+karthik1agisam@users.noreply.github.com>
+Date:   2025-10-13
+Title:  Merge pull request #8 from mohanganesh3/ajax/changing
+Details: Merged AJAX functionality for ride filtering
+
+Commit: abf3a05
+Author: Akshaya <akshaya.aienavolu@gmail.com>
+Date:   2025-10-13
+Title:  Merge branch 'main' of https://github.com/mohanganesh3/LANE into mybranch
+Details: Synchronized booking features with main branch
+
+Commit: da865aa
+Author: Akshaya <akshaya.aienavolu@gmail.com>
+Date:   2025-10-13
+Title:  Update bookingController.js
+Details: Enhanced booking controller logic and error handling
+
+Commit: b9b3b89
+Author: karthik1agisam <149920811+karthik1agisam@users.noreply.github.com>
+Date:   2025-10-13
+Title:  Merge pull request #4 from mohanganesh3/feature/showPostRideUpdate
+Details: Integrated refactored ride posting logic
+
+Commit: 7df74d6
+Author: SujalBandi <sujalpcmb123@gmail.com>
+Date:   2025-10-13
+Title:  Merge branch 'main' of https://github.com/mohanganesh3/LANE into sujal
+Details: Synced sujal branch with latest main changes
+
+Commit: 4bb0920
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-12
+Title:  Merge pull request #1 from mohanganesh3/dinesh
+Details: Merged authentication XHR implementations
+
+Commit: 1c4c384
+Author: MohanGanesh <mohanganesh165577@gmail.com>
+Date:   2025-10-12
+Title:  Update README.md
+Details: Documentation improvements
+
+Commit: 2e8a4b2
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  fix(tracking): wire io to app, correct driver update endpoint path, init tracking if missing, cap breadcrumbs, add Leaflet invalidateSize and polling fallback
+Details: Critical real-time tracking fixes for Socket.IO integration
+
+Commit: 3e98c6b
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  fix(sos): connect tracking page SOS button to proper location-aware handler
+Details: SOS emergency button integration with location tracking
+
+Commit: 059b59a
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  feat(permissions): add comprehensive permission manager with modal UI
+Details: Geolocation permission management system
+
+Commit: e6a4eb7
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  fix(sos): add coordinate validation + logging to debug null location bug
+Details: Location coordinate validation for SOS system
+
+Commit: 0cfeed4
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  fix(critical): fix SOS null coordinates bug by adding getCurrentLocation helper; enable driver location tracking for PICKUP_PENDING status
+Details: Major SOS bug fix with location helper function
+
+Commit: 98d6156
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  feat(ui): show Live Track button on My Bookings and Booking Details for READY_FOR_PICKUP and other active states
+Details: Live tracking UI enhancement
+
+Commit: 98993e3
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-12
+Title:  feat(tracking): enable live tracking during READY_FOR_PICKUP state; compat socket handler; auto-start driver geolocation when ACTIVE/READY_FOR_PICKUP; allow booking lookup by rideId in READY_FOR_PICKUP
+Details: Complete live tracking state management system
+
+Commit: d11fd7d
+Author: SujalBandi <sujalpcmb123@gmail.com>
+Date:   2025-10-10
+Title:  Update ride search form with AJAX (XHR) functionality
+Details: Implemented XMLHttpRequest-based ride search
+
+Commit: 7733368
+Author: SujalBandi <sujalpcmb123@gmail.com>
+Date:   2025-10-08
+Title:  Add EJS partial for AJAX ride search results
+Details: Created partial template for dynamic search results
+
+Commit: 33dda75
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-07
+Title:  geo fencing
+Details: Geofencing implementation for safety zones
+
+Commit: 539bbe4
+Author: SujalBandi <sujalpcmb123@gmail.com>
+Date:   2025-10-06
+Title:  Render partial EJS for AJAX ride search requests
+Details: Server-side partial rendering for AJAX requests
+
+Commit: e23dcea
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-06
+Title:  chore(ui): replace unread-count fetch with XHR polling
+Details: Converted fetch API to XMLHttpRequest for notifications
+
+Commit: d518a70
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-06
+Title:  chore(admin): make approval UI XHR-based in verification-details
+Details: Admin verification approval using XHR
+
+Commit: 7d0cf18
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-06
+Title:  fix(sos): resolve critical emergency alert system issues - location tracking, notifications, and UI improvements
+Details: Complete SOS system overhaul
+
+Commit: 189ce3c
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-06
+Title:  fix(sos): resolve critical emergency alert system issues - location tracking, notifications, and UI improvements
+Details: Additional SOS system fixes
+
+Commit: 9f72d3f
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-05
+Title:  chore(admin): make approve/reject XHR and add data-user-id
+Details: Admin actions converted to XMLHttpRequest
+
+Commit: 58c933c
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-05
+Title:  chore(auth): switch verify-otp to XMLHttpRequest (XHR)
+Details: OTP verification using XHR instead of fetch
+
+Commit: c8e90d3
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-05
+Title:  fixed code
+Details: General bug fixes and code improvements
+
+Commit: 41757e6
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-05
+Title:  fixed code
+Details: Additional code fixes
+
+Commit: a833ba2
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-05
+Title:  change show rides controller with filters
+Details: Enhanced ride filtering functionality
+
+Commit: 20dba0e
+Author: SujalBandi <sujalpcmb123@gmail.com>
+Date:   2025-10-04
+Title:  Add XHR-based AJAX to ride search form
+Details: Initial AJAX implementation for ride search
+
+Commit: 58891d4
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-04
+Title:  chore(auth): switch register form to XMLHttpRequest (XHR)
+Details: Registration form converted to XHR
+
+Commit: 859ca68
+Author: MudeDineshNaik <mudedineshnaik7@gmail.com>
+Date:   2025-10-04
+Title:  chore(auth): switch login form to XMLHttpRequest (XHR)
+Details: Login form converted to XHR for async submission
+
+Commit: 27c889c
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-10-03
+Title:  added real time tracking
+Details: Real-time GPS tracking with Socket.IO
+
+Commit: bb31620
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-02
+Title:  Refactored showPostRidePage logic without changing functionality
+Details: Code refactoring for better maintainability
+
+Commit: 39b33e0
+Author: Akshaya <akshaya.aienavolu@gmail.com>
+Date:   2025-10-02
+Title:  modified controllers.js
+Details: Booking controller enhancements
+
+Commit: 69f9f80
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-02
+Title:  change show rides controller with filters
+Details: Initial ride filtering implementation
+
+Commit: 2e1b8b8
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-02
+Title:  change ajax in code
+Details: AJAX integration in codebase
+
+Commit: ac03ede
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-02
+Title:  Merge branch 'main' of https://github.com/mohanganesh3/LANE into ajax/changing
+Details: Branch synchronization
+
+Commit: 6054354
+Author: karthik1agisam <karthikagisam353570@gmail.com>
+Date:   2025-10-02
+Title:  add ajax funtinoality
+Details: Core AJAX functionality addition
+
+Commit: 8ff707b
+Author: Mohan Ganesh <mohanganesh3@users.noreply.github.com>
+Date:   2025-09-12
+Title:  Initial commit: LANE Carpool Platform
+Details: Project initialization with complete backend structure
+
+--------------------------------------------------------------------------------
+MOHAN GANESH S20230010092 
+--------------------------------------------------------------------------------
+✓ Initial commit: LANE Carpool Platform (Sep 12)
+✓ Added real time tracking (Oct 3)
+✓ Fixed code improvements (Oct 5) [2 commits]
+✓ Fix(sos): resolve critical emergency alert system (Oct 6) [2 commits]
+✓ Geo fencing implementation (Oct 7)
+✓ feat(tracking): enable live tracking during READY_FOR_PICKUP (Oct 12)
+✓ feat(ui): show Live Track button on My Bookings (Oct 12)
+✓ fix(critical): fix SOS null coordinates bug (Oct 12)
+✓ fix(sos): add coordinate validation + logging (Oct 12)
+✓ feat(permissions): add comprehensive permission manager (Oct 12)
+✓ fix(sos): connect tracking page SOS button (Oct 12)
+✓ fix(tracking): wire io to app, correct driver update endpoint (Oct 12)
+✓ Update README.md (Oct 12)
+✓ Merge pull request #7 from mohanganesh3/mybranch (Oct 13)
+✓ Merge branch 'main' into mybranch (Oct 13)
+
+PRIMARY CONTRIBUTIONS:
+• Real-time GPS tracking with Socket.IO
+• SOS emergency alert system
+• Geofencing and safety features
+• Location tracking and breadcrumbs
+• Permission management system
+
+--------------------------------------------------------------------------------
+KARTHIK S20230010005 
+--------------------------------------------------------------------------------
+✓ add ajax funtinoality (Oct 2)
+✓ Merge branch 'main' into ajax/changing (Oct 2)
+✓ change ajax in code (Oct 2)
+✓ change show rides controller with filters (Oct 2)
+✓ change show rides controller with filters (Oct 5)
+✓ Refactored showPostRidePage logic without changing functionality (Oct 2)
+✓ Merge pull request #4 from mohanganesh3/feature/showPostRideUpdate (Oct 13)
+✓ Merge pull request #8 from mohanganesh3/ajax/changing (Oct 13)
+
+PRIMARY CONTRIBUTIONS:
+• AJAX functionality integration
+• Ride filtering and search UI
+• Post ride page refactoring
+• XMLHttpRequest implementations
+• Dynamic content loading
+
+--------------------------------------------------------------------------------
+DINESH S20230010152 
+--------------------------------------------------------------------------------
+✓ chore(auth): switch login form to XMLHttpRequest (XHR) (Oct 4)
+✓ chore(auth): switch register form to XMLHttpRequest (XHR) (Oct 4)
+✓ chore(auth): switch verify-otp to XMLHttpRequest (XHR) (Oct 5)
+✓ chore(admin): make approve/reject XHR and add data-user-id (Oct 5)
+✓ chore(admin): make approval UI XHR-based in verification-details (Oct 6)
+✓ chore(ui): replace unread-count fetch with XHR polling (Oct 6)
+✓ Merge pull request #1 from mohanganesh3/dinesh (Oct 12)
+
+PRIMARY CONTRIBUTIONS:
+• Authentication system (Login, Register, OTP)
+• Admin panel XHR integration
+• User verification system
+• Notification polling system
+• Async form submissions
+
+--------------------------------------------------------------------------------
+AKSHAYA S20230010006 
+--------------------------------------------------------------------------------
+✓ modified controllers.js (Oct 2)
+✓ Update bookingController.js (Oct 13)
+✓ Merge branch 'main' into mybranch (Oct 13)
+
+PRIMARY CONTRIBUTIONS:
+• Booking controller logic
+• Booking status management
+• Booking validation and error handling
+• Integration with ride system
+
+--------------------------------------------------------------------------------
+SUJAL S20230010232
+--------------------------------------------------------------------------------
+✓ Add XHR-based AJAX to ride search form (Oct 4)
+✓ Render partial EJS for AJAX ride search requests (Oct 6)
+✓ Add EJS partial for AJAX ride search results (Oct 8)
+✓ Update ride search form with AJAX (XHR) functionality (Oct 10)
+✓ Merge branch 'main' into sujal (Oct 13)
+✓ Merge pull request #9 from mohanganesh3/sujal (Oct 13)
+
+PRIMARY CONTRIBUTIONS:
+• Ride search AJAX implementation
+• EJS partial rendering for dynamic results
+• Search form XMLHttpRequest integration
+• Dynamic search results without page reload
+
+================================================================================
+DEVELOPMENT STATISTICS
+================================================================================
+
+Total Commits: 42 commits
+Team Size: 5 members
+Branches Used: main, sujal, dinesh, mybranch, ajax/changing
+Pull Requests: 9 merged PRs
+
+
+

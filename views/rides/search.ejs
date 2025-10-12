@@ -76,33 +76,16 @@
             function initLocationAutocomplete(input, coordsInput) {
                 let debounceTimer;
                 let suggestionsDiv = null;
-                // ...existing code for autocomplete...
-            }
 
-            // Traditional AJAX for ride search form
-            document.getElementById('ride-search-form').addEventListener('submit', function(e) {
-                e.preventDefault();
-                var form = e.target;
-                var params = [];
-                for (var i = 0; i < form.elements.length; i++) {
-                    var el = form.elements[i];
-                    if (el.name && !el.disabled) {
-                        params.push(encodeURIComponent(el.name) + '=' + encodeURIComponent(el.value));
+                // Create suggestions dropdown
+                const createSuggestionsDiv = () => {
+                    if (!suggestionsDiv) {
+                        suggestionsDiv = document.createElement('div');
+                        suggestionsDiv.className = 'absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-80 overflow-y-auto hidden';
+                        input.parentElement.appendChild(suggestionsDiv);
                     }
-                }
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', '/rides/search/results?' + params.join('&'), true);
-                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState === 4 && xhr.status === 200) { //added xhr
-                        document.getElementById('search-results').innerHTML = xhr.responseText;
-                    }
+                    return suggestionsDiv;
                 };
-                xhr.send();
-                    input.parentElement.appendChild(suggestionsDiv);
-                }
-                return suggestionsDiv;
-            };
 
             // Fetch suggestions from Nominatim API
             const fetchSuggestions = async (query) => {
@@ -252,7 +235,8 @@
             );
         });
 
-        document.getElementById('searchForm').addEventListener('submit', async (e) => {
+        // Traditional XHR for ride search form
+        document.getElementById('ride-search-form').addEventListener('submit', function(e) {
             e.preventDefault();
 
             // Validate that locations are selected from autocomplete
@@ -260,131 +244,56 @@
             const toCoords = document.getElementById('toCoordinates').value;
 
             if (!fromCoords || !toCoords) {
-                LANEApp.showAlert('Please select valid locations from the dropdown', 'error');
+                showAlert('Please select valid locations from the dropdown', 'error');
                 return;
             }
 
-            // Get form data
-            const formData = new FormData(e.target);
-
-            // Build query parameters with coordinate data
-            const params = new URLSearchParams({
-                origin: fromCoords,
-                destination: toCoords,
-                date: formData.get('date'),
-                seats: formData.get('seats')
-            });
-
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('resultsSection').classList.remove('hidden');
-
-            try {
-                const response = await fetch(`/rides/search/results?${params}`);
-
-                console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers);
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                console.log('Response data:', data);
-
-                document.getElementById('loading').classList.add('hidden');
-
-                if (!data || !data.rides) {
-                    console.error('Invalid response format:', data);
-                    LANEApp.showAlert('Invalid response from server', 'error');
-                    return;
-                }
-
-                document.getElementById('resultCount').textContent = data.rides.length;
-
-                if (data.rides.length === 0) {
-                    document.getElementById('noResults').classList.remove('hidden');
-                    document.getElementById('ridesContainer').innerHTML = '';
-                } else {
-                    document.getElementById('noResults').classList.add('hidden');
-                    displayRides(data.rides);
-                }
-            } catch (error) {
-                console.error('Search error:', error);
-                document.getElementById('loading').classList.add('hidden');
-                LANEApp.showAlert('Failed to search rides: ' + error.message, 'error');
+            // Map form fields to validation-expected parameter names
+            var form = e.target;
+            var params = [];
+            
+            // Add origin (from fromCoordinates)
+            params.push('origin=' + encodeURIComponent(fromCoords));
+            
+            // Add destination (from toCoordinates)
+            params.push('destination=' + encodeURIComponent(toCoords));
+            
+            // Add date if provided
+            var dateInput = form.elements['date'];
+            if (dateInput && dateInput.value) {
+                params.push('date=' + encodeURIComponent(dateInput.value));
             }
+            
+            // Add seats if provided
+            var seatsInput = form.elements['seats'];
+            if (seatsInput && seatsInput.value) {
+                params.push('seats=' + encodeURIComponent(seatsInput.value));
+            }
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/rides/search/results?' + params.join('&'), true);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        document.getElementById('search-results').innerHTML = xhr.responseText;
+                    } else {
+                        // Try to parse error message from response
+                        var errorMsg = 'Failed to search rides';
+                        try {
+                            var errorData = JSON.parse(xhr.responseText);
+                            if (errorData && errorData.message) {
+                                errorMsg = errorData.message;
+                            }
+                        } catch(e) {
+                            // Use default error message
+                        }
+                        showAlert(errorMsg, 'error');
+                    }
+                }
+            };
+            xhr.send();
         });
-
-        function displayRides(results) {
-            console.log('displayRides called with', results.length, 'results');
-
-            const container = document.getElementById('ridesContainer');
-            container.innerHTML = results.map((result, index) => {
-                console.log(`Processing result ${index}:`, {
-                    hasRide: !!result.ride,
-                    carbonSaved: result.carbonSaved,
-                    carbonSavedType: typeof result.carbonSaved,
-                    price: result.price
-                });
-
-                const ride = result.ride;
-                return `
-        <div class="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6">
-            <div class="flex items-start justify-between">
-                <div class="flex-1">
-                    <div class="flex items-center mb-4">
-                        <img src="${ride.rider?.profilePhoto || '/images/default-avatar.png'}" 
-                            class="w-12 h-12 rounded-full mr-4" alt="${ride.rider?.name || 'Driver'}">
-                        <div>
-                            <h3 class="font-semibold text-gray-800">${ride.rider?.name || 'Driver'}</h3>
-                            <div class="flex items-center text-sm text-gray-600">
-                                <div class="text-yellow-400 mr-2">
-                                    ${'★'.repeat(Math.floor(ride.rider?.rating?.overall || 0))}${'☆'.repeat(5 - Math.floor(ride.rider?.rating?.overall || 0))}
-                                </div>
-                                <span>${ride.rider?.rating?.overall?.toFixed(1) || 'New'}</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="space-y-2 mb-4">
-                        <div class="flex items-center text-gray-700">
-                            <i class="fas fa-map-marker-alt text-green-600 w-6"></i>
-                            <span class="ml-2">${ride.route?.start?.name || 'Pickup location'}</span>
-                        </div>
-                        <div class="flex items-center text-gray-700">
-                            <i class="fas fa-map-marker-alt text-red-600 w-6"></i>
-                            <span class="ml-2">${ride.route?.destination?.name || 'Destination'}</span>
-                        </div>
-                        <div class="flex items-center text-gray-600 text-sm">
-                            <i class="fas fa-clock w-6"></i>
-                            <span class="ml-2">${new Date(ride.schedule?.departureDateTime).toLocaleString()}</span>
-                        </div>
-                        <div class="flex items-center text-gray-600 text-sm">
-                            <i class="fas fa-route w-6"></i>
-                            <span class="ml-2">${result.distance?.toFixed(1) || ride.route?.distance?.toFixed(1)} km</span>
-                            ${result.directDistance ? `<span class="ml-2 text-xs text-gray-400">(direct: ${result.directDistance.toFixed(1)} km)</span>` : ''}
-                            ${result.detour && result.detour > 0 ? `<span class="ml-2 px-2 py-0.5 ${result.detour > 15 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'} rounded text-xs">+${Number(result.detour).toFixed(1)}% route</span>` : ''}
-                            ${result.matchQuality ? `<span class="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">${result.matchQuality}</span>` : ''}
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center space-x-4 text-sm text-gray-600">
-                        <span><i class="fas fa-users mr-1"></i>${ride.pricing?.availableSeats || 0} seats</span>
-                        <span><i class="fas fa-car mr-1"></i>${ride.vehicleDetails?.model || ride.vehicle?.model || 'Vehicle'}</span>
-                        ${result.carbonSaved && typeof result.carbonSaved === 'number' ? `<span class="text-green-600"><i class="fas fa-leaf mr-1"></i>${result.carbonSaved.toFixed(1)}kg CO₂ saved</span>` : ''}
-                    </div>
-                </div>
-                
-                <div class="text-right">
-                    <div class="text-2xl font-bold text-primary mb-2">₹${result.price || ride.pricing?.pricePerSeat || 0}</div>
-                    <a href="/rides/${ride._id}" class="bg-primary hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold transition inline-block">
-                        View Details
-                    </a>
-                </div>
-            </div>
-        </div>
-    `}).join('');
-        }
     </script>
 
     <%- include('../partials/footer') %>

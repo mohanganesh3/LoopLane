@@ -1,22 +1,203 @@
 <% if (results && results.length > 0) { %>
-  <ul class="ride-results-list">
-    <% results.forEach(function(result) { %>
-      <li class="ride-result-item">
-        <div>
-          <strong><%= result.ride.route?.start?.name || 'Pickup location' %></strong> to <strong><%= result.ride.route?.destination?.name || 'Destination' %></strong>
+    <div class="mt-8">
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-car text-primary mr-2"></i>Available Rides
+            </h2>
+            <p class="text-gray-600">Found <%= results.length %> ride<%= results.length !== 1 ? 's' : '' %> matching your search</p>
         </div>
-        <div>
-          Date: <%= new Date(result.ride.schedule?.departureDateTime).toLocaleString() %>
+
+        <div class="space-y-4">
+            <% results.forEach(function(result) { 
+                const ride = result.ride;
+                const rider = ride.rider || {};
+                // Prefer precomputed values from server; fallback to profile fields
+                const riderName = (result.riderDisplayName && result.riderDisplayName.trim().length)
+                    ? result.riderDisplayName
+                    : (rider.profile ? `${rider.profile.firstName || ''} ${rider.profile.lastName || ''}`.trim() : 'Unknown Rider');
+                const riderPhoto = (result.riderPhoto && result.riderPhoto.trim().length)
+                    ? result.riderPhoto
+                    : (rider.profile && rider.profile.photo ? rider.profile.photo : '/images/default-avatar.png');
+                const vehicle = ride.vehicle || {};
+                const schedule = ride.schedule || {};
+                const pricing = ride.pricing || {};
+                
+                // Format date and time
+                const departureDate = new Date(schedule.departureDateTime);
+                const dateStr = departureDate.toLocaleDateString('en-IN', { 
+                    day: 'numeric', 
+                    month: 'short', 
+                    year: 'numeric' 
+                });
+                const timeStr = departureDate.toLocaleTimeString('en-IN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                // Match quality badge colors
+                const qualityColors = {
+                    'EXCELLENT': 'bg-green-100 text-green-800',
+                    'GOOD': 'bg-blue-100 text-blue-800',
+                    'FAIR': 'bg-yellow-100 text-yellow-800',
+                    'POOR': 'bg-orange-100 text-orange-800'
+                };
+                const qualityColor = qualityColors[result.matchQuality] || 'bg-gray-100 text-gray-800';
+            %>
+                <div class="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100">
+                    <div class="p-6">
+                        <!-- Header: Rider Info & Match Quality -->
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-3">
+                                <img src="<%= riderPhoto %>" 
+                                     alt="<%= riderName %>"
+                                     class="w-12 h-12 rounded-full object-cover border-2 border-primary">
+                                <div>
+                                    <h3 class="font-semibold text-gray-800"><%= riderName %></h3>
+                                    <div class="flex items-center space-x-2 text-sm">
+                                        <% if (rider.rating && rider.rating > 0) { %>
+                                            <span class="flex items-center text-yellow-500">
+                                                <i class="fas fa-star mr-1"></i>
+                                                <%= rider.rating.toFixed(1) %>
+                                            </span>
+                                        <% } %>
+                                        <% if (rider.statistics && rider.statistics.totalRidesCompleted) { %>
+                                            <span class="text-gray-500">
+                                                • <%= rider.statistics.totalRidesCompleted %> rides
+                                            </span>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="<%= qualityColor %> px-3 py-1 rounded-full text-xs font-semibold">
+                                <%= result.matchQuality %> MATCH
+                            </span>
+                        </div>
+
+                        <!-- Route Information -->
+                        <div class="mb-4 bg-gray-50 rounded-lg p-4">
+                            <div class="flex items-start space-x-3">
+                                <div class="flex flex-col items-center">
+                                    <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                    <div class="w-0.5 h-12 bg-gray-300"></div>
+                                    <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                </div>
+                                <div class="flex-1 space-y-3">
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">FROM</p>
+                                        <p class="font-medium text-gray-800">
+                                            <%= ride.route?.start?.name || result.pickupPoint?.address || 'Pickup Location' %>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs text-gray-500 mb-1">TO</p>
+                                        <p class="font-medium text-gray-800">
+                                            <%= ride.route?.destination?.name || result.dropoffPoint?.address || 'Destination' %>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Ride Details Grid -->
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <!-- Date & Time -->
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-calendar-alt text-primary"></i>
+                                <div>
+                                    <p class="text-xs text-gray-500">Date</p>
+                                    <p class="font-semibold text-gray-800 text-sm"><%= dateStr %></p>
+                                </div>
+                            </div>
+                            
+                            <!-- Departure Time -->
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-clock text-primary"></i>
+                                <div>
+                                    <p class="text-xs text-gray-500">Time</p>
+                                    <p class="font-semibold text-gray-800 text-sm"><%= timeStr %></p>
+                                </div>
+                            </div>
+                            
+                            <!-- Available Seats -->
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-users text-primary"></i>
+                                <div>
+                                    <p class="text-xs text-gray-500">Seats</p>
+                                    <p class="font-semibold text-gray-800 text-sm"><%= pricing.availableSeats || 0 %> available</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Vehicle -->
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-car text-primary"></i>
+                                <div>
+                                    <p class="text-xs text-gray-500">Vehicle</p>
+                                    <p class="font-semibold text-gray-800 text-sm"><%= vehicle.make || 'Car' %> <%= vehicle.model || '' %></p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Additional Info -->
+                        <div class="flex items-center justify-between pt-4 border-t border-gray-200">
+                            <div class="flex items-center space-x-4">
+                                <!-- Distance -->
+                                <% if (result.distance) { %>
+                                    <div class="flex items-center text-sm text-gray-600">
+                                        <i class="fas fa-route text-primary mr-1"></i>
+                                        <%= (result.distance / 1000).toFixed(1) %> km
+                                    </div>
+                                <% } %>
+                                
+                                <!-- Carbon Saved -->
+                                <% if (result.carbonSaved && result.carbonSaved > 0) { %>
+                                    <div class="flex items-center text-sm text-green-600">
+                                        <i class="fas fa-leaf text-green-600 mr-1"></i>
+                                        <%= result.carbonSaved.toFixed(2) %> kg CO₂ saved
+                                    </div>
+                                <% } %>
+                            </div>
+                            
+                            <!-- Price & CTA -->
+                            <div class="flex items-center space-x-4">
+                                <div class="text-right">
+                                    <p class="text-xs text-gray-500">Total Price</p>
+                                    <p class="text-2xl font-bold text-primary">₹<%= result.price || 0 %></p>
+                                </div>
+                                <a href="/rides/<%= ride._id %>" 
+                                   class="bg-primary hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-all transform hover:scale-105 inline-flex items-center">
+                                    View Details
+                                    <i class="fas fa-arrow-right ml-2"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
         </div>
-        <div>
-          Price: ₹<%= result.price || result.ride.pricing?.pricePerSeat || 0 %>
-        </div>
-        <div>
-          <a href="/rides/<%= result.ride._id %>" target="_blank">View Details</a>
-        </div>
-      </li>
-    <% }) %>
-  </ul>
+    </div>
 <% } else { %>
-  <div class="no-results">No rides found. Try adjusting your search criteria.</div>
+    <div class="mt-8 bg-white rounded-xl shadow-lg p-12 text-center">
+        <div class="max-w-md mx-auto">
+            <i class="fas fa-search text-gray-300 text-6xl mb-4"></i>
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">No Rides Found</h3>
+            <p class="text-gray-600 mb-6">
+                We couldn't find any rides matching your search criteria. 
+                Try adjusting your dates, locations, or the number of passengers.
+            </p>
+            <div class="flex flex-col space-y-3 text-sm text-gray-500">
+                <div class="flex items-center justify-center">
+                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>
+                    <span>Try searching for nearby cities or popular destinations</span>
+                </div>
+                <div class="flex items-center justify-center">
+                    <i class="fas fa-calendar text-primary mr-2"></i>
+                    <span>Consider flexible dates for more options</span>
+                </div>
+                <div class="flex items-center justify-center">
+                    <i class="fas fa-bell text-primary mr-2"></i>
+                    <span>Set up alerts to get notified of new rides</span>
+                </div>
+            </div>
+        </div>
+    </div>
 <% } %>

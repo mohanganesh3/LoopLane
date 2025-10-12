@@ -177,6 +177,19 @@ io.on('connection', (socket) => {
         console.log(`✅ [Socket.IO] User joined personal room: user-${userId}`);
     });
     
+    // Join admin room for emergency alerts
+    socket.on('join-admin', () => {
+        socket.join('admin-room');
+        console.log(`🛡️ [Socket.IO] Admin joined admin room: ${socket.id}`);
+        socket.emit('admin-joined', { success: true });
+    });
+    
+    // Join emergency tracking room
+    socket.on('join-emergency', (emergencyId) => {
+        socket.join(`emergency-${emergencyId}`);
+        console.log(`🚨 [Socket.IO] User joined emergency room: emergency-${emergencyId}`);
+    });
+    
     // Generic join handler (for backward compatibility)
     socket.on('join', (roomName) => {
         socket.join(roomName);

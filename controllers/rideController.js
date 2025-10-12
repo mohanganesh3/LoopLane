@@ -11,6 +11,7 @@ const carbonCalculator = require('../utils/carbonCalculator');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const helpers = require('../utils/helpers');
 const axios = require('axios');
+const { getUserDisplay } = require('../utils/userUtils');
 
 /**
  * Show post ride page
@@ -287,7 +288,7 @@ exports.searchRides = asyncHandler(async (req, res) => {
         'pricing.availableSeats': { $gte: parseInt(seats) || 1 },
         status: 'ACTIVE'
     })
-    .populate('rider', 'name profilePhoto rating statistics')
+    .populate('rider', 'profile.firstName profile.lastName profile.photo rating statistics name fullName displayName')
     .populate('vehicle', 'make model type')
     .lean();
 
@@ -310,6 +311,8 @@ exports.searchRides = asyncHandler(async (req, res) => {
 
     // Format results
     const results = matchedRides.map(match => {
+        // Compute safe rider display details (works with plain objects from .lean())
+        const riderDisplay = getUserDisplay(match.ride?.rider || {});
         const carbonData = carbonCalculator.calculateCarbonSaved(
             match.matchDetails.segmentDistance,
             match.ride.vehicle?.type || 'SEDAN',
@@ -327,7 +330,10 @@ exports.searchRides = asyncHandler(async (req, res) => {
             dropoffPoint: match.matchDetails.dropoffPoint,
             price: (match.ride.pricing?.pricePerSeat || 0) * (parseInt(seats) || 1),
             carbonSaved: carbonData.totalSaved || 0, // Send just the number
-            carbonData: carbonData // Send full object for detailed display if needed
+            carbonData: carbonData, // Send full object for detailed display if needed
+            riderDisplayName: riderDisplay.name,
+            riderPhoto: riderDisplay.photo,
+            riderInitials: riderDisplay.initials
         };
     });
 
@@ -789,7 +795,6 @@ exports.startRide = asyncHandler(async (req, res) => {
     const otpService = require('../utils/otpService');
     const Notification = require('../models/Notification');
     const emailService = require('../utils/emailService');
-    const smsService = require('../utils/smsService');
     
     for (const booking of bookingsToStart) {
         // ⭐ GENERATE PICKUP OTP (valid indefinitely)
@@ -857,21 +862,6 @@ exports.startRide = asyncHandler(async (req, res) => {
             console.log(`📧 [Start Ride] Email sent to ${booking.passenger.email}`);
         } catch (emailError) {
             console.error('❌ [Start Ride] Email error:', emailError.message);
-        }
-
-        // Send SMS with pickup OTP
-        try {
-            if (booking.passenger.phone) {
-                await smsService.sendRideStartedSMS(
-                    booking.passenger.phone,
-                    riderName,
-                    pickupOTP.code,
-                    booking.bookingReference
-                );
-                console.log(`📱 [Start Ride] SMS sent to ${booking.passenger.phone}`);
-            }
-        } catch (smsError) {
-            console.error('❌ [Start Ride] SMS error:', smsError.message);
         }
     }
 

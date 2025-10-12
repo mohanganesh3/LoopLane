@@ -1507,3 +1507,200 @@ exports.showFinancialDashboard = asyncHandler(async (req, res) => {
         getUserName: require('../models/User').getUserName
     });
 });
+
+/**
+ * Show SOS Emergency Dashboard
+ */
+exports.showSOSDashboard = asyncHandler(async (req, res) => {
+    res.render('admin/sos-dashboard', {
+        title: 'SOS Emergency Dashboard',
+        user: req.user
+    });
+});
+
+/**
+ * Get all emergencies (API endpoint)
+ */
+exports.getAllEmergencies = asyncHandler(async (req, res) => {
+    const { status, priority, type, limit = 50 } = req.query;
+    
+    const query = {};
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+    if (type) query.type = type;
+    
+    const emergencies = await Emergency.find(query)
+        .populate('user', 'profile email phone')
+        .populate('ride', 'route.start.name route.destination.name')
+        .populate('booking', 'bookingReference')
+        .populate('responseTimeline.performedBy', 'profile')
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit));
+    
+    // Calculate statistics
+    const stats = {
+        active: await Emergency.countDocuments({ status: 'ACTIVE' }),
+        inProgress: await Emergency.countDocuments({ status: 'IN_PROGRESS' }),
+        resolved: await Emergency.countDocuments({ status: 'RESOLVED' }),
+        highPriority: await Emergency.countDocuments({ 
+            priority: { $in: ['CRITICAL', 'HIGH'] },
+            status: { $in: ['ACTIVE', 'IN_PROGRESS'] }
+        }),
+        resolvedToday: await Emergency.countDocuments({
+            status: 'RESOLVED',
+            'resolution.resolvedAt': { 
+                $gte: new Date(new Date().setHours(0, 0, 0, 0)) 
+            }
+        })
+    };
+    
+    // Calculate average response time
+    const resolvedEmergencies = await Emergency.find({
+        status: 'RESOLVED',
+        'resolution.resolvedAt': { $exists: true }
+    }).select('createdAt resolution.resolvedAt').limit(100);
+    
+    if (resolvedEmergencies.length > 0) {
+        const totalTime = resolvedEmergencies.reduce((sum, e) => {
+            const responseTime = (new Date(e.resolution.resolvedAt) - new Date(e.createdAt)) / 1000 / 60; // minutes
+            return sum + responseTime;
+        }, 0);
+        const avgMinutes = Math.round(totalTime / resolvedEmergencies.length);
+        stats.avgResponseTime = avgMinutes < 60 ? `${avgMinutes}m` : `${Math.round(avgMinutes / 60)}h`;
+    } else {
+        stats.avgResponseTime = '--';
+    }
+    
+    res.json({
+        success: true,
+        emergencies,
+        stats
+    });
+});
+
+/**
+ * Get emergency details (API endpoint)
+ */
+exports.getEmergencyDetails = asyncHandler(async (req, res) => {
+    const { emergencyId } = req.params;
+    
+    const emergency = await Emergency.findById(emergencyId)
+        .populate('user', 'profile email phone emergencyContacts')
+        .populate('ride', 'route.start.name route.destination.name rider')
+        .populate('booking', 'bookingReference passenger')
+        .populate('responseTimeline.performedBy', 'profile')
+        .populate('resolution.resolvedBy', 'profile');
+    
+    if (!emergency) {
+        throw new AppError('Emergency not found', 404);
+    }
+    
+    res.json({
+        success: true,
+        emergency
+    });
+});
+
+/**
+ * Respond to emergency (API endpoint)
+ */
+exports.respondToEmergency = asyncHandler(async (req, res) => {
+    const { emergencyId } = req.params;
+    const adminId = req.user._id;
+    
+    const emergency = await Emergency.findById(emergencyId);
+    
+    if (!emergency) {
+        throw new AppError('Emergency not found', 404);
+    }
+    
+    if (emergency.status !== 'ACTIVE') {
+        throw new AppError('Emergency is not active', 400);
+    }
+    
+    // Update status to IN_PROGRESS
+    emergency.status = 'IN_PROGRESS';
+    
+    // Add to response timeline
+    emergency.responseTimeline.push({
+        action: 'Admin Responded',
+        timestamp: new Date(),
+        performedBy: adminId,
+        details: `Admin ${req.user.profile.firstName} is now responding to this emergency`
+    });
+    
+    await emergency.save();
+    
+    // Emit socket event to user
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`emergency-${emergencyId}`).emit('admin-responding', {
+            emergencyId,
+            admin: {
+                name: `${req.user.profile.firstName} ${req.user.profile.lastName}`,
+                id: adminId
+            },
+            message: 'An admin is now responding to your emergency'
+        });
+    }
+    
+    res.json({
+        success: true,
+        message: 'Successfully marked as responding',
+        emergency
+    });
+});
+
+/**
+ * Resolve emergency (API endpoint)
+ */
+exports.resolveEmergency = asyncHandler(async (req, res) => {
+    const { emergencyId } = req.params;
+    const { resolution } = req.body;
+    const adminId = req.user._id;
+    
+    const emergency = await Emergency.findById(emergencyId);
+    
+    if (!emergency) {
+        throw new AppError('Emergency not found', 404);
+    }
+    
+    if (emergency.status === 'RESOLVED') {
+        throw new AppError('Emergency already resolved', 400);
+    }
+    
+    // Update status and resolution
+    emergency.status = 'RESOLVED';
+    emergency.resolution = {
+        resolvedAt: new Date(),
+        resolvedBy: adminId,
+        resolution: resolution || 'Emergency resolved by admin',
+        method: 'ADMIN_ACTION'
+    };
+    
+    // Add to response timeline
+    emergency.responseTimeline.push({
+        action: 'Emergency Resolved',
+        timestamp: new Date(),
+        performedBy: adminId,
+        details: resolution || 'Emergency resolved by admin'
+    });
+    
+    await emergency.save();
+    
+    // Emit socket event to user
+    const io = req.app.get('io');
+    if (io) {
+        io.to(`emergency-${emergencyId}`).emit('emergency-resolved', {
+            emergencyId,
+            resolution: resolution || 'Emergency resolved by admin'
+        });
+    }
+    
+    res.json({
+        success: true,
+        message: 'Emergency marked as resolved',
+        emergency
+    });
+});
+

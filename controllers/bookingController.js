@@ -8,7 +8,6 @@ const Ride = require('../models/Ride');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const emailService = require('../utils/emailService');
-const smsService = require('../utils/smsService');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const helpers = require('../utils/helpers');
 
@@ -222,20 +221,6 @@ exports.createBooking = asyncHandler(async (req, res) => {
             console.error('Failed to send email notification:', emailError);
         }
 
-        // Send SMS notification to rider
-        try {
-            if (ride.rider.phone && ride.rider.phoneVerified) {
-                await smsService.sendBookingRequestSMS(
-                    ride.rider.phone,
-                    passengerName,
-                    numSeats,
-                    `${process.env.APP_URL || 'http://localhost:3000'}/bookings/${booking._id}`
-                );
-            }
-        } catch (smsError) {
-            console.error('Failed to send SMS notification:', smsError);
-        }
-
         console.log(`📧 [Manual Approval] Booking ${booking._id} requires rider approval`);
     }
 
@@ -408,23 +393,6 @@ exports.acceptBooking = asyncHandler(async (req, res) => {
         console.error('❌ [Accept Booking] Error sending email:', emailError.message);
     }
 
-    // Send SMS notification to passenger
-    try {
-        console.log('📱 [Accept Booking] Sending SMS notification');
-        const smsService = require('../utils/smsService');
-        const passenger = booking.passenger;
-        if (passenger.phone) {
-            await smsService.sendBookingAcceptedSMS(
-                passenger.phone,
-                riderName,
-                booking.bookingReference,
-                booking.seatsBooked
-            );
-        }
-    } catch (smsError) {
-        console.error('❌ [Accept Booking] Error sending SMS:', smsError.message);
-    }
-
     console.log('✅ [Accept Booking] All notifications sent successfully');
 
     res.status(200).json({
@@ -528,21 +496,6 @@ exports.rejectBooking = asyncHandler(async (req, res) => {
         );
     } catch (emailError) {
         console.error('Error sending booking rejected email:', emailError);
-    }
-
-    // Send SMS notification to passenger
-    try {
-        const smsService = require('../utils/smsService');
-        const passenger = booking.passenger;
-        if (passenger.phone) {
-            await smsService.sendBookingRejectedSMS(
-                passenger.phone,
-                riderName,
-                booking.bookingReference
-            );
-        }
-    } catch (smsError) {
-        console.error('Error sending booking rejected SMS:', smsError);
     }
 
     res.status(200).json({
@@ -662,22 +615,6 @@ exports.verifyPickupOTP = asyncHandler(async (req, res) => {
         console.log(`📧 [Verify Pickup] Email sent with dropoff OTP to ${booking.passenger.email}`);
     } catch (emailError) {
         console.error('❌ [Verify Pickup] Email error:', emailError.message);
-    }
-
-    // Send SMS with dropoff OTP
-    try {
-        const smsService = require('../utils/smsService');
-        if (booking.passenger.phone) {
-            await smsService.sendPickupConfirmedSMS(
-                booking.passenger.phone,
-                riderName,
-                dropoffOTP.code,
-                booking.bookingReference
-            );
-            console.log(`📱 [Verify Pickup] SMS sent with dropoff OTP to ${booking.passenger.phone}`);
-        }
-    } catch (smsError) {
-        console.error('❌ [Verify Pickup] SMS error:', smsError.message);
     }
 
     res.status(200).json({

@@ -120,6 +120,22 @@
             <span>Emergencies</span>
         </a>
 
+        <a href="/admin/sos" class="sidebar-link <%= active === 'sos' ? 'active' : '' %>" style="
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 15px;
+            font-weight: 500;
+            <%= active === 'sos' ? 'background: rgba(255, 255, 255, 0.15); border-left: 4px solid white;' : '' %>
+        ">
+            <i class="fas fa-ambulance" style="font-size: 18px; width: 20px;"></i>
+            <span>SOS Dashboard</span>
+        </a>
+
         <a href="/admin/reports" class="sidebar-link <%= active === 'reports' ? 'active' : '' %>" style="
             display: flex;
             align-items: center;

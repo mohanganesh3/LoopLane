@@ -139,17 +139,27 @@ class EmergencyResponseSystem {
                     emergencyId: emergency._id,
                     type: emergency.type,
                     userId: user._id,
-                    userName: user.name,
+                    userName: user.name || `${user.profile.firstName} ${user.profile.lastName}`,
                     location: emergency.location,
                     priority: emergency.priority
                 });
 
-                // Emit to admin room
+                // Emit to admin room with new-sos-alert event
+                io.to('admin-room').emit('new-sos-alert', {
+                    emergencyId: emergency._id,
+                    userName: user.name || `${user.profile.firstName} ${user.profile.lastName}`,
+                    type: emergency.type,
+                    priority: emergency.priority,
+                    location: emergency.location,
+                    createdAt: emergency.createdAt
+                });
+                
+                // Also emit emergency:new for backward compatibility
                 io.to('admin-room').emit('emergency:new', {
                     emergency: emergency.toJSON(),
                     user: {
                         id: user._id,
-                        name: user.name,
+                        name: user.name || `${user.profile.firstName} ${user.profile.lastName}`,
                         phone: user.phone,
                         photo: user.profile?.photo
                     }
@@ -468,13 +478,25 @@ class EmergencyResponseSystem {
                 accuracy: locationData.accuracy
             });
 
-            // Broadcast location update
+            // Broadcast location update to emergency room
             if (io) {
                 io.to(`emergency-${emergencyId}`).emit('emergency:location-update', {
                     emergencyId,
                     location: {
                         lat: locationData.latitude,
                         lng: locationData.longitude,
+                        speed: locationData.speed,
+                        accuracy: locationData.accuracy,
+                        timestamp: new Date()
+                    }
+                });
+                
+                // Also emit to admin room with sos-location-update event
+                io.to('admin-room').emit('sos-location-update', {
+                    emergencyId,
+                    location: {
+                        latitude: locationData.latitude,
+                        longitude: locationData.longitude,
                         speed: locationData.speed,
                         accuracy: locationData.accuracy,
                         timestamp: new Date()

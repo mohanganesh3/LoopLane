@@ -1,0 +1,363 @@
+# Demo Video Link - Group 39 LoopLane
+
+## 🎥 Project Demo Video
+
+**Project:** LoopLane - Advanced Carpooling Platform  
+**Group ID:** 39  
+**Recording Date:** October 13, 2025
+
+---
+
+## 📺 Video URL
+
+**YouTube Link:** `[INSERT YOUR DEMO VIDEO YOUTUBE URL HERE]`
+
+**Alternative Link (Google Drive):** `[INSERT GOOGLE DRIVE LINK IF APPLICABLE]`
+
+---
+
+## ⏱️ Video Timestamps & Features Demonstrated
+
+### 1. Introduction & Project Overview (0:00 - 1:00)
+- **0:00 - 0:15** - Project title card and team introduction
+- **0:15 - 0:30** - Technology stack overview (Node.js, MongoDB, Socket.IO)
+- **0:30 - 0:50** - Key features summary
+- **0:50 - 1:00** - Demo agenda
+
+---
+
+### 2. User Registration & Authentication (1:00 - 2:30)
+- **1:00 - 1:30** - Registration form with XHR (XMLHttpRequest)
+  - Form validation demonstration
+  - Password strength requirements
+  - Email validation
+  - Real-time error messages without page reload
+  - **Developer:** Dinesh (S20230010152)
+  
+- **1:30 - 2:00** - OTP Verification
+  - SMS OTP received via Twilio
+  - 6-digit OTP input
+  - XHR-based verification
+  - Success redirect
+  - **Developer:** Dinesh (S20230010152)
+  
+- **2:00 - 2:30** - Login with XHR
+  - Email/password login
+  - Loading spinner during request
+  - Network tab showing XHR request
+  - Dashboard redirect
+  - **Developer:** Dinesh (S20230010152)
+
+---
+
+### 3. User Dashboard & Profile (2:30 - 4:00)
+- **2:30 - 3:00** - User dashboard overview
+  - Quick stats (rides, bookings, carbon saved)
+  - Recent activities
+  - Notification center
+  
+- **3:00 - 3:30** - Profile completion (for Riders)
+  - Vehicle details form
+  - Document upload (license, RC, insurance)
+  - Cloudinary integration for image storage
+  
+- **3:30 - 4:00** - Emergency contacts
+  - Add 3 emergency contacts
+  - Phone number validation
+
+---
+
+### 4. Post a Ride (AJAX Form) (4:00 - 5:30)
+- **4:00 - 4:30** - Post ride form
+  - Location autocomplete (Leaflet.js)
+  - Date/time picker
+  - Seat selection
+  - Price per seat
+  - Vehicle selection
+  - **Developer:** Karthik (S20230010005)
+  
+- **4:30 - 5:00** - Distance calculation
+  - Auto-calculated route distance
+  - Estimated carbon savings display
+  
+- **5:00 - 5:30** - XHR submission
+  - Form submitted via XMLHttpRequest
+  - Network tab showing POST request
+  - No page reload
+  - Success message and redirect
+  - **Developer:** Karthik (S20230010005)
+
+---
+
+### 5. Search Rides (Dynamic AJAX) (5:30 - 7:00)
+- **5:30 - 6:00** - Search form
+  - From/To location selection
+  - Date selection
+  - Number of seats required
+  - **Developer:** Sujal (S20230010232)
+  
+- **6:00 - 6:30** - XHR search request
+  - Network tab showing GET request
+  - Query parameters visible
+  - Loading state ("Searching...")
+  - **Developer:** Sujal (S20230010232)
+  
+- **6:30 - 7:00** - Dynamic results
+  - Partial EJS rendering
+  - Results injected without page reload
+  - Filter options (price, time, preferences)
+  - **Developer:** Sujal (S20230010232)
+
+---
+
+### 6. Booking Flow (7:00 - 9:00)
+- **7:00 - 7:30** - Create booking
+  - Select ride from search results
+  - Choose pickup/dropoff locations
+  - Specify seats needed
+  - Payment method selection
+  - **Developer:** Akshaya (S20230010006)
+  
+- **7:30 - 8:00** - Booking confirmation
+  - Pickup OTP generated
+  - Email/SMS notification sent
+  - Booking details displayed
+  - **Developer:** Akshaya (S20230010006)
+  
+- **8:00 - 8:30** - Rider acceptance
+  - Rider receives booking notification
+  - Accept booking action
+  - Status updates to CONFIRMED
+  - **Developer:** Akshaya (S20230010006)
+  
+- **8:30 - 9:00** - Ready for pickup
+  - Rider changes status to READY_FOR_PICKUP
+  - Live tracking button appears
+  - OTP verification at pickup
+
+---
+
+### 7. Real-time GPS Tracking (Socket.IO) (9:00 - 11:00)
+- **9:00 - 9:30** - Driver side tracking
+  - Geolocation permission prompt
+  - Location capture every 5 seconds
+  - Socket.IO emit demonstration
+  - **Developer:** Mohan Ganesh (S20230010092)
+  
+- **9:30 - 10:00** - Passenger side tracking
+  - Live Track button click
+  - Leaflet.js map loads
+  - Driver marker updates in real-time
+  - **Developer:** Mohan Ganesh (S20230010092)
+  
+- **10:00 - 10:30** - Location breadcrumbs
+  - Trail of previous locations
+  - Polyline drawing on map
+  - Distance traveled counter
+  - **Developer:** Mohan Ganesh (S20230010092)
+  
+- **10:30 - 11:00** - WebSocket demonstration
+  - Browser DevTools → WS tab
+  - Socket.IO events visible
+  - Real-time message exchange
+
+---
+
+### 8. SOS Emergency System (11:00 - 12:00)
+- **11:00 - 11:20** - SOS button trigger
+  - Red panic button click
+  - Geolocation capture
+  - Emergency type selection
+  - **Developer:** Mohan Ganesh (S20230010092)
+  
+- **11:20 - 11:40** - Emergency notifications
+  - SMS sent to 3 emergency contacts (Twilio)
+  - Email notifications sent
+  - Admin dashboard alert (Socket.IO)
+  - **Developer:** Mohan Ganesh (S20230010092)
+  
+- **11:40 - 12:00** - SOS dashboard
+  - Active emergency view
+  - Location on map
+  - Emergency details
+  - Resolution actions
+
+---
+
+### 9. Admin Panel (XHR Operations) (12:00 - 13:30)
+- **12:00 - 12:30** - Admin login
+  - Admin credentials: admin@lane.com / Admin@123
+  - Admin dashboard overview
+  
+- **12:30 - 13:00** - Driver verification
+  - Pending verifications list
+  - View uploaded documents
+  - Approve/Reject via XHR
+  - Network tab showing AJAX request
+  - No page reload
+  - **Developer:** Dinesh (S20230010152)
+  
+- **13:00 - 13:30** - Admin statistics
+  - Total users, rides, bookings
+  - Revenue chart
+  - Active emergencies
+  - User management
+
+---
+
+### 10. In-app Chat System (13:30 - 14:30)
+- **13:30 - 14:00** - Open chat
+  - Navigate to booking
+  - Click "Chat with Driver/Passenger"
+  - Real-time connection established
+  
+- **14:00 - 14:30** - Real-time messaging
+  - Send message (Socket.IO)
+  - Instant delivery to other user
+  - Typing indicator
+  - Unread count updates
+  - Read receipts
+
+---
+
+### 11. Review & Rating System (14:30 - 15:00)
+- **14:30 - 14:45** - Submit review
+  - Post-ride review form
+  - 5-star rating
+  - Written comment (10-1000 characters)
+  - Validation demonstration
+  
+- **14:45 - 15:00** - View reviews
+  - User profile reviews
+  - Average rating calculation
+  - Review statistics
+
+---
+
+### 12. AJAX/XHR Validation Evidence (15:00 - 16:00)
+- **15:00 - 15:30** - Network tab walkthrough
+  - Login XHR request/response
+  - Register XHR request/response
+  - Search XHR with query parameters
+  - Post ride XHR with JSON payload
+  
+- **15:30 - 16:00** - Headers & payloads
+  - Content-Type: application/json
+  - X-Requested-With: XMLHttpRequest
+  - Request/response body examination
+  - Status codes (200, 400, 500)
+
+---
+
+### 13. Responsive Design & Browser Testing (16:00 - 16:30)
+- **16:00 - 16:15** - Mobile view
+  - Chrome DevTools mobile emulation
+  - Responsive navigation
+  - Touch-friendly buttons
+  
+- **16:15 - 16:30** - Cross-browser testing
+  - Chrome (primary)
+  - Firefox
+  - Safari (macOS)
+
+---
+
+### 14. Database & Backend (16:30 - 17:00)
+- **16:30 - 16:45** - MongoDB collections
+  - `users` collection
+  - `rides` collection
+  - `bookings` collection
+  - `emergencies` collection
+  
+- **16:45 - 17:00** - Server logs
+  - Terminal output
+  - MongoDB connection
+  - Socket.IO connections
+  - API request logs
+
+---
+
+### 15. Conclusion & Q&A (17:00 - 18:00)
+- **17:00 - 17:30** - Key achievements summary
+  - 100% XHR-based forms (no Fetch API)
+  - Real-time tracking with Socket.IO
+  - Comprehensive SOS system
+  - Admin panel with AJAX
+  
+- **17:30 - 18:00** - Team contributions
+  - Each member's role
+  - Git commit statistics
+  - Code ownership
+  - Future enhancements
+
+---
+
+## 📊 Features Demonstrated by Developer
+
+| Developer | Features Demonstrated | Timestamps |
+|-----------|----------------------|------------|
+| **Mohan Ganesh** | Real-time tracking, SOS system, Socket.IO, Geofencing | 9:00-12:00 |
+| **Karthik** | Post ride AJAX, Ride filtering | 4:00-5:30 |
+| **Dinesh** | Login/Register XHR, OTP, Admin panel AJAX | 1:00-2:30, 12:00-13:30 |
+| **Akshaya** | Booking system, Status management | 7:00-9:00 |
+| **Sujal** | Search AJAX, Partial rendering | 5:30-7:00 |
+
+---
+
+## 🎬 Recording Details
+
+**Recording Tool:** OBS Studio / Zoom / Loom  
+**Resolution:** 1920x1080 (Full HD)  
+**Duration:** ~18 minutes  
+**Audio:** Yes (narrated walkthrough)  
+**Subtitle/Captions:** [Optional - Yes/No]
+
+---
+
+## 📝 Video Checklist
+
+✅ All AJAX/XHR operations clearly demonstrated  
+✅ Network tab visible during async operations  
+✅ No page reloads shown for AJAX forms  
+✅ Socket.IO WebSocket connections visible  
+✅ Real-time tracking demonstrated live  
+✅ SOS emergency system triggered  
+✅ Admin panel XHR approvals shown  
+✅ Database records visible  
+✅ Each team member's contribution highlighted  
+✅ Clear narration throughout  
+
+---
+
+## 📱 How to Watch
+
+1. Click the YouTube/Drive link above
+2. Set video quality to 1080p for best viewing
+3. Use timestamps to jump to specific features
+4. Enable captions if available
+5. Fullscreen mode recommended
+
+---
+
+## 🔗 Additional Resources
+
+- **GitHub Repository:** https://github.com/mohanganesh3/CreaPrompt_Studio
+- **Documentation:** See `README_FULL.md`
+- **Test Plan:** See `test_plan.md`
+- **Network Evidence:** See `network_evidence/` folder
+
+---
+
+**Video Prepared By:** Group 39 - LoopLane Team  
+**Submission Date:** October 13, 2025  
+**Assessment:** Mid-Review
+
+---
+
+## 📧 Contact for Video Issues
+
+If you experience any issues accessing the video, please contact:
+
+**SPOC:** Mohan Ganesh (S20230010092)  
+**Email:** mohanganesh165577@gmail.com  
+**Alternative Contact:** See `task_assignment.md` for all team members

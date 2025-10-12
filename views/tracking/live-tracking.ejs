@@ -206,6 +206,12 @@
 <!-- Socket.IO -->
 <script src="/socket.io/socket.io.js"></script>
 
+<!-- Permission Manager -->
+<script src="/js/permissions.js"></script>
+
+<!-- SOS System -->
+<script src="/js/sos.js"></script>
+
 <script>
 // Configuration
 const bookingId = '<%= booking._id %>';
@@ -421,12 +427,27 @@ document.getElementById('showRouteBtn').addEventListener('click', () => {
 });
 
 // SOS button - Use the global SOS system
-document.getElementById('sosBtn').addEventListener('click', async () => {
-    // Use the triggerSOSAlert function from sos.js which handles location properly
-    if (typeof triggerSOSAlert === 'function') {
-        await triggerSOSAlert(rideId, bookingId);
-    } else {
-        alert('SOS system not available. Please refresh the page.');
+document.getElementById('sosBtn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    try {
+        btn.disabled = true;
+        btn.classList.add('opacity-70');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Triggering...';
+
+        // Use the triggerSOSAlert function from sos.js which handles location properly
+        if (typeof triggerSOSAlert === 'function') {
+            await triggerSOSAlert(rideId, bookingId);
+        } else {
+            console.error('SOS: triggerSOSAlert not found');
+            alert('SOS system not available. Please refresh the page.');
+        }
+    } catch (err) {
+        console.error('SOS trigger failed:', err);
+        alert('Failed to trigger SOS. Please allow location and try again.');
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-70');
+        btn.innerHTML = '<i class="fas fa-ambulance mr-2"></i>Trigger SOS';
     }
 });
 
@@ -460,6 +481,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => {
         try { map.invalidateSize(); } catch (e) {}
     }, 250);
+
+    // Fallback: If there's no initialLocation and no location updates yet,
+    // center map on viewer's current location to avoid blank-looking map
+    try {
+        if (!initialLocation && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    console.log('🧭 Viewer geolocation fallback:', { lat, lng });
+                    map.setView([lat, lng], 14);
+                    // Add a temporary marker for the viewer
+                    const viewerMarker = L.marker([lat, lng], {
+                        icon: L.icon({
+                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
+                            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                            iconSize: [25, 41],
+                            iconAnchor: [12, 41],
+                            popupAnchor: [1, -34],
+                            shadowSize: [41, 41]
+                        })
+                    }).addTo(map);
+                    viewerMarker.bindPopup('<b>You are here</b>').openPopup();
+                },
+                (err) => {
+                    console.warn('Geolocation fallback failed:', err);
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+            );
+        }
+    } catch (geoErr) {
+        console.warn('Viewer location fallback error:', geoErr);
+    }
 
     // Polling fallback in case socket events are missed
     const poll = async () => {
