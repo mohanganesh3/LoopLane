@@ -420,38 +420,13 @@ document.getElementById('showRouteBtn').addEventListener('click', () => {
     }
 });
 
-// SOS button
+// SOS button - Use the global SOS system
 document.getElementById('sosBtn').addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to trigger an emergency SOS alert?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch('/sos/trigger', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                bookingId,
-                rideId,
-                location: currentMarker ? {
-                    coordinates: [
-                        currentMarker.getLatLng().lng,
-                        currentMarker.getLatLng().lat
-                    ]
-                } : null
-            })
-        });
-
-        const data = await response.json();
-        
-        if (data.success) {
-            alert('SOS alert sent! Emergency contacts have been notified.');
-        } else {
-            alert('Failed to send SOS alert: ' + data.message);
-        }
-    } catch (error) {
-        console.error('Error sending SOS:', error);
-        alert('Failed to send SOS alert. Please call emergency services directly.');
+    // Use the triggerSOSAlert function from sos.js which handles location properly
+    if (typeof triggerSOSAlert === 'function') {
+        await triggerSOSAlert(rideId, bookingId);
+    } else {
+        alert('SOS system not available. Please refresh the page.');
     }
 });
 

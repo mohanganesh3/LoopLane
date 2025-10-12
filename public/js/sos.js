@@ -11,12 +11,19 @@ let emergencyId = null;
 function getCurrentLocation() {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
-            reject(new Error('Geolocation not supported'));
+            reject(new Error('Geolocation not supported by your browser'));
             return;
         }
         
+        console.log('🔍 Requesting geolocation permission...');
+        
         navigator.geolocation.getCurrentPosition(
             (position) => {
+                console.log('✅ Geolocation permission granted:', {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                });
                 resolve({
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
@@ -24,8 +31,24 @@ function getCurrentLocation() {
                 });
             },
             (error) => {
-                console.error('Geolocation error:', error);
-                reject(error);
+                console.error('❌ Geolocation error:', error);
+                let errorMessage = 'Failed to get your location. ';
+                
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage += 'Location permission denied. Please enable location access in your browser settings.';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage += 'Location information is unavailable.';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage += 'Location request timed out.';
+                        break;
+                    default:
+                        errorMessage += 'An unknown error occurred.';
+                }
+                
+                reject(new Error(errorMessage));
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
@@ -100,11 +123,28 @@ async function triggerSOSAlert(rideId = null, bookingId = null) {
             // Update UI
             updateSOSButton(true);
         } else {
-            showAlert(result.message || 'Failed to send SOS', 'error');
+            showAlert(result.message || 'Failed to send SOS alert', 'error');
         }
     } catch (error) {
-        console.error('SOS Error:', error);
-        showAlert('Failed to send SOS alert. Please call emergency services.', 'error');
+        console.error('❌ SOS Error:', error);
+        
+        // Show user-friendly error message
+        let errorMessage = 'Failed to send SOS alert. ';
+        
+        if (error.message && error.message.includes('permission')) {
+            errorMessage = '⚠️ Location permission required! Please enable location access in your browser and try again.';
+        } else if (error.message && error.message.includes('timeout')) {
+            errorMessage = '⚠️ Location request timed out. Please try again or call emergency services directly.';
+        } else {
+            errorMessage = '⚠️ Failed to send SOS alert. Please call emergency services: 112';
+        }
+        
+        showAlert(errorMessage, 'error');
+        
+        // Offer to call emergency directly
+        if (confirm(errorMessage + '\n\nWould you like to call emergency services now?')) {
+            window.location.href = 'tel:112';
+        }
     }
 }
 
