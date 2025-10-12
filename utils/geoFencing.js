@@ -2,6 +2,7 @@
  * Advanced Geo-Fencing Utility
  * Implements intelligent location monitoring, route deviation detection,
  * safe/danger zones, and predictive safety analytics
+ * Enhanced with real-time boundary checks and alert system
  */
 
 const turf = require('@turf/turf');

@@ -29,6 +29,25 @@ exports.triggerSOS = asyncHandler(async (req, res) => {
     } = req.body;
 
     console.log('🚨 [SOS] Emergency triggered by user:', req.user._id);
+    console.log('📍 [SOS] Location data received:', { latitude, longitude, accuracy });
+
+    // Validate location coordinates
+    if (!latitude || !longitude || typeof latitude !== 'number' || typeof longitude !== 'number') {
+        console.error('❌ [SOS] Invalid location coordinates:', { latitude, longitude });
+        return res.status(400).json({
+            success: false,
+            message: 'Valid location coordinates are required for SOS alert. Please enable location permissions and try again.'
+        });
+    }
+
+    // Validate coordinate ranges
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        console.error('❌ [SOS] Coordinates out of range:', { latitude, longitude });
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid coordinate values received.'
+        });
+    }
 
     const user = await User.findById(req.user._id).populate('emergencyContacts');
     

@@ -16,47 +16,26 @@ const helpers = require('../utils/helpers');
  * Create booking
  */
 exports.createBooking = asyncHandler(async (req, res) => {
-    console.log('📝 [Create Booking] Request received');
-    console.log('📝 [Create Booking] Body:', req.body);
-    console.log('📝 [Create Booking] User:', req.user._id);
+    console.log('📝 [Create Booking] Request received', 'Body:', req.body, 'User:', req.user._id);
 
     const { rideId, pickupLocation, dropoffLocation, seats, paymentMethod, specialRequests } = req.body;
 
     const ride = await Ride.findById(rideId).populate('rider', 'name email phone profile');
 
-    if (!ride) {
-        throw new AppError('Ride not found', 404);
-    }
-
-    if (ride.status !== 'ACTIVE') {
-        throw new AppError('Ride is not available for booking', 400);
-    }
-
-    if (ride.rider._id.toString() === req.user._id.toString()) {
-        throw new AppError('Cannot book your own ride', 400);
-    }
+    if (!ride) throw new AppError('Ride not found', 404);
+    if (ride.status !== 'ACTIVE') throw new AppError('Ride is not available for booking', 400);
+    if (ride.rider._id.toString() === req.user._id.toString()) throw new AppError('Cannot book your own ride', 400);
 
     // ✅ CHECK GENDER RESTRICTION (FEMALE ONLY)
-    if (ride.preferences.gender === 'FEMALE_ONLY') {
-        const passenger = await User.findById(req.user._id);
-        if (passenger.profile.gender !== 'FEMALE') {
-            throw new AppError('This ride is for female passengers only', 403);
-        }
+    if (ride.preferences.gender === 'FEMALE_ONLY' && (await User.findById(req.user._id)).profile.gender !== 'FEMALE') {
+        throw new AppError('This ride is for female passengers only', 403);
     }
 
     const numSeats = parseInt(seats);
-    if (ride.pricing.availableSeats < numSeats) {
-        throw new AppError('Not enough seats available', 400);
-    }
+    if (ride.pricing.availableSeats < numSeats) throw new AppError('Not enough seats available', 400);
 
     // Check if user already has a booking
-    const existingBooking = await Booking.findOne({
-        passenger: req.user._id,
-        ride: ride._id,
-        status: { $nin: ['CANCELLED', 'REJECTED'] }
-    });
-
-    if (existingBooking) {
+    if (await Booking.findOne({ passenger: req.user._id, ride: ride._id, status: { $nin: ['CANCELLED', 'REJECTED'] } })) {
         throw new AppError('You already have a booking for this ride', 400);
     }
 
@@ -360,18 +339,13 @@ exports.acceptBooking = asyncHandler(async (req, res) => {
     // Update booking status
     booking.status = 'CONFIRMED';
     booking.riderResponse.respondedAt = new Date();
-    if (message) {
-        booking.riderResponse.message = message;
-    }
-    
+    if (message) booking.riderResponse.message = message;
     await booking.save();
 
-    console.log('✅ [Accept Booking] Booking confirmed:', booking._id);
-    console.log('ℹ️  [Accept Booking] Pickup OTP will be generated when ride starts');
+    console.log('✅ [Accept Booking] Booking confirmed:', booking._id, 'ℹ️ Pickup OTP will be generated when ride starts');
 
     // Get passenger and rider names safely
-    const passengerName = User.getUserName(booking.passenger);
-    const riderName = User.getUserName(req.user);
+    const passengerName = User.getUserName(booking.passenger), riderName = User.getUserName(req.user);
 
     // Create notification for passenger
     const notification = await Notification.create({
@@ -1278,7 +1252,8 @@ exports.markAsPaid = asyncHandler(async (req, res) => {
 });
 
 /**
- * Cancel booking
+ * Cancel booking...
+ * ...
  */
 exports.cancelBooking = asyncHandler(async (req, res) => {
     const { bookingId } = req.params;
@@ -1469,6 +1444,7 @@ exports.completeJourney = asyncHandler(async (req, res) => {
     console.log('✅ [Complete Journey] Booking marked as COMPLETED');
 
     // Update passenger statistics
+    //update passenger statistics...
     const passenger = await User.findById(booking.passenger._id);
     if (passenger && passenger.statistics) {
         passenger.statistics.completedRides = (passenger.statistics.completedRides || 0) + 1;

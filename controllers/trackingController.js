@@ -1,6 +1,7 @@
 /**
  * Tracking Controller
  * Handles real-time ride tracking functionality
+ * Features: Live location updates, breadcrumb trails, Socket.IO integration
  */
 
 const Booking = require('../models/Booking');
@@ -47,7 +48,7 @@ exports.showTrackingPage = asyncHandler(async (req, res) => {
                     { passenger: userId },
                     { rider: userId }
                 ],
-                status: { $in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] }
+                status: { $in: ['CONFIRMED', 'READY_FOR_PICKUP', 'IN_PROGRESS', 'COMPLETED'] }
             })
             .populate({
                 path: 'ride',
@@ -200,8 +201,8 @@ exports.updateLocation = asyncHandler(async (req, res) => {
         throw new AppError('Only the rider can update location', 403);
     }
 
-    // Check ride status (allow ACTIVE or IN_PROGRESS to start streaming)
-    if (!['IN_PROGRESS', 'ACTIVE'].includes(ride.status)) {
+    // Check ride status (allow ACTIVE, READY_FOR_PICKUP or IN_PROGRESS to start streaming)
+    if (!['IN_PROGRESS', 'ACTIVE', 'READY_FOR_PICKUP'].includes(ride.status)) {
         throw new AppError('Ride is not active', 400);
     }
 

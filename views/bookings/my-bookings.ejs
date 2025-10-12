@@ -212,12 +212,19 @@
                                                 <i class="fas fa-eye mr-2"></i>View Details
                                             </a>
 
-                                            <% if (booking.status==='CONFIRMED' || booking.status==='IN_PROGRESS' ) { %>
+                                            <% if (
+                                                booking.status==='CONFIRMED' ||
+                                                booking.status==='PICKUP_PENDING' ||
+                                                booking.status==='PICKED_UP' ||
+                                                booking.status==='IN_TRANSIT' ||
+                                                booking.status==='DROPPING_OFF' ||
+                                                booking.status==='DROPOFF_PENDING'
+                                            ) { %>
                                                 <a href="/tracking/<%= booking._id %>"
                                                     class="px-4 py-2 bg-primary hover:bg-green-700 text-white rounded-lg font-semibold transition">
-                                                    <i class="fas fa-map-marked-alt mr-2"></i>Track Ride
+                                                    <i class="fas fa-map-marked-alt mr-2"></i>Live Track
                                                 </a>
-                                                <% } %>
+                                            <% } %>
 
                                                     <% if (booking.status==='CONFIRMED' ) { %>
                                                         <a href="/chat/<%= booking.ride?._id %>"
