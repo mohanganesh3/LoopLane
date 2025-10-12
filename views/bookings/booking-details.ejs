@@ -85,6 +85,18 @@
                         <i class="fas fa-times mr-2"></i>Cancel Booking
                     </button>
                     <% } %>
+
+                    <% if (isPassenger && (
+                        booking.status==='CONFIRMED' ||
+                        booking.status==='PICKUP_PENDING' ||
+                        booking.status==='PICKED_UP' ||
+                        booking.status==='IN_TRANSIT' ||
+                        booking.status==='DROPOFF_PENDING'
+                    )) { %>
+                        <a href="/tracking/<%= booking._id %>" class="ml-3 px-4 py-2 bg-primary hover:bg-green-700 text-white rounded-lg transition">
+                            <i class="fas fa-map-marked-alt mr-2"></i>Live Track
+                        </a>
+                    <% } %>
             </div>
 
             <!-- OTP SECTION FOR PASSENGERS -->
