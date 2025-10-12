@@ -2,16 +2,6 @@
 
 A comprehensive carpooling web application built with Node.js, Express, MongoDB, and EJS. LANE connects riders and passengers for eco-friendly, cost-effective travel.
 
-## 📋 Table of Contents
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Project Structure](#project-structure)
-- [API Documentation](#api-documentation)
-- [Contributing](#contributing)
-- [License](#license)
-
 ## ✨ Features
 
 ### For Riders (Drivers)
@@ -452,49 +442,5 @@ npm test -- bookings
   }
 }
 ```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 👨‍💻 Author
-
-**Mohan Ganesh**
-- GitHub: [@mohanganesh3](https://github.com/mohanganesh3)
-- Email: admin@lanecarpool.com
-
-## 🙏 Acknowledgments
-
-- Node.js and Express.js communities
-- MongoDB documentation
-- Leaflet.js for mapping
-- All open-source contributors
-
-## 📞 Support
-
-For support, email admin@lanecarpool.com or open an issue in the repository.
-
-## 🔮 Future Enhancements
-
-- [ ] Mobile app (React Native)
-- [ ] Advanced route optimization
-- [ ] Integration with Google Maps
-- [ ] Ride sharing with multiple pickup points
-- [ ] Loyalty program
-- [ ] Referral system
-- [ ] Multi-language support
-- [ ] Dark mode
-
 ---
 
-**Made with ❤️ for sustainable transportation**
