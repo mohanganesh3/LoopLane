@@ -295,6 +295,30 @@ exports.searchRides = asyncHandler(async (req, res) => {
     console.log('Found rides:', rides.length);
     console.log('Search coords:', { pickup: originCoords.coordinates, dropoff: destCoords.coordinates });
 
+    // Filter out rides without proper route geometry and log reasons
+    const ridesWithValidGeometry = rides.filter(ride => {
+        if (!ride.route) {
+            console.log(`⚠️  Ride ${ride._id} skipped: No route field`);
+            return false;
+        }
+        if (!ride.route.geometry) {
+            console.log(`⚠️  Ride ${ride._id} skipped: No geometry in route`);
+            return false;
+        }
+        if (!ride.route.geometry.coordinates) {
+            console.log(`⚠️  Ride ${ride._id} skipped: No coordinates in geometry`);
+            return false;
+        }
+        if (ride.route.geometry.coordinates.length < 2) {
+            console.log(`⚠️  Ride ${ride._id} skipped: Insufficient coordinates (${ride.route.geometry.coordinates.length})`);
+            return false;
+        }
+        console.log(`✓ Ride ${ride._id} has ${ride.route.geometry.coordinates.length} route points`);
+        return true;
+    });
+
+    console.log(`Valid rides with geometry: ${ridesWithValidGeometry.length} / ${rides.length}`);
+
     // Match routes using intelligent algorithm
     const passengerRoute = {
         pickup: originCoords.coordinates,
@@ -303,7 +327,7 @@ exports.searchRides = asyncHandler(async (req, res) => {
 
     const matchedRides = routeMatching.findMatchingRides(
         passengerRoute,
-        rides,
+        ridesWithValidGeometry,
         20
     );
 

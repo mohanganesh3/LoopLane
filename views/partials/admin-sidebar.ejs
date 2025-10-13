@@ -104,6 +104,27 @@
             <span>Bookings</span>
         </a>
 
+        <a href="/admin/deviations" class="sidebar-link <%= active === 'geo-fencing' ? 'active' : '' %>" style="
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 15px;
+            font-weight: 500;
+            <%= active === 'geo-fencing' ? 'background: rgba(255, 255, 255, 0.15); border-left: 4px solid white;' : '' %>
+        ">
+            <i class="fas fa-route" style="font-size: 18px; width: 20px;"></i>
+            <span>Geo-Fencing</span>
+            <% if (typeof unresolvedDeviations !== 'undefined' && unresolvedDeviations > 0) { %>
+                <span style="background: #ef4444; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: auto;">
+                    <%= unresolvedDeviations %>
+                </span>
+            <% } %>
+        </a>
+
         <a href="/admin/reports" class="sidebar-link <%= active === 'reports' ? 'active' : '' %>" style="
             display: flex;
             align-items: center;

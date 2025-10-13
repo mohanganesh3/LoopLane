@@ -327,6 +327,14 @@
             <a href="/admin/bookings" class="admin-nav-item">
                 <i class="fas fa-ticket-alt"></i> Bookings
             </a>
+            <a href="/admin/deviations" class="admin-nav-item">
+                <i class="fas fa-route"></i> Geo-Fencing
+                <% if (typeof unresolvedDeviations !== 'undefined' && unresolvedDeviations > 0) { %>
+                    <span style="background: #ef4444; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 10px;">
+                        <%= unresolvedDeviations %>
+                    </span>
+                <% } %>
+            </a>
             <a href="/admin/reports" class="admin-nav-item">
                 <i class="fas fa-flag"></i> Reports
             </a>
@@ -425,6 +433,28 @@
                     </div>
                     <div style="font-size: 13px; color: #6b7280; margin-top: 10px;">
                         From <%= stats.bookings.total %> total bookings
+                    </div>
+                </div>
+
+                <!-- Geo-Fencing Alerts -->
+                <div class="stat-card <%= unresolvedDeviations > 5 ? 'danger' : unresolvedDeviations > 0 ? 'warning' : 'success' %>">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value"><%= unresolvedDeviations || 0 %></div>
+                            <div class="stat-label">Route Deviations</div>
+                        </div>
+                        <div class="stat-icon <%= unresolvedDeviations > 5 ? 'danger' : unresolvedDeviations > 0 ? 'warning' : 'success' %>">
+                            <i class="fas fa-route"></i>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; color: #6b7280; margin-top: 10px;">
+                        <% if (unresolvedDeviations > 0) { %>
+                            <a href="/admin/deviations" style="color: #ef4444; font-weight: 600; text-decoration: none;">
+                                ⚠️ <%= unresolvedDeviations %> unresolved alerts
+                            </a>
+                        <% } else { %>
+                            ✅ All drivers on route
+                        <% } %>
                     </div>
                 </div>
             </div>

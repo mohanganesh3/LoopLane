@@ -5,11 +5,26 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
+const RouteDeviation = require('../models/RouteDeviation');
 const { isAuthenticated, isAdmin } = require('../middleware/auth');
 
 // All routes require admin authentication
 router.use(isAuthenticated);
 router.use(isAdmin);
+
+// Middleware to add unresolved deviations count to all admin pages
+router.use(async (req, res, next) => {
+    try {
+        const unresolvedDeviations = await RouteDeviation.countDocuments({ 
+            status: { $in: ['ACTIVE', 'ESCALATED'] } 
+        });
+        res.locals.unresolvedDeviations = unresolvedDeviations;
+    } catch (error) {
+        console.error('Error fetching unresolved deviations:', error);
+        res.locals.unresolvedDeviations = 0;
+    }
+    next();
+});
 
 // Dashboard
 router.get('/dashboard', adminController.showDashboard);

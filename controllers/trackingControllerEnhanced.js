@@ -6,6 +6,7 @@
 const Booking = require('../models/Booking');
 const Ride = require('../models/Ride');
 const Emergency = require('../models/Emergency');
+const RouteDeviation = require('../models/RouteDeviation');
 const GeoFencing = require('../utils/geoFencing');
 const EmergencyResponseSystem = require('../utils/emergencyResponseSystem');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
@@ -308,37 +309,132 @@ exports.updateLocation = asyncHandler(async (req, res) => {
 
 /**
  * Send route deviation alert
+ * Creates RouteDeviation record, notifies passengers, driver, and admin
  */
 exports.sendDeviationAlert = async function(booking, deviationCheck, io) {
     try {
-        const ride = booking.ride;
-        const rider = ride.rider;
+        const ride = await Ride.findById(booking.ride).populate('rider', 'name phone email');
+        if (!ride) return;
 
         // Notify passengers
         const passengers = await Booking.find({
             ride: ride._id,
             status: { $in: ['CONFIRMED', 'IN_PROGRESS'] }
-        }).populate('passenger', 'phone name');
+        }).populate('passenger', 'phone name email');
 
-        const alertMessage = `Route deviation detected: Vehicle is ${deviationCheck.distance}m off planned route.`;
+        const currentLocation = ride.tracking.currentLocation.coordinates;
+        const deviationDistanceKm = (deviationCheck.distance / 1000).toFixed(2);
 
-        // Send in-app notifications
+        // Determine severity based on distance
+        let severity = 'LOW';
+        if (deviationCheck.distance > 15000) severity = 'CRITICAL'; // > 15km
+        else if (deviationCheck.distance > 10000) severity = 'HIGH'; // > 10km
+        else if (deviationCheck.distance > 5000) severity = 'MEDIUM'; // > 5km
+
+        // Check if there's already an active deviation for this ride
+        let deviation = await RouteDeviation.findOne({
+            ride: ride._id,
+            status: 'ACTIVE'
+        });
+
+        if (!deviation) {
+            // Create new deviation record
+            deviation = await RouteDeviation.create({
+                ride: ride._id,
+                driver: ride.rider._id,
+                passengers: passengers.map(p => p.passenger._id),
+                deviationType: 'ROUTE_DEVIATION',
+                severity: severity,
+                deviationLocation: {
+                    type: 'Point',
+                    coordinates: currentLocation
+                },
+                deviationDistance: parseFloat(deviationDistanceKm),
+                deviatedAt: new Date(),
+                locationDescription: `Deviated ${deviationDistanceKm}km from planned route`,
+                status: 'ACTIVE'
+            });
+
+            console.log(`📝 Created RouteDeviation record: ${deviation._id}`);
+        } else {
+            // Update existing deviation
+            deviation.deviationDistance = parseFloat(deviationDistanceKm);
+            deviation.severity = severity;
+            deviation.duration = Math.floor((Date.now() - deviation.deviatedAt) / 1000);
+            await deviation.save();
+        }
+
+        const alertMessage = `⚠️ ROUTE DEVIATION: Driver is ${deviationDistanceKm}km off the planned route. Stay alert!`;
+        const driverWarning = `⚠️ WARNING: You are ${deviationDistanceKm}km off route. Please return to the planned path immediately.`;
+
+        // Send notifications to passengers
         for (const passengerBooking of passengers) {
             if (io) {
                 io.to(`user-${passengerBooking.passenger._id}`).emit('safety-alert', {
                     type: 'ROUTE_DEVIATION',
-                    severity: deviationCheck.deviation,
+                    severity: severity,
                     message: alertMessage,
-                    distance: deviationCheck.distance,
+                    deviationId: deviation._id,
+                    distance: deviationDistanceKm,
                     location: {
-                        lat: ride.tracking.currentLocation.coordinates[1],
-                        lng: ride.tracking.currentLocation.coordinates[0]
-                    }
+                        lat: currentLocation[1],
+                        lng: currentLocation[0]
+                    },
+                    actions: [
+                        { label: 'View on Map', action: 'VIEW_MAP' },
+                        { label: 'Contact Driver', action: 'CALL_DRIVER' },
+                        { label: 'Report Emergency', action: 'SOS', critical: severity === 'CRITICAL' }
+                    ]
                 });
             }
+
+            deviation.notificationsSent.passengerNotified = true;
         }
 
-        console.log(`📢 Route deviation alert sent for ride ${ride._id}`);
+        // Warn driver
+        if (io) {
+            io.to(`user-${ride.rider._id}`).emit('driver-warning', {
+                type: 'ROUTE_DEVIATION',
+                severity: severity,
+                message: driverWarning,
+                deviationId: deviation._id,
+                distance: deviationDistanceKm,
+                instructions: 'Return to planned route immediately to avoid penalties'
+            });
+        }
+        deviation.notificationsSent.driverWarned = true;
+
+        // Alert admin for HIGH or CRITICAL deviations
+        if (severity === 'HIGH' || severity === 'CRITICAL') {
+            if (io) {
+                io.to('admin-room').emit('admin-alert', {
+                    type: 'ROUTE_DEVIATION',
+                    severity: severity,
+                    deviationId: deviation._id,
+                    ride: {
+                        id: ride._id,
+                        rider: ride.rider.name,
+                        riderPhone: ride.rider.phone,
+                        passengers: passengers.map(p => ({
+                            name: p.passenger.name,
+                            phone: p.passenger.phone
+                        }))
+                    },
+                    message: `${severity} route deviation detected: ${deviationDistanceKm}km off route`,
+                    location: {
+                        lat: currentLocation[1],
+                        lng: currentLocation[0]
+                    },
+                    timestamp: new Date(),
+                    requiresAction: severity === 'CRITICAL'
+                });
+            }
+            deviation.notificationsSent.adminAlerted = true;
+        }
+
+        await deviation.save();
+
+        console.log(`📢 Route deviation alert sent for ride ${ride._id} - Severity: ${severity}, Distance: ${deviationDistanceKm}km`);
     } catch (error) {
         console.error('Error sending deviation alert:', error);
     }

@@ -10,6 +10,7 @@ const Report = require('../models/Report');
 const Review = require('../models/Review');
 const Notification = require('../models/Notification');
 const Settings = require('../models/Settings');
+const RouteDeviation = require('../models/RouteDeviation');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const helpers = require('../utils/helpers');
 const { sendEmail } = require('../config/email');
@@ -75,6 +76,11 @@ exports.showDashboard = asyncHandler(async (req, res) => {
     const completedBookingsCount = totalRevenue[0]?.count || 0;
     const platformRevenue = completedBookingsCount * 50; // ₹50 commission per booking
 
+    // Get unresolved route deviations count for geo-fencing badge
+    const unresolvedDeviations = await RouteDeviation.countDocuments({ 
+        status: { $in: ['ACTIVE', 'ESCALATED'] } 
+    });
+
     res.render('admin/dashboard', {
         title: 'Admin Dashboard',
         stats: {
@@ -98,6 +104,7 @@ exports.showDashboard = asyncHandler(async (req, res) => {
             platformRevenue: platformRevenue,
             revenueBookings: completedBookingsCount
         },
+        unresolvedDeviations,
         recentUsers,
         recentRides,
         user: req.user

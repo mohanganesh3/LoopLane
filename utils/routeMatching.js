@@ -10,9 +10,15 @@ const helpers = require('./helpers');
 class RouteMatching {
     constructor() {
         this.OSRM_URL = process.env.OSRM_API_URL || 'https://router.project-osrm.org';
-        this.DEVIATION_THRESHOLD = parseFloat(process.env.ROUTE_DEVIATION_THRESHOLD) || 2; // km for intermediate points (allow realistic highway offsets)
+        this.DEVIATION_THRESHOLD = parseFloat(process.env.ROUTE_DEVIATION_THRESHOLD) || 10; // km for intermediate points (increased for highways)
         this.ENDPOINT_THRESHOLD = parseFloat(process.env.ROUTE_ENDPOINT_THRESHOLD) || 20; // km tolerance for start/end matching
         this.MAX_DETOUR_PERCENT = 20; // Maximum 20% detour allowed
+        this.EXACT_MATCH_EPSILON = 0.5; // km - for detecting exact waypoint matches
+        
+        console.log('🔧 [RouteMatching] Initialized with thresholds:');
+        console.log(`   DEVIATION_THRESHOLD: ${this.DEVIATION_THRESHOLD} km`);
+        console.log(`   ENDPOINT_THRESHOLD: ${this.ENDPOINT_THRESHOLD} km`);
+        console.log(`   EXACT_MATCH_EPSILON: ${this.EXACT_MATCH_EPSILON} km`);
     }
 
     /**
@@ -23,6 +29,26 @@ class RouteMatching {
      * @returns {object} Match result
      */
     isPointNearRoute(point, routeCoordinates, threshold = this.DEVIATION_THRESHOLD) {
+        // First, check for exact/near matches at waypoints (prioritize exact coordinate matches)
+        for (let i = 0; i < routeCoordinates.length; i++) {
+            const [lon, lat] = routeCoordinates[i];
+            const dist = helpers.calculateDistance(
+                point[1], point[0],
+                lat, lon
+            );
+            
+            // If point is very close to a waypoint (within 500m), return it immediately
+            if (dist < this.EXACT_MATCH_EPSILON) {
+                return {
+                    isNear: true,
+                    distance: dist,
+                    closestIndex: i,
+                    closestPoint: routeCoordinates[i],
+                    isExactMatch: true
+                };
+            }
+        }
+
         let minDistance = Infinity;
         let closestIndex = -1;
         let closestPoint = null;
@@ -49,7 +75,8 @@ class RouteMatching {
             isNear: minDistance <= threshold,
             distance: minDistance,
             closestIndex: closestIndex,
-            closestPoint: closestPoint
+            closestPoint: closestPoint,
+            isExactMatch: false
         };
     }
 
@@ -198,8 +225,23 @@ class RouteMatching {
         const { pickup, dropoff } = passengerRoute;
         const { coordinates: routeCoords } = rideRoute.geometry;
 
-        // For simple routes (2 points), use proximity-based matching
-        if (routeCoords.length === 2) {
+        // Validate route has sufficient data
+        if (!routeCoords || routeCoords.length < 2) {
+            return {
+                isMatch: false,
+                reason: 'Invalid route geometry (insufficient coordinates)'
+            };
+        }
+
+        // For routes with only 2 points AND short distance, use proximity-based matching
+        // This should be rare since OSRM provides detailed geometry
+        const directDist = helpers.calculateDistance(
+            routeCoords[0][1], routeCoords[0][0],
+            routeCoords[routeCoords.length - 1][1], routeCoords[routeCoords.length - 1][0]
+        );
+        
+        if (routeCoords.length === 2 && directDist < 50) {
+            // Only use simple matching for very short routes (< 50km)
             return this.matchSimpleRoute(passengerRoute, rideRoute);
         }
 
@@ -207,7 +249,9 @@ class RouteMatching {
         const rideEnd = routeCoords[routeCoords.length - 1];
 
         // Check if pickup point is near the route
+        console.log('🔍 [Match Debug] Checking pickup point...');
         let pickupMatch = this.isPointNearRoute(pickup, routeCoords);
+        console.log(`  Pickup near route? ${pickupMatch.isNear}, distance: ${pickupMatch.distance?.toFixed(2)} km, threshold: ${this.DEVIATION_THRESHOLD} km`);
 
         if (!pickupMatch.isNear) {
             const pickupToStart = helpers.calculateDistance(pickup[1], pickup[0], rideStart[1], rideStart[0]);
