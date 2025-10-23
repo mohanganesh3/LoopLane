@@ -60,8 +60,194 @@ const BookingDetails = () => {
         {/* Journey Status */}
         <JourneyStatus booking={booking} />
 
-        {/* Content will be added in next commits */}
+        {/* Journey Details */}
+        <JourneyDetails booking={booking} />
+
+        {/* Payment Details */}
+        <PaymentDetails booking={booking} />
+
+        {/* Driver/Passenger Info */}
+        <PersonInfo booking={booking} />
+
+        {/* Cancellation Info */}
+        {booking.status === 'CANCELLED' && booking.cancellation && (
+          <CancellationInfo cancellation={booking.cancellation} />
+        )}
       </div>
+    </div>
+  );
+};
+
+// Journey Details Component
+const JourneyDetails = ({ booking }) => {
+  const formatDate = (date) => {
+    return new Date(date).toLocaleString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 className="text-xl font-bold text-gray-800 mb-4">
+        <i className="fas fa-route text-emerald-500 mr-2"></i>Journey Details
+      </h2>
+      
+      <div className="space-y-4">
+        <div className="flex items-center">
+          <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+            <i className="fas fa-map-marker-alt text-green-600 text-xl"></i>
+          </div>
+          <div className="ml-4 flex-1">
+            <p className="text-sm text-gray-500">Pickup</p>
+            <p className="text-lg font-semibold text-gray-800">
+              {booking.pickupPoint?.name || booking.pickupPoint?.address || 'Pickup location'}
+            </p>
+          </div>
+        </div>
+
+        <div className="ml-6 border-l-2 border-gray-300 pl-6 py-2">
+          <div className="text-gray-600 flex items-center gap-4">
+            <span><i className="fas fa-road mr-2"></i>
+              {booking.ride?.route?.distance ? `${booking.ride.route.distance.toFixed(1)} km` : 'N/A'}
+            </span>
+            <span><i className="fas fa-clock mr-2"></i>
+              {booking.ride?.route?.duration ? `${Math.round(booking.ride.route.duration)} mins` : 'N/A'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center">
+          <div className="flex-shrink-0 w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+            <i className="fas fa-map-marker-alt text-red-600 text-xl"></i>
+          </div>
+          <div className="ml-4 flex-1">
+            <p className="text-sm text-gray-500">Dropoff</p>
+            <p className="text-lg font-semibold text-gray-800">
+              {booking.dropoffPoint?.name || booking.dropoffPoint?.address || 'Dropoff location'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Schedule */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t">
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="font-semibold text-gray-700 mb-2">
+            <i className="fas fa-calendar-alt text-emerald-500 mr-2"></i>Departure Time
+          </h3>
+          <p className="text-lg">
+            {formatDate(booking.ride?.schedule?.departureDateTime || booking.createdAt)}
+          </p>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="font-semibold text-gray-700 mb-2">
+            <i className="fas fa-users text-emerald-500 mr-2"></i>Seats Booked
+          </h3>
+          <p className="text-lg">{booking.seatsBooked || 1} seat(s)</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Payment Details Component
+const PaymentDetails = ({ booking }) => {
+  return (
+    <div className="bg-emerald-50 rounded-lg p-6 mb-6">
+      <h3 className="font-semibold text-gray-700 mb-3">
+        <i className="fas fa-credit-card text-emerald-500 mr-2"></i>Payment Details
+      </h3>
+      <div className="space-y-2">
+        <div className="flex justify-between">
+          <span className="text-gray-600">Subtotal:</span>
+          <span className="font-semibold">₹{booking.totalPrice || 0}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">Payment Method:</span>
+          <span className="font-semibold">{booking.payment?.method || 'CASH'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-600">Payment Status:</span>
+          <span className={`px-3 py-1 ${
+            booking.payment?.status === 'PAID' 
+              ? 'bg-green-100 text-green-800' 
+              : 'bg-yellow-100 text-yellow-800'
+          } rounded-full text-sm font-semibold`}>
+            {booking.payment?.status || 'PENDING'}
+          </span>
+        </div>
+        <div className="border-t pt-2 mt-2 flex justify-between text-lg">
+          <span className="font-bold">Total:</span>
+          <span className="font-bold text-emerald-600">₹{booking.totalPrice || 0}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Person Info (Driver for passengers, Passenger for drivers)
+const PersonInfo = ({ booking }) => {
+  const rider = booking.ride?.rider;
+  const passenger = booking.passenger;
+
+  // Show driver info for passengers
+  if (rider) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h3 className="font-semibold text-gray-700 mb-4">
+          <i className="fas fa-user text-emerald-500 mr-2"></i>Your Driver
+        </h3>
+        <div className="flex items-start space-x-4">
+          <img 
+            src={rider.profilePhoto || '/images/default-avatar.png'} 
+            alt={rider.firstName}
+            className="w-16 h-16 rounded-full object-cover"
+          />
+          <div className="flex-1">
+            <h4 className="text-lg font-semibold">{rider.firstName} {rider.lastName}</h4>
+            <div className="flex items-center text-yellow-500 mb-2">
+              {[1,2,3,4,5].map(i => (
+                <i key={i} className={`fas fa-star ${i <= (rider.rating?.overall || 0) ? '' : 'text-gray-300'}`}></i>
+              ))}
+              <span className="text-gray-600 ml-2">{(rider.rating?.overall || 0).toFixed(1)}</span>
+            </div>
+            <div className="flex gap-4 text-sm text-gray-600">
+              <span><i className="fas fa-car mr-1"></i>{rider.statistics?.totalRidesCompleted || 0} rides</span>
+              {rider.phone && <span><i className="fas fa-phone mr-1"></i>{rider.phone}</span>}
+            </div>
+            {(booking.status === 'CONFIRMED' || booking.status === 'IN_PROGRESS') && (
+              <div className="mt-3">
+                <Link
+                  to={`/chat?userId=${rider._id}`}
+                  className="inline-flex items-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition"
+                >
+                  <i className="fas fa-comment mr-2"></i>Chat with Driver
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+};
+
+// Cancellation Info
+const CancellationInfo = ({ cancellation }) => {
+  return (
+    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+      <h3 className="font-semibold text-gray-700 mb-2">
+        <i className="fas fa-times-circle text-red-500 mr-2"></i>Cancellation Details
+      </h3>
+      <p className="text-gray-700"><strong>Cancelled by:</strong> {cancellation.cancelledBy}</p>
+      <p className="text-gray-700"><strong>Reason:</strong> {cancellation.reason || 'No reason provided'}</p>
+      <p className="text-gray-600 text-sm">
+        <strong>Date:</strong> {new Date(cancellation.cancelledAt).toLocaleString()}
+      </p>
     </div>
   );
 };
