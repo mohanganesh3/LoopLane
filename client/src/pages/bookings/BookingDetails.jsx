@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { LoadingSpinner, Alert, Badge } from '../../components/common';
 import bookingService from '../../services/bookingService';
 
 const BookingDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
   useEffect(() => {
     fetchBooking();
@@ -21,6 +25,25 @@ const BookingDetails = () => {
       setError('Failed to load booking details');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Cancel booking handler
+  const handleCancelBooking = async () => {
+    if (!cancelReason.trim()) {
+      alert('Please provide a reason for cancellation');
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      await bookingService.cancelBooking(id, cancelReason);
+      setShowCancelModal(false);
+      fetchBooking(); // Refresh booking data
+    } catch (err) {
+      alert(err.message || 'Failed to cancel booking');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -40,6 +63,9 @@ const BookingDetails = () => {
       </div>
     );
   }
+
+  // Check if booking can be cancelled
+  const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
 
   return (
     <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
@@ -63,6 +89,11 @@ const BookingDetails = () => {
         {/* Journey Details */}
         <JourneyDetails booking={booking} />
 
+        {/* Special Requests */}
+        {booking.specialRequests && (
+          <SpecialRequests requests={booking.specialRequests} />
+        )}
+
         {/* Payment Details */}
         <PaymentDetails booking={booking} />
 
@@ -73,7 +104,134 @@ const BookingDetails = () => {
         {booking.status === 'CANCELLED' && booking.cancellation && (
           <CancellationInfo cancellation={booking.cancellation} />
         )}
+
+        {/* Action Buttons */}
+        {canCancel && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h3 className="font-semibold text-gray-700 mb-4">
+              <i className="fas fa-cog text-emerald-500 mr-2"></i>Actions
+            </h3>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => setShowCancelModal(true)}
+                className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition flex items-center"
+              >
+                <i className="fas fa-times-circle mr-2"></i>Cancel Booking
+              </button>
+              <Link
+                to={`/chat?userId=${booking.ride?.rider?._id}`}
+                className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition flex items-center"
+              >
+                <i className="fas fa-comment mr-2"></i>Contact Driver
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Rate Experience Button (for completed bookings) */}
+        {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && !booking.rating && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-yellow-800">
+                  <i className="fas fa-star text-yellow-500 mr-2"></i>Rate your experience
+                </h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Help other passengers by sharing your feedback
+                </p>
+              </div>
+              <Link
+                to={`/bookings/${id}/rate`}
+                className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition"
+              >
+                Rate Now
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Cancel Modal */}
+        {showCancelModal && (
+          <CancelModal
+            onClose={() => setShowCancelModal(false)}
+            onConfirm={handleCancelBooking}
+            loading={actionLoading}
+            reason={cancelReason}
+            setReason={setCancelReason}
+          />
+        )}
       </div>
+    </div>
+  );
+};
+
+// Cancel Booking Modal
+const CancelModal = ({ onClose, onConfirm, loading, reason, setReason }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i className="fas fa-exclamation-triangle text-red-500 text-3xl"></i>
+          </div>
+          <h3 className="text-xl font-bold text-gray-800">Cancel Booking?</h3>
+          <p className="text-gray-600 mt-2">
+            Are you sure you want to cancel this booking? This action cannot be undone.
+          </p>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Reason for cancellation <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Please provide a reason..."
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            rows={3}
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+          >
+            Keep Booking
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading || !reason.trim()}
+            className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+          >
+            {loading ? (
+              <>
+                <i className="fas fa-spinner fa-spin mr-2"></i>Cancelling...
+              </>
+            ) : (
+              <>
+                <i className="fas fa-times mr-2"></i>Cancel Booking
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Special Requests Component
+const SpecialRequests = ({ requests }) => {
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h3 className="font-semibold text-gray-700 mb-3">
+        <i className="fas fa-sticky-note text-emerald-500 mr-2"></i>Special Requests
+      </h3>
+      <p className="text-gray-600 bg-gray-50 rounded-lg p-4 italic">
+        "{requests}"
+      </p>
     </div>
   );
 };
