@@ -27,6 +27,44 @@ const userService = {
     return response.data;
   },
 
+  // Upload driving license for verification
+  uploadLicense: async (formData) => {
+    const response = await api.post('/user/license/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  // Get license verification status
+  getLicenseStatus: async () => {
+    const response = await api.get('/user/license/status');
+    return response.data;
+  },
+
+  // Add vehicle details
+  addVehicle: async (vehicleData) => {
+    const response = await api.post('/user/vehicle', vehicleData);
+    return response.data;
+  },
+
+  // Update vehicle details
+  updateVehicle: async (vehicleId, vehicleData) => {
+    const response = await api.put(`/user/vehicle/${vehicleId}`, vehicleData);
+    return response.data;
+  },
+
+  // Delete vehicle
+  deleteVehicle: async (vehicleId) => {
+    const response = await api.delete(`/user/vehicle/${vehicleId}`);
+    return response.data;
+  },
+
+  // Get user's vehicles
+  getVehicles: async () => {
+    const response = await api.get('/user/vehicles');
+    return response.data;
+  },
+
   // Get trip history
   getTripHistory: async (page = 1, limit = 10) => {
     const response = await api.get(`/user/trip-history?page=${page}&limit=${limit}`);
@@ -48,6 +86,18 @@ const userService = {
   // Update settings
   updateSettings: async (data) => {
     const response = await api.put('/user/settings', data);
+    return response.data;
+  },
+
+  // Update emergency contacts
+  updateEmergencyContacts: async (contacts) => {
+    const response = await api.put('/user/emergency-contacts', { contacts });
+    return response.data;
+  },
+
+  // Get emergency contacts
+  getEmergencyContacts: async () => {
+    const response = await api.get('/user/emergency-contacts');
     return response.data;
   },
 
