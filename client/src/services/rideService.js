@@ -1,27 +1,44 @@
 import api from './api';
 
 const rideService = {
-  // Search rides
+  // Search rides with filters
   searchRides: async (params) => {
     const queryParams = new URLSearchParams();
     if (params.origin) queryParams.append('origin', JSON.stringify(params.origin));
     if (params.destination) queryParams.append('destination', JSON.stringify(params.destination));
     if (params.date) queryParams.append('date', params.date);
     if (params.seats) queryParams.append('seats', params.seats);
+    if (params.maxPrice) queryParams.append('maxPrice', params.maxPrice);
+    if (params.departureTime) queryParams.append('departureTime', params.departureTime);
+    if (params.preferences) queryParams.append('preferences', JSON.stringify(params.preferences));
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.sortBy) queryParams.append('sortBy', params.sortBy);
     
     const response = await api.get(`/rides/search/results?${queryParams.toString()}`);
     return response.data;
   },
 
-  // Get ride by ID
+  // Get ride by ID with full details
   getRideById: async (id) => {
     const response = await api.get(`/rides/${id}`);
     return response.data;
   },
 
-  // Get my rides (for riders)
-  getMyRides: async (page = 1, limit = 10) => {
-    const response = await api.get(`/rides/my-rides?page=${page}&limit=${limit}`);
+  // Get my rides as driver
+  getMyRides: async (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.status) queryParams.append('status', params.status);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    
+    const response = await api.get(`/rides/my-rides?${queryParams.toString()}`);
+    return response.data;
+  },
+
+  // Get bookings for a specific ride
+  getRideBookings: async (rideId) => {
+    const response = await api.get(`/rides/${rideId}/bookings`);
     return response.data;
   },
 
@@ -31,27 +48,51 @@ const rideService = {
     return response.data;
   },
 
-  // Update ride
+  // Update ride details
   updateRide: async (id, data) => {
     const response = await api.put(`/rides/${id}`, data);
     return response.data;
   },
 
   // Cancel ride
-  cancelRide: async (id) => {
-    const response = await api.delete(`/rides/${id}`);
+  cancelRide: async (id, reason) => {
+    const response = await api.post(`/rides/${id}/cancel`, { reason });
     return response.data;
   },
 
-  // Start ride
+  // Start ride (driver begins journey)
   startRide: async (id) => {
     const response = await api.post(`/rides/${id}/start`);
     return response.data;
   },
 
-  // Complete ride
+  // Complete ride (journey finished)
   completeRide: async (id) => {
     const response = await api.post(`/rides/${id}/complete`);
+    return response.data;
+  },
+
+  // Accept booking request
+  acceptBooking: async (rideId, bookingId) => {
+    const response = await api.post(`/rides/${rideId}/bookings/${bookingId}/accept`);
+    return response.data;
+  },
+
+  // Reject booking request
+  rejectBooking: async (rideId, bookingId, reason) => {
+    const response = await api.post(`/rides/${rideId}/bookings/${bookingId}/reject`, { reason });
+    return response.data;
+  },
+
+  // Get nearby rides (for location-based search)
+  getNearbyRides: async (lat, lng, radius = 10) => {
+    const response = await api.get(`/rides/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+    return response.data;
+  },
+
+  // Get popular routes
+  getPopularRoutes: async () => {
+    const response = await api.get('/rides/popular-routes');
     return response.data;
   }
 };

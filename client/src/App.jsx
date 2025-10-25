@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/layout';
 import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword } from './pages/auth';
-import { SearchRides, PostRide, MyRides } from './pages/rides';
+import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
 import { Dashboard, LicenseUpload } from './pages/user';
 import { MyBookings, BookingDetails } from './pages/bookings';
 import { Home } from './pages/home';
@@ -42,7 +42,7 @@ function App() {
           <Route path="/rides/search" element={<Layout><SearchRides /></Layout>} />
           <Route path="/rides/post" element={<Layout><PostRide /></Layout>} />
           <Route path="/rides/my-rides" element={<Layout><MyRides /></Layout>} />
-          <Route path="/rides/:id" element={<Layout><Placeholder title="Ride Details" /></Layout>} />
+          <Route path="/rides/:id" element={<Layout><RideDetails /></Layout>} />
 
           {/* Bookings */}
           <Route path="/bookings" element={<Layout><MyBookings /></Layout>} />
