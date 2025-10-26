@@ -4,7 +4,7 @@ import { Layout } from './components/layout';
 import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword } from './pages/auth';
 import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
 import { Dashboard, LicenseUpload } from './pages/user';
-import { MyBookings, BookingDetails } from './pages/bookings';
+import { MyBookings, BookingDetails, RateBooking } from './pages/bookings';
 import { Home } from './pages/home';
 import { Chat } from './pages/chat';
 
@@ -48,7 +48,7 @@ function App() {
           {/* Bookings */}
           <Route path="/bookings" element={<Layout><MyBookings /></Layout>} />
           <Route path="/bookings/:id" element={<Layout><BookingDetails /></Layout>} />
-          <Route path="/bookings/:id/rate" element={<Layout><Placeholder title="Rate Booking" /></Layout>} />
+          <Route path="/bookings/:id/rate" element={<Layout><RateBooking /></Layout>} />
 
           {/* Chat */}
           <Route path="/chat" element={<Layout showFooter={false}><Chat /></Layout>} />
