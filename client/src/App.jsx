@@ -3,7 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/layout';
 import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword } from './pages/auth';
 import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
-import { Dashboard, LicenseUpload } from './pages/user';
+import { Dashboard, LicenseUpload, Profile } from './pages/user';
 import { MyBookings, BookingDetails, RateBooking } from './pages/bookings';
 import { Home } from './pages/home';
 import { Chat } from './pages/chat';
@@ -36,8 +36,8 @@ function App() {
           {/* Protected Routes - User */}
           <Route path="/user/dashboard" element={<Layout><Dashboard /></Layout>} />
           <Route path="/user/license-upload" element={<Layout><LicenseUpload /></Layout>} />
-          <Route path="/user/profile" element={<Layout><Placeholder title="Profile" /></Layout>} />
-          <Route path="/user/settings" element={<Layout><Placeholder title="Settings" /></Layout>} />
+          <Route path="/user/profile" element={<Layout><Profile /></Layout>} />
+          <Route path="/user/settings" element={<Layout><Profile /></Layout>} />
 
           {/* Rides */}
           <Route path="/rides/search" element={<Layout><SearchRides /></Layout>} />
