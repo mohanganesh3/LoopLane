@@ -109,6 +109,34 @@ const RideCard = ({ ride }) => {
             <p className="text-xs text-gray-500">per seat</p>
           </div>
         </div>
+
+        {/* Preferences Tags */}
+        {preferences && (
+          <div className="flex flex-wrap gap-1 mt-3">
+            {preferences.smokingAllowed && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">🚬 Smoking OK</span>
+            )}
+            {preferences.petsAllowed && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">🐾 Pets OK</span>
+            )}
+            {preferences.musicAllowed && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">🎵 Music</span>
+            )}
+            {vehicle?.hasAC && (
+              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded-full">❄️ AC</span>
+            )}
+          </div>
+        )}
+
+        {/* Vehicle Info */}
+        {vehicle && (
+          <div className="flex items-center mt-3 text-xs text-gray-500">
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            <span>{vehicle.make} {vehicle.model} • {vehicle.color}</span>
+          </div>
+        )}
       </div>
     </Link>
   );
