@@ -132,6 +132,92 @@ const SearchFilters = ({ filters, onFilterChange, onApply, onClear }) => {
             <span className="text-sm text-gray-500 ml-2">& up</span>
           </div>
         </div>
+
+        {/* Ride Preferences */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Ride Preferences</label>
+          <div className="space-y-2">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={filters.smokingAllowed || false}
+                onChange={(e) => onFilterChange('smokingAllowed', e.target.checked)}
+                className="h-4 w-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">Smoking allowed</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={filters.petsAllowed || false}
+                onChange={(e) => onFilterChange('petsAllowed', e.target.checked)}
+                className="h-4 w-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">Pets allowed</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={filters.musicAllowed || false}
+                onChange={(e) => onFilterChange('musicAllowed', e.target.checked)}
+                className="h-4 w-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">Music on</span>
+            </label>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={filters.acAvailable || false}
+                onChange={(e) => onFilterChange('acAvailable', e.target.checked)}
+                className="h-4 w-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500"
+              />
+              <span className="ml-2 text-sm text-gray-600">AC available</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Gender Preference */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Driver Gender</label>
+          <select
+            value={filters.driverGender || ''}
+            onChange={(e) => onFilterChange('driverGender', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          >
+            <option value="">Any</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+
+        {/* Verified Only */}
+        <div>
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={filters.verifiedOnly || false}
+              onChange={(e) => onFilterChange('verifiedOnly', e.target.checked)}
+              className="h-4 w-4 text-emerald-500 border-gray-300 rounded focus:ring-emerald-500"
+            />
+            <span className="ml-2 text-sm text-gray-700 font-medium">Verified drivers only</span>
+          </label>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="pt-4 border-t border-gray-200 space-y-2">
+          <button
+            onClick={onApply}
+            className="w-full py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors font-medium"
+          >
+            Apply Filters
+          </button>
+          <button
+            onClick={onClear}
+            className="w-full py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Clear All
+          </button>
+        </div>
       </div>
     </div>
   );
