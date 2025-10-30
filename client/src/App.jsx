@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/layout';
-import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword } from './pages/auth';
+import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword, ChangePassword } from './pages/auth';
 import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
 import { Dashboard, LicenseUpload } from './pages/user';
 import { MyBookings, BookingDetails, RateBooking } from './pages/bookings';
@@ -29,6 +29,7 @@ function App() {
           <Route path="/auth/verify-otp" element={<VerifyOtp />} />
           <Route path="/auth/forgot-password" element={<ForgotPassword />} />
           <Route path="/auth/reset-password" element={<ResetPassword />} />
+          <Route path="/auth/change-password" element={<ChangePassword />} />
 
           {/* Public Routes with Layout */}
           <Route path="/" element={<Layout><Home /></Layout>} />
