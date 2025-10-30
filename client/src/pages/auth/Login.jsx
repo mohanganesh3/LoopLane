@@ -109,11 +109,15 @@ const Login = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  required
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${
+                    validationErrors.email ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="your@email.com"
                 />
               </div>
+              {validationErrors.email && (
+                <p className="mt-1 text-sm text-red-500">{validationErrors.email}</p>
+              )}
             </div>
 
             <div>
@@ -127,8 +131,9 @@ const Login = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  required
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${
+                    validationErrors.password ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="••••••••"
                 />
                 <button
@@ -139,6 +144,9 @@ const Login = () => {
                   <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                 </button>
               </div>
+              {validationErrors.password && (
+                <p className="mt-1 text-sm text-red-500">{validationErrors.password}</p>
+              )}
             </div>
 
             <div className="flex items-center justify-between">
