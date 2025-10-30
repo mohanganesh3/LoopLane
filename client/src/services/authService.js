@@ -52,6 +52,33 @@ export const authService = {
   getCurrentUser: async () => {
     const response = await api.get('/api/users/profile')
     return response.data
+  },
+
+  // Change password
+  changePassword: async (currentPassword, newPassword) => {
+    const response = await api.post('/auth/change-password', {
+      currentPassword,
+      newPassword
+    })
+    return response.data
+  },
+
+  // Update email
+  updateEmail: async (newEmail, password) => {
+    const response = await api.post('/auth/update-email', {
+      newEmail,
+      password
+    })
+    return response.data
+  },
+
+  // Request account deletion
+  requestAccountDeletion: async (password, reason) => {
+    const response = await api.post('/auth/delete-account', {
+      password,
+      reason
+    })
+    return response.data
   }
 }
 
