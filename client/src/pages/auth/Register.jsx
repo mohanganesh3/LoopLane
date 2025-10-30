@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button, Alert } from '../../components/common';
@@ -19,6 +19,43 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0,
+    label: '',
+    color: ''
+  });
+
+  // Password strength calculation
+  useEffect(() => {
+    const password = formData.password;
+    let score = 0;
+    
+    if (password.length >= 8) score += 1;
+    if (password.length >= 12) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/[a-z]/.test(password)) score += 1;
+    if (/[0-9]/.test(password)) score += 1;
+    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+    
+    let label = '';
+    let color = '';
+    
+    if (password.length === 0) {
+      label = '';
+      color = '';
+    } else if (score <= 2) {
+      label = 'Weak';
+      color = 'bg-red-500';
+    } else if (score <= 4) {
+      label = 'Medium';
+      color = 'bg-yellow-500';
+    } else {
+      label = 'Strong';
+      color = 'bg-emerald-500';
+    }
+    
+    setPasswordStrength({ score, label, color });
+  }, [formData.password]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
