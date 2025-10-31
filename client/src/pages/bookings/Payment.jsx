@@ -10,7 +10,17 @@ const Payment = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('upi');
+  const [upiId, setUpiId] = useState('');
+  const [cardDetails, setCardDetails] = useState({
+    number: '',
+    expiry: '',
+    cvv: '',
+    name: ''
+  });
+  const [couponCode, setCouponCode] = useState('');
+  const [discount, setDiscount] = useState(0);
 
   useEffect(() => {
     fetchBooking();
@@ -28,6 +38,69 @@ const Payment = () => {
       setError(err.message || 'Failed to load booking');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApplyCoupon = () => {
+    // Mock coupon validation
+    if (couponCode.toUpperCase() === 'FIRST50') {
+      setDiscount(50);
+      setSuccess('Coupon applied! ₹50 discount');
+    } else if (couponCode.toUpperCase() === 'SAVE10') {
+      const disc = Math.round(booking.totalAmount * 0.1);
+      setDiscount(disc);
+      setSuccess(`Coupon applied! ₹${disc} discount (10% off)`);
+    } else {
+      setError('Invalid coupon code');
+      setDiscount(0);
+    }
+  };
+
+  const handlePayment = async () => {
+    setProcessing(true);
+    setError('');
+
+    // Validate payment method specific fields
+    if (paymentMethod === 'upi' && !upiId) {
+      setError('Please enter your UPI ID');
+      setProcessing(false);
+      return;
+    }
+
+    if (paymentMethod === 'card') {
+      if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvv || !cardDetails.name) {
+        setError('Please fill all card details');
+        setProcessing(false);
+        return;
+      }
+    }
+
+    try {
+      const paymentData = {
+        bookingId,
+        method: paymentMethod,
+        amount: booking.totalAmount - discount,
+        ...(paymentMethod === 'upi' && { upiId }),
+        ...(paymentMethod === 'card' && { cardDetails }),
+        ...(discount > 0 && { couponCode, discount })
+      };
+
+      const response = await bookingService.processPayment(paymentData);
+      
+      if (response.success) {
+        navigate(`/bookings/${bookingId}/success`, { 
+          state: { 
+            paymentId: response.paymentId,
+            amount: booking.totalAmount - discount
+          } 
+        });
+      } else {
+        setError(response.message || 'Payment failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Payment processing failed');
+    } finally {
+      setProcessing(false);
     }
   };
 
