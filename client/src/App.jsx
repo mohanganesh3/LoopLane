@@ -1,10 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { Layout } from './components/layout';
-import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword } from './pages/auth';
+import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword, ChangePassword } from './pages/auth';
 import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
-import { Dashboard, LicenseUpload } from './pages/user';
-import { MyBookings, BookingDetails, RateBooking } from './pages/bookings';
+import { Dashboard, LicenseUpload, Profile } from './pages/user';
+import { MyBookings, BookingDetails, RateBooking, Payment, PaymentSuccess, PaymentFailed } from './pages/bookings';
 import { Home } from './pages/home';
 import { Chat } from './pages/chat';
 
@@ -49,6 +49,9 @@ function App() {
           <Route path="/bookings" element={<Layout><MyBookings /></Layout>} />
           <Route path="/bookings/:id" element={<Layout><BookingDetails /></Layout>} />
           <Route path="/bookings/:id/rate" element={<Layout><RateBooking /></Layout>} />
+          <Route path="/bookings/:bookingId/payment" element={<Layout><Payment /></Layout>} />
+          <Route path="/bookings/:bookingId/success" element={<Layout><PaymentSuccess /></Layout>} />
+          <Route path="/bookings/:bookingId/failed" element={<Layout><PaymentFailed /></Layout>} />
 
           {/* Chat */}
           <Route path="/chat" element={<Layout showFooter={false}><Chat /></Layout>} />
