@@ -7,6 +7,7 @@ import { Dashboard, LicenseUpload } from './pages/user';
 import { MyBookings, BookingDetails, RateBooking } from './pages/bookings';
 import { Home } from './pages/home';
 import { Chat } from './pages/chat';
+import { LiveTracking, SOS, DriverTracking } from './pages/tracking';
 
 // Placeholder components for routes not yet implemented
 const Placeholder = ({ title }) => (
@@ -55,10 +56,11 @@ function App() {
           <Route path="/chat/:id" element={<Layout showFooter={false}><Chat /></Layout>} />
 
           {/* Tracking */}
-          <Route path="/tracking/:bookingId" element={<Layout showFooter={false}><Placeholder title="Live Tracking" /></Layout>} />
+          <Route path="/tracking/:bookingId" element={<Layout showFooter={false}><LiveTracking /></Layout>} />
+          <Route path="/driver/tracking/:rideId" element={<Layout showFooter={false}><DriverTracking /></Layout>} />
 
           {/* SOS */}
-          <Route path="/sos" element={<Layout showFooter={false}><Placeholder title="SOS Emergency" /></Layout>} />
+          <Route path="/sos" element={<SOS />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<Layout><Placeholder title="Admin Dashboard" /></Layout>} />
