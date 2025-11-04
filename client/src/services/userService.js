@@ -111,6 +111,30 @@ const userService = {
   deleteAccount: async () => {
     const response = await api.delete('/user/account');
     return response.data;
+  },
+
+  // Get all notifications
+  getNotifications: async () => {
+    const response = await api.get('/api/notifications/all');
+    return response.data;
+  },
+
+  // Mark notification as read
+  markNotificationRead: async (notificationId) => {
+    const response = await api.post(`/api/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  // Mark all notifications as read
+  markAllNotificationsRead: async () => {
+    const response = await api.post('/api/notifications/mark-all-read');
+    return response.data;
+  },
+
+  // Get unread notification count
+  getUnreadNotificationCount: async () => {
+    const response = await api.get('/api/notifications/unread-count');
+    return response.data;
   }
 };
 
