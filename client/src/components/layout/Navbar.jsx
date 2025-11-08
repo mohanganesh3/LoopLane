@@ -1,36 +1,71 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
-function Navbar() {
+function Navbar({ adminTheme = false }) {
   const { user, logout } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin')
 
   const handleLogout = async () => {
     try {
       await fetch('/auth/logout', { credentials: 'include' })
       logout()
-      navigate('/login')
+      navigate('/auth/login')
     } catch (error) {
       console.error('Logout failed:', error)
     }
   }
 
+  // Admin navigation links
+  const adminNavLinks = [
+    { to: '/admin/dashboard', label: 'Dashboard' },
+    { to: '/admin/users', label: 'Users' },
+    { to: '/admin/rides', label: 'Rides' },
+    { to: '/admin/bookings', label: 'Bookings' },
+    { to: '/admin/verifications', label: 'Verifications' },
+    { to: '/admin/reports', label: 'Reports' },
+    { to: '/admin/sos', label: 'SOS' },
+  ]
+
   return (
-    <nav className="bg-white shadow-lg fixed w-full top-0 z-50">
+    <nav className={`${isAdminRoute ? 'bg-indigo-900' : 'bg-white'} shadow-lg fixed w-full top-0 z-50`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <span className="text-primary text-2xl">🚗</span>
-            <span className="text-2xl font-bold text-gray-800">LANE</span>
+          <Link to={isAdminRoute ? '/admin' : '/'} className="flex items-center space-x-2">
+            <span className={`text-2xl ${isAdminRoute ? 'text-white' : 'text-emerald-500'}`}>🚗</span>
+            <span className={`text-2xl font-bold ${isAdminRoute ? 'text-white' : 'text-gray-800'}`}>
+              {isAdminRoute ? 'LANE Admin' : 'LANE'}
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
-            {user ? (
+            {isAdminRoute && user?.role === 'admin' ? (
+              <>
+                {adminNavLinks.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`text-white/80 hover:text-white transition ${
+                      location.pathname === link.to ? 'text-white font-semibold' : ''
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                <Link
+                  to="/user/dashboard"
+                  className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition"
+                >
+                  User Mode
+                </Link>
+              </>
+            ) : user ? (
               <>
                 <Link to="/rides/search" className="text-gray-700 hover:text-primary transition">
                   Search Rides
@@ -71,16 +106,19 @@ function Navbar() {
 
                   {userMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50">
-                      <Link to="/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/user/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         Dashboard
                       </Link>
-                      <Link to="/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/user/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         Profile
                       </Link>
-                      <Link to="/settings" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/user/settings" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         Settings
                       </Link>
-                      {user.role === 'ADMIN' && (
+                      <Link to="/user/reviews" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                        My Reviews
+                      </Link>
+                      {user.role === 'admin' && (
                         <>
                           <hr className="my-2" />
                           <Link to="/admin" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
