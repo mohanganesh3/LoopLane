@@ -1,82 +1,201 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { Layout } from './components/layout';
-import { Login, Register, VerifyOtp, ForgotPassword, ResetPassword, ChangePassword } from './pages/auth';
-import { SearchRides, PostRide, MyRides, RideDetails } from './pages/rides';
-import { Dashboard, LicenseUpload, Profile } from './pages/user';
-import { MyBookings, BookingDetails, RateBooking, Payment, PaymentSuccess, PaymentFailed } from './pages/bookings';
-import { Home } from './pages/home';
-import { Chat } from './pages/chat';
-import { LiveTracking, SOS, DriverTracking } from './pages/tracking';
+import { NotificationProvider } from './context/NotificationContext';
+import Layout from './components/layout/Layout';
 
-// Placeholder components for routes not yet implemented
-const Placeholder = ({ title }) => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="text-center">
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">{title}</h1>
-      <p className="text-gray-600">Coming soon...</p>
-    </div>
-  </div>
-);
+// User Pages
+import Home from './pages/user/Home';
+import Login from './pages/user/Login';
+import Register from './pages/user/Register';
+import Dashboard from './pages/user/Dashboard';
+import PostRide from './pages/user/PostRide';
+import FindRide from './pages/user/FindRide';
+import SearchResults from './pages/user/SearchResults';
+import RideDetails from './pages/user/RideDetails';
+import MyRides from './pages/user/MyRides';
+import Bookings from './pages/user/Bookings';
+import Profile from './pages/user/Profile';
+import Chat from './pages/user/Chat';
+import Reviews from './pages/user/Reviews';
+import Notifications from './pages/user/Notifications';
+import LicenseUpload from './pages/user/LicenseUpload';
+import Payment from './pages/user/Payment';
+import Tracking from './pages/user/Tracking';
+
+// Admin Pages
+import AdminLogin from './pages/admin/AdminLogin';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import UserManagement from './pages/admin/UserManagement';
+import RideManagement from './pages/admin/RideManagement';
+import Reports from './pages/admin/Reports';
+import LicenseVerification from './pages/admin/LicenseVerification';
+
+// Protected Route Component
+import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Auth Routes - No Layout */}
-          <Route path="/auth/login" element={<Login />} />
-          <Route path="/auth/register" element={<Register />} />
-          <Route path="/auth/verify-otp" element={<VerifyOtp />} />
-          <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-          <Route path="/auth/reset-password" element={<ResetPassword />} />
-          <Route path="/auth/change-password" element={<ChangePassword />} />
-
-          {/* Public Routes with Layout */}
-          <Route path="/" element={<Layout><Home /></Layout>} />
-
-          {/* Protected Routes - User */}
-          <Route path="/user/dashboard" element={<Layout><Dashboard /></Layout>} />
-          <Route path="/user/license-upload" element={<Layout><LicenseUpload /></Layout>} />
-          <Route path="/user/profile" element={<Layout><Profile /></Layout>} />
-          <Route path="/user/settings" element={<Layout><Profile /></Layout>} />
-
-          {/* Rides */}
-          <Route path="/rides/search" element={<Layout><SearchRides /></Layout>} />
-          <Route path="/rides/post" element={<Layout><PostRide /></Layout>} />
-          <Route path="/rides/my-rides" element={<Layout><MyRides /></Layout>} />
-          <Route path="/rides/:id" element={<Layout><RideDetails /></Layout>} />
-
-          {/* Bookings */}
-          <Route path="/bookings" element={<Layout><MyBookings /></Layout>} />
-          <Route path="/bookings/:id" element={<Layout><BookingDetails /></Layout>} />
-          <Route path="/bookings/:id/rate" element={<Layout><RateBooking /></Layout>} />
-          <Route path="/bookings/:bookingId/payment" element={<Layout><Payment /></Layout>} />
-          <Route path="/bookings/:bookingId/success" element={<Layout><PaymentSuccess /></Layout>} />
-          <Route path="/bookings/:bookingId/failed" element={<Layout><PaymentFailed /></Layout>} />
-
-          {/* Chat */}
-          <Route path="/chat" element={<Layout showFooter={false}><Chat /></Layout>} />
-          <Route path="/chat/:id" element={<Layout showFooter={false}><Chat /></Layout>} />
-
-          {/* Tracking */}
-          <Route path="/tracking/:bookingId" element={<Layout showFooter={false}><LiveTracking /></Layout>} />
-          <Route path="/driver/tracking/:rideId" element={<Layout showFooter={false}><DriverTracking /></Layout>} />
-
-          {/* SOS */}
-          <Route path="/sos" element={<SOS />} />
-
-          {/* Admin Routes */}
-          <Route path="/admin" element={<Layout><Placeholder title="Admin Dashboard" /></Layout>} />
-          <Route path="/admin/users" element={<Layout><Placeholder title="Manage Users" /></Layout>} />
-          <Route path="/admin/rides" element={<Layout><Placeholder title="Manage Rides" /></Layout>} />
-          <Route path="/admin/bookings" element={<Layout><Placeholder title="Manage Bookings" /></Layout>} />
-          <Route path="/admin/reports" element={<Layout><Placeholder title="Reports" /></Layout>} />
-
-          {/* 404 */}
-          <Route path="*" element={<Layout><Placeholder title="404 - Page Not Found" /></Layout>} />
-        </Routes>
-      </BrowserRouter>
+      <NotificationProvider>
+        <Router>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            
+            {/* User Protected Routes */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/post-ride" element={
+              <ProtectedRoute>
+                <Layout>
+                  <PostRide />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/find-ride" element={
+              <ProtectedRoute>
+                <Layout>
+                  <FindRide />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/search" element={
+              <ProtectedRoute>
+                <Layout>
+                  <SearchResults />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/ride/:id" element={
+              <ProtectedRoute>
+                <Layout>
+                  <RideDetails />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/my-rides" element={
+              <ProtectedRoute>
+                <Layout>
+                  <MyRides />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/bookings" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Bookings />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Profile />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/chat" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Chat />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/chat/:recipientId" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Chat />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/reviews" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Reviews />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/notifications" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Notifications />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/license-upload" element={
+              <ProtectedRoute>
+                <Layout>
+                  <LicenseUpload />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/payment/:bookingId" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Payment />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            <Route path="/tracking/:rideId" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Tracking />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Admin Routes */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={
+              <AdminRoute>
+                <Layout adminTheme>
+                  <AdminDashboard />
+                </Layout>
+              </AdminRoute>
+            } />
+            <Route path="/admin/users" element={
+              <AdminRoute>
+                <Layout adminTheme>
+                  <UserManagement />
+                </Layout>
+              </AdminRoute>
+            } />
+            <Route path="/admin/rides" element={
+              <AdminRoute>
+                <Layout adminTheme>
+                  <RideManagement />
+                </Layout>
+              </AdminRoute>
+            } />
+            <Route path="/admin/reports" element={
+              <AdminRoute>
+                <Layout adminTheme>
+                  <Reports />
+                </Layout>
+              </AdminRoute>
+            } />
+            <Route path="/admin/licenses" element={
+              <AdminRoute>
+                <Layout adminTheme>
+                  <LicenseVerification />
+                </Layout>
+              </AdminRoute>
+            } />
+            
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
