@@ -1,6 +1,22 @@
-# 🚗 LANE - Carpool Platform
+# 🚗 LOOPLANE - Carpool Platform
 
-A comprehensive carpooling web application built with Node.js, Express, MongoDB, and EJS. LANE connects riders and passengers for eco-friendly, cost-effective travel.
+A comprehensive carpooling web application with a React frontend and Express.js backend. LOOPLANE connects riders and passengers for eco-friendly, cost-effective travel.
+
+## 🚀 Tech Stack
+
+### Frontend (React + Vite)
+- **React 18** with Vite for fast development
+- **React Router v6** for navigation
+- **Tailwind CSS** for styling (Emerald for user, Indigo for admin)
+- **Socket.IO Client** for real-time features
+- **React Query** for server state management
+
+### Backend (Express.js)
+- **Express.js** with Node.js
+- **MongoDB** with Mongoose ODM
+- **Socket.IO** for real-time communication
+- **JWT** for authentication
+- **Razorpay** for payment processing
 
 ## ✨ Features
 
