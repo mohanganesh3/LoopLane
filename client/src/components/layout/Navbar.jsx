@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
 function Navbar({ adminTheme = false }) {
-  const { user, logout } = useAuth()
+  const { user, logout, isAuthenticated } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const navigate = useNavigate()
@@ -14,7 +14,7 @@ function Navbar({ adminTheme = false }) {
     try {
       await fetch('/auth/logout', { credentials: 'include' })
       logout()
-      navigate('/auth/login')
+      navigate('/login')
     } catch (error) {
       console.error('Logout failed:', error)
     }
@@ -25,27 +25,25 @@ function Navbar({ adminTheme = false }) {
     { to: '/admin/dashboard', label: 'Dashboard' },
     { to: '/admin/users', label: 'Users' },
     { to: '/admin/rides', label: 'Rides' },
-    { to: '/admin/bookings', label: 'Bookings' },
-    { to: '/admin/verifications', label: 'Verifications' },
     { to: '/admin/reports', label: 'Reports' },
-    { to: '/admin/sos', label: 'SOS' },
+    { to: '/admin/licenses', label: 'Verifications' },
   ]
 
   return (
-    <nav className={`${isAdminRoute ? 'bg-indigo-900' : 'bg-white'} shadow-lg fixed w-full top-0 z-50`}>
+    <nav className={`${isAdminRoute || adminTheme ? 'bg-indigo-900' : 'bg-white'} shadow-lg fixed w-full top-0 z-50`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to={isAdminRoute ? '/admin' : '/'} className="flex items-center space-x-2">
-            <span className={`text-2xl ${isAdminRoute ? 'text-white' : 'text-emerald-500'}`}>🚗</span>
-            <span className={`text-2xl font-bold ${isAdminRoute ? 'text-white' : 'text-gray-800'}`}>
-              {isAdminRoute ? 'LANE Admin' : 'LANE'}
+          <Link to={isAdminRoute ? '/admin/dashboard' : '/'} className="flex items-center space-x-2">
+            <span className={`text-2xl ${isAdminRoute || adminTheme ? 'text-white' : 'text-emerald-500'}`}>🚗</span>
+            <span className={`text-2xl font-bold ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-800'}`}>
+              {isAdminRoute || adminTheme ? 'LOOPLANE Admin' : 'LOOPLANE'}
             </span>
           </Link>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-6">
-            {isAdminRoute && user?.role === 'admin' ? (
+            {(isAdminRoute || adminTheme) && user?.role === 'admin' ? (
               <>
                 {adminNavLinks.map((link) => (
                   <Link
@@ -59,34 +57,34 @@ function Navbar({ adminTheme = false }) {
                   </Link>
                 ))}
                 <Link
-                  to="/user/dashboard"
+                  to="/dashboard"
                   className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-lg transition"
                 >
                   User Mode
                 </Link>
               </>
-            ) : user ? (
+            ) : isAuthenticated ? (
               <>
-                <Link to="/rides/search" className="text-gray-700 hover:text-primary transition">
+                <Link to="/find-ride" className="text-gray-700 hover:text-emerald-500 transition">
                   Search Rides
                 </Link>
                 
-                {user.role === 'RIDER' && (
+                {user?.role === 'RIDER' && (
                   <>
-                    <Link to="/rides/post" className="text-gray-700 hover:text-primary transition">
+                    <Link to="/post-ride" className="text-gray-700 hover:text-emerald-500 transition">
                       Post Ride
                     </Link>
-                    <Link to="/rides/my-rides" className="text-gray-700 hover:text-primary transition">
+                    <Link to="/my-rides" className="text-gray-700 hover:text-emerald-500 transition">
                       My Rides
                     </Link>
                   </>
                 )}
                 
-                <Link to="/bookings" className="text-gray-700 hover:text-primary transition">
+                <Link to="/bookings" className="text-gray-700 hover:text-emerald-500 transition">
                   My Bookings
                 </Link>
                 
-                <Link to="/chat" className="text-gray-700 hover:text-primary transition">
+                <Link to="/chat" className="text-gray-700 hover:text-emerald-500 transition">
                   Messages
                 </Link>
 
@@ -94,7 +92,7 @@ function Navbar({ adminTheme = false }) {
                 <div className="relative">
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex items-center space-x-2 text-gray-700 hover:text-primary"
+                    className="flex items-center space-x-2 text-gray-700 hover:text-emerald-500"
                   >
                     <img
                       src={user.profile?.photo || '/images/default-avatar.png'}
@@ -106,22 +104,22 @@ function Navbar({ adminTheme = false }) {
 
                   {userMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl py-2 z-50">
-                      <Link to="/user/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         Dashboard
                       </Link>
-                      <Link to="/user/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/profile" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         Profile
                       </Link>
-                      <Link to="/user/settings" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
-                        Settings
+                      <Link to="/notifications" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                        Notifications
                       </Link>
-                      <Link to="/user/reviews" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                      <Link to="/reviews" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                         My Reviews
                       </Link>
                       {user.role === 'admin' && (
                         <>
                           <hr className="my-2" />
-                          <Link to="/admin" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
+                          <Link to="/admin/dashboard" className="block px-4 py-2 text-gray-700 hover:bg-gray-100">
                             Admin Panel
                           </Link>
                         </>
@@ -136,29 +134,21 @@ function Navbar({ adminTheme = false }) {
                     </div>
                   )}
                 </div>
-
-                {/* SOS Button */}
-                <Link
-                  to="/sos"
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
-                >
-                  SOS
-                </Link>
               </>
             ) : (
               <>
-                <Link to="/" className="text-gray-700 hover:text-primary transition">
+                <Link to="/" className="text-gray-700 hover:text-emerald-500 transition">
                   Home
                 </Link>
-                <Link to="/rides/search" className="text-gray-700 hover:text-primary transition">
+                <Link to="/find-ride" className="text-gray-700 hover:text-emerald-500 transition">
                   Search Rides
                 </Link>
-                <Link to="/login" className="text-gray-700 hover:text-primary transition">
+                <Link to="/login" className="text-gray-700 hover:text-emerald-500 transition">
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-primary hover:bg-green-600 text-white px-6 py-2 rounded-lg transition"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg transition"
                 >
                   Sign Up
                 </Link>
@@ -178,34 +168,28 @@ function Navbar({ adminTheme = false }) {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-white border-t">
+        <div className={`md:hidden ${isAdminRoute || adminTheme ? 'bg-indigo-800' : 'bg-white'} border-t`}>
           <div className="px-4 py-4 space-y-3">
-            {user ? (
+            {isAuthenticated ? (
               <>
-                <Link to="/rides/search" className="block text-gray-700 hover:text-primary">
+                <Link to="/find-ride" className={`block ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-700'} hover:text-emerald-500`}>
                   Search Rides
                 </Link>
-                {user.role === 'RIDER' && (
+                {user?.role === 'RIDER' && (
                   <>
-                    <Link to="/rides/post" className="block text-gray-700 hover:text-primary">
+                    <Link to="/post-ride" className={`block ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-700'} hover:text-emerald-500`}>
                       Post Ride
                     </Link>
-                    <Link to="/rides/my-rides" className="block text-gray-700 hover:text-primary">
+                    <Link to="/my-rides" className={`block ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-700'} hover:text-emerald-500`}>
                       My Rides
                     </Link>
                   </>
                 )}
-                <Link to="/bookings" className="block text-gray-700 hover:text-primary">
+                <Link to="/bookings" className={`block ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-700'} hover:text-emerald-500`}>
                   My Bookings
                 </Link>
-                <Link to="/dashboard" className="block text-gray-700 hover:text-primary">
+                <Link to="/dashboard" className={`block ${isAdminRoute || adminTheme ? 'text-white' : 'text-gray-700'} hover:text-emerald-500`}>
                   Dashboard
-                </Link>
-                <Link
-                  to="/sos"
-                  className="block bg-red-600 text-white text-center py-2 rounded-lg"
-                >
-                  SOS Emergency
                 </Link>
                 <button
                   onClick={handleLogout}
@@ -216,10 +200,10 @@ function Navbar({ adminTheme = false }) {
               </>
             ) : (
               <>
-                <Link to="/login" className="block text-gray-700 hover:text-primary">
+                <Link to="/login" className="block text-gray-700 hover:text-emerald-500">
                   Login
                 </Link>
-                <Link to="/register" className="block text-primary hover:text-green-600">
+                <Link to="/register" className="block text-emerald-500 hover:text-emerald-600">
                   Sign Up
                 </Link>
               </>
