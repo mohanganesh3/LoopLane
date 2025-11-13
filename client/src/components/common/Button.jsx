@@ -12,10 +12,10 @@ function Button({
   const baseStyles = 'font-semibold rounded-lg transition flex items-center justify-center'
   
   const variants = {
-    primary: 'bg-primary hover:bg-green-600 text-white',
+    primary: 'bg-emerald-500 hover:bg-emerald-600 text-white',
     secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800',
     danger: 'bg-red-600 hover:bg-red-700 text-white',
-    outline: 'border-2 border-primary text-primary hover:bg-primary hover:text-white'
+    outline: 'border-2 border-emerald-500 text-emerald-500 hover:bg-emerald-500 hover:text-white'
   }
   
   const sizes = {
