@@ -86,6 +86,10 @@ const Register = () => {
       setError('Password must contain at least one number');
       return false;
     }
+    if (!/[@$!%*?&]/.test(formData.password)) {
+      setError('Password must contain at least one special character (@$!%*?&)');
+      return false;
+    }
     if (!/^[0-9]{10}$/.test(formData.phone)) {
       setError('Please enter a valid 10-digit phone number');
       return false;
@@ -111,11 +115,12 @@ const Register = () => {
         email: formData.email,
         phone: formData.phone,
         password: formData.password,
+        confirmPassword: formData.confirmPassword,
         role: formData.role
       });
 
       if (result.success) {
-        navigate(result.redirectUrl || '/auth/verify-otp');
+        navigate(result.redirectUrl || '/verify-otp');
       } else {
         setError(result.message || 'Registration failed');
       }
@@ -133,8 +138,8 @@ const Register = () => {
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <i className="fas fa-car text-emerald-500 text-3xl"></i>
-              <span className="text-3xl font-bold text-gray-800">LANE</span>
+              <span className="text-emerald-500 text-3xl">🚗</span>
+              <span className="text-3xl font-bold text-gray-800">LOOPLANE</span>
             </div>
             <h2 className="text-2xl font-bold text-gray-800">Create Account</h2>
             <p className="text-gray-600">Join the green carpooling revolution</p>
@@ -210,7 +215,7 @@ const Register = () => {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
-                  <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                  {showPassword ? '🙈' : '👁️'}
                 </button>
               </div>
               {/* Password Strength Indicator */}
@@ -244,8 +249,8 @@ const Register = () => {
                     <p className={`text-xs ${/[0-9]/.test(formData.password) ? 'text-emerald-500' : 'text-gray-400'}`}>
                       {/[0-9]/.test(formData.password) ? '✓' : '○'} One number
                     </p>
-                    <p className={`text-xs ${/[^A-Za-z0-9]/.test(formData.password) ? 'text-emerald-500' : 'text-gray-400'}`}>
-                      {/[^A-Za-z0-9]/.test(formData.password) ? '✓' : '○'} One special character
+                    <p className={`text-xs ${/[@$!%*?&]/.test(formData.password) ? 'text-emerald-500' : 'text-gray-400'}`}>
+                      {/[@$!%*?&]/.test(formData.password) ? '✓' : '○'} One special character (@$!%*?&)
                     </p>
                   </div>
                 </div>
@@ -348,7 +353,7 @@ const Register = () => {
           <div className="mt-6 text-center">
             <p className="text-gray-600">
               Already have an account?{' '}
-              <Link to="/auth/login" className="text-emerald-500 hover:text-emerald-600 font-semibold">
+              <Link to="/login" className="text-emerald-500 hover:text-emerald-600 font-semibold">
                 Login
               </Link>
             </p>

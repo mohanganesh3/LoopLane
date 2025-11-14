@@ -15,7 +15,7 @@ const Home = () => {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate('/user/dashboard');
+      navigate('/dashboard');
     }
   }, [isAuthenticated, user, navigate]);
 
@@ -127,7 +127,7 @@ const QuickSearchForm = () => {
     if (from) params.set('from', from);
     if (to) params.set('to', to);
     if (date) params.set('date', date);
-    navigate(`/rides/search?${params.toString()}`);
+    navigate(`/search?${params.toString()}`);
   };
 
   return (
@@ -136,7 +136,7 @@ const QuickSearchForm = () => {
       
       <div className="space-y-4">
         <div className="relative">
-          <i className="fas fa-map-marker-alt absolute left-4 top-1/2 -translate-y-1/2 text-green-500"></i>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500">📍</span>
           <input
             type="text"
             value={from}
@@ -147,7 +147,7 @@ const QuickSearchForm = () => {
         </div>
         
         <div className="relative">
-          <i className="fas fa-map-marker-alt absolute left-4 top-1/2 -translate-y-1/2 text-red-500"></i>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-red-500">📍</span>
           <input
             type="text"
             value={to}
@@ -158,7 +158,7 @@ const QuickSearchForm = () => {
         </div>
         
         <div className="relative">
-          <i className="fas fa-calendar absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500"></i>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500">📅</span>
           <input
             type="date"
             value={date}
@@ -172,12 +172,12 @@ const QuickSearchForm = () => {
           type="submit"
           className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center"
         >
-          <i className="fas fa-search mr-2"></i>Search Rides
+          🔍 Search Rides
         </button>
       </div>
       
       <p className="text-center text-gray-500 text-sm mt-4">
-        Or <Link to="/rides/post" className="text-emerald-500 hover:underline font-medium">offer a ride</Link>
+        Or <Link to="/post-ride" className="text-emerald-500 hover:underline font-medium">offer a ride</Link>
       </p>
     </form>
   );
@@ -458,16 +458,16 @@ const CTASection = () => {
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link 
-            to="/auth/register" 
+            to="/register" 
             className="bg-white text-emerald-600 hover:bg-gray-100 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center"
           >
-            <i className="fas fa-user-plus mr-2"></i>Sign Up Free
+            ✨ Sign Up Free
           </Link>
           <Link 
-            to="/rides/search" 
+            to="/find-ride" 
             className="border-2 border-white text-white hover:bg-white hover:text-emerald-600 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center"
           >
-            <i className="fas fa-search mr-2"></i>Find a Ride
+            🔍 Find a Ride
           </Link>
         </div>
         

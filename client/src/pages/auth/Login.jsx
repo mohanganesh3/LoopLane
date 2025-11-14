@@ -67,9 +67,9 @@ const Login = () => {
       const result = await login(formData.email, formData.password);
       
       if (result.success) {
-        navigate(result.redirectUrl || '/user/dashboard');
-      } else if (result.redirectUrl === '/auth/verify-otp') {
-        navigate('/auth/verify-otp');
+        navigate(result.redirectUrl || '/dashboard');
+      } else if (result.redirectUrl === '/verify-otp') {
+        navigate('/verify-otp');
       } else {
         setError(result.message || 'Login failed');
       }
@@ -87,8 +87,8 @@ const Login = () => {
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <div className="flex items-center justify-center space-x-2 mb-4">
-              <i className="fas fa-car text-emerald-500 text-3xl"></i>
-              <span className="text-3xl font-bold text-gray-800">LANE</span>
+              <span className="text-emerald-500 text-3xl">🚗</span>
+              <span className="text-3xl font-bold text-gray-800">LOOPLANE</span>
             </div>
             <h2 className="text-2xl font-bold text-gray-800">Welcome Back!</h2>
             <p className="text-gray-600">Login to continue your journey</p>
@@ -161,7 +161,7 @@ const Login = () => {
                 <span className="ml-2 text-sm text-gray-600">Remember me</span>
               </label>
               <Link 
-                to="/auth/forgot-password" 
+                to="/forgot-password" 
                 className="text-sm text-emerald-500 hover:text-emerald-600"
               >
                 Forgot Password?
@@ -188,7 +188,7 @@ const Login = () => {
           <div className="text-center">
             <p className="text-gray-600">
               Don't have an account?{' '}
-              <Link to="/auth/register" className="text-emerald-500 hover:text-emerald-600 font-semibold">
+              <Link to="/register" className="text-emerald-500 hover:text-emerald-600 font-semibold">
                 Sign Up
               </Link>
             </p>
@@ -198,9 +198,9 @@ const Login = () => {
         {/* Additional Info */}
         <div className="mt-6 text-center text-sm text-gray-600">
           <p>By logging in, you agree to our</p>
-          <Link to="/terms" className="text-emerald-500 hover:text-emerald-600">Terms of Service</Link>
+          <span className="text-emerald-500 hover:text-emerald-600 cursor-pointer">Terms of Service</span>
           {' '}and{' '}
-          <Link to="/privacy" className="text-emerald-500 hover:text-emerald-600">Privacy Policy</Link>
+          <span className="text-emerald-500 hover:text-emerald-600 cursor-pointer">Privacy Policy</span>
         </div>
       </div>
     </div>

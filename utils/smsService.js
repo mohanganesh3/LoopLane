@@ -7,9 +7,21 @@ const { client, twilioPhone } = require('../config/sms');
 
 class SMSService {
     /**
+     * Check if SMS is available
+     */
+    static isAvailable() {
+        return client !== null && twilioPhone;
+    }
+
+    /**
      * Send OTP via SMS
      */
     static async sendOTP(phone, otp, name) {
+        if (!this.isAvailable()) {
+            console.warn('⚠️ SMS service not configured - OTP not sent via SMS');
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `Hi ${name}, Your ${process.env.APP_NAME} verification code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
 
         try {
@@ -30,6 +42,11 @@ class SMSService {
      * Send booking request SMS to rider
      */
     static async sendBookingRequestSMS(phone, passengerName, seats, bookingUrl) {
+        if (!this.isAvailable()) {
+            console.warn('⚠️ SMS service not configured');
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `🔔 New Booking Request! ${passengerName} wants to book ${seats} seat(s) in your ride. View details: ${bookingUrl}`;
 
         try {
@@ -50,6 +67,10 @@ class SMSService {
      * Send booking confirmation SMS
      */
     static async sendBookingConfirmation(phone, bookingDetails) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `Booking Confirmed! Ride from ${bookingDetails.from} to ${bookingDetails.to} on ${bookingDetails.date} at ${bookingDetails.time}. Driver: ${bookingDetails.driverName}, ${bookingDetails.driverPhone}. Booking ID: ${bookingDetails.bookingId}`;
 
         try {
@@ -70,6 +91,10 @@ class SMSService {
      * Send emergency SOS SMS alert
      */
     static async sendSOSAlert(phone, emergencyDetails) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         // Build location info
         let locationInfo = emergencyDetails.location || 'Location not available';
         
@@ -105,6 +130,10 @@ class SMSService {
      * Send ride starting reminder SMS
      */
     static async sendRideReminder(phone, rideDetails, hoursUntil) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `Reminder: Your ride from ${rideDetails.from} to ${rideDetails.to} is departing in ${hoursUntil} hours at ${rideDetails.time}. Meeting point: ${rideDetails.meetingPoint}. Have a safe journey!`;
 
         try {
@@ -125,6 +154,10 @@ class SMSService {
      * Send route deviation alert SMS
      */
     static async sendDeviationAlert(phone, driverName, location) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `⚠️ Route Deviation Alert: Driver ${driverName} has deviated from planned route. Current location: ${location}. Track live: ${process.env.BASE_URL}/tracking. Stay alert!`;
 
         try {
@@ -145,6 +178,10 @@ class SMSService {
      * Send verification code for emergency contact
      */
     static async sendEmergencyContactVerification(phone, data) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `Hi ${data.name}! ${data.userName} has added you as an emergency contact on LANE Carpool. Your verification code is: ${data.otp}. You will receive alerts only in case of emergency. This code expires in 10 minutes.`;
 
         try {
@@ -165,6 +202,10 @@ class SMSService {
      * Send admin alert for escalated emergencies
      */
     static async sendAdminAlert(phone, alertDetails) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `🚨 ESCALATED SOS: ${alertDetails.userName} needs help! Time: ${alertDetails.timeElapsed}. Track: ${alertDetails.location}. Emergency ID: ${alertDetails.emergencyId}. Type: ${alertDetails.alertType}`;
 
         try {
@@ -185,6 +226,10 @@ class SMSService {
      * Send booking accepted SMS notification
      */
     static async sendBookingAcceptedSMS(phone, riderName, bookingRef, seats) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `✅ ${process.env.APP_NAME}: Your booking ${bookingRef} for ${seats} seat(s) has been ACCEPTED by ${riderName}! Check your email for details. Have a safe journey! 🚗`;
 
         try {
@@ -205,6 +250,10 @@ class SMSService {
      * Send booking rejected SMS notification
      */
     static async sendBookingRejectedSMS(phone, riderName, bookingRef) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `❌ ${process.env.APP_NAME}: Your booking ${bookingRef} has been declined by ${riderName}. Search for other rides at ${process.env.APP_URL || 'http://localhost:3000'}/rides/search`;
 
         try {
@@ -225,6 +274,10 @@ class SMSService {
      * Send generic SMS
      */
     static async sendSMS(phone, message) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         try {
             const result = await client.messages.create({
                 body: message,
@@ -243,6 +296,10 @@ class SMSService {
      * Send location update SMS (during emergency)
      */
     static async sendLocationUpdate(phone, name, location, emergencyId) {
+        if (!this.isAvailable()) {
+            return { success: false, error: 'SMS service not configured' };
+        }
+
         const message = `Update: ${name} (Emergency #${emergencyId}) - Last seen at ${location}. Track live: ${process.env.BASE_URL}/emergency/track/${emergencyId}`;
 
         try {

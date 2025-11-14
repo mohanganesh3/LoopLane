@@ -82,7 +82,7 @@ exports.register = asyncHandler(async (req, res) => {
         success: true,
         message: 'OTP sent to your email',
         userId: newUser._id,
-        redirectUrl: '/auth/verify-otp'
+        redirectUrl: '/verify-otp'
     });
 });
 

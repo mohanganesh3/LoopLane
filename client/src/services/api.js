@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+// In development, use empty string to leverage Vite proxy
+// In production, use actual API URL
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 // Create axios instance
 const api = axios.create({
@@ -16,8 +18,9 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Redirect to login if unauthorized
+    // Don't redirect on 401 for auth endpoints
+    if (error.response?.status === 401 && !error.config.url.includes('/auth')) {
+      // Redirect to login if unauthorized (but not for login/register attempts)
       window.location.href = '/login'
     }
     return Promise.reject(error)

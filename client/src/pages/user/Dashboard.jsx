@@ -94,17 +94,17 @@ const Dashboard = () => {
             <div className="hidden md:block">
               {isRider ? (
                 <Link
-                  to="/rides/post"
+                  to="/post-ride"
                   className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition"
                 >
-                  <i className="fas fa-plus-circle mr-2"></i> Post New Ride
+                  ➕ Post New Ride
                 </Link>
               ) : (
                 <Link
-                  to="/rides/search"
+                  to="/find-ride"
                   className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition"
                 >
-                  <i className="fas fa-search mr-2"></i> Find Rides
+                  🔍 Find Rides
                 </Link>
               )}
             </div>
@@ -188,19 +188,19 @@ const Dashboard = () => {
               title={isRider ? 'Upcoming Rides' : 'Upcoming Bookings'}
               headerAction={
                 <Link
-                  to={isRider ? '/rides/my-rides' : '/bookings'}
+                  to={isRider ? '/my-rides' : '/bookings'}
                   className="text-emerald-500 hover:text-emerald-600 text-sm font-semibold"
                 >
-                  View All <i className="fas fa-arrow-right ml-1"></i>
+                  View All →
                 </Link>
               }
             >
               {upcomingTrips.length === 0 ? (
                 <div className="text-center py-12">
-                  <i className="fas fa-calendar-times text-gray-300 text-6xl mb-4"></i>
+                  <span className="text-gray-300 text-6xl mb-4 block">📅</span>
                   <p className="text-gray-600 mb-4">No upcoming trips</p>
                   <Link
-                    to={isRider ? '/rides/post' : '/rides/search'}
+                    to={isRider ? '/post-ride' : '/find-ride'}
                     className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg transition inline-block"
                   >
                     {isRider ? 'Post a Ride' : 'Find Rides'}
@@ -310,32 +310,32 @@ const Dashboard = () => {
             <Card title="Quick Actions">
               <div className="space-y-3">
                 <Link
-                  to="/user/profile"
+                  to="/profile"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <i className="fas fa-user text-emerald-500 mr-3"></i>
+                  <span className="text-emerald-500 mr-3">👤</span>
                   <span className="text-gray-700">Edit Profile</span>
                 </Link>
                 <Link
-                  to="/user/trip-history"
+                  to="/bookings"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <i className="fas fa-history text-emerald-500 mr-3"></i>
-                  <span className="text-gray-700">Trip History</span>
+                  <span className="text-emerald-500 mr-3">📋</span>
+                  <span className="text-gray-700">My Bookings</span>
                 </Link>
                 <Link
                   to="/chat"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <i className="fas fa-comments text-emerald-500 mr-3"></i>
+                  <span className="text-emerald-500 mr-3">💬</span>
                   <span className="text-gray-700">Messages</span>
                 </Link>
                 <Link
-                  to="/user/settings"
+                  to="/notifications"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <i className="fas fa-cog text-emerald-500 mr-3"></i>
-                  <span className="text-gray-700">Settings</span>
+                  <span className="text-emerald-500 mr-3">🔔</span>
+                  <span className="text-gray-700">Notifications</span>
                 </Link>
               </div>
             </Card>
