@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Button, Alert } from '../../components/common';
+import { Button, Alert, Modal } from '../../components/common';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -24,6 +24,10 @@ const Register = () => {
     label: '',
     color: ''
   });
+  
+  // Modal states
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
   // Password strength calculation
   useEffect(() => {
@@ -134,13 +138,19 @@ const Register = () => {
   return (
     <div className="pt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12">
       <div className="max-w-lg w-full mx-4">
+        {/* Back to Home Link */}
+        <Link to="/" className="inline-flex items-center text-gray-600 hover:text-emerald-600 mb-6 transition">
+          <i className="fas fa-arrow-left mr-2"></i>
+          Back to Home
+        </Link>
+        
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Logo & Title */}
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <span className="text-emerald-500 text-3xl">🚗</span>
+            <Link to="/" className="inline-flex items-center justify-center space-x-2 mb-4 hover:opacity-80 transition">
+              <i className="fas fa-car-side text-emerald-500 text-3xl"></i>
               <span className="text-3xl font-bold text-gray-800">LOOPLANE</span>
-            </div>
+            </Link>
             <h2 className="text-2xl font-bold text-gray-800">Create Account</h2>
             <p className="text-gray-600">Join the green carpooling revolution</p>
           </div>
@@ -214,8 +224,9 @@ const Register = () => {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showPassword ? '🙈' : '👁️'}
+                  <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} aria-hidden="true" />
                 </button>
               </div>
               {/* Password Strength Indicator */}
@@ -334,13 +345,21 @@ const Register = () => {
               />
               <span className="ml-2 text-sm text-gray-600">
                 I agree to the{' '}
-                <Link to="/terms" className="text-emerald-500 hover:text-emerald-600">
+                <button 
+                  type="button"
+                  className="text-emerald-500 font-medium hover:underline" 
+                  onClick={() => setShowTermsModal(true)}
+                >
                   Terms of Service
-                </Link>{' '}
+                </button>{' '}
                 and{' '}
-                <Link to="/privacy" className="text-emerald-500 hover:text-emerald-600">
+                <button 
+                  type="button"
+                  className="text-emerald-500 font-medium hover:underline" 
+                  onClick={() => setShowPrivacyModal(true)}
+                >
                   Privacy Policy
-                </Link>
+                </button>
               </span>
             </label>
 
@@ -360,6 +379,105 @@ const Register = () => {
           </div>
         </div>
       </div>
+
+      {/* Terms of Service Modal */}
+      <Modal
+        isOpen={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        title="Terms of Service"
+        size="lg"
+        footer={
+          <Button onClick={() => setShowTermsModal(false)}>
+            I Understand
+          </Button>
+        }
+      >
+        <div className="prose prose-sm max-w-none">
+          <h4 className="text-lg font-semibold text-gray-900 mb-3">Welcome to LOOPLANE</h4>
+          <p className="text-gray-600 mb-4">
+            By using LOOPLANE, you agree to the following terms and conditions:
+          </p>
+          
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">1. User Responsibilities</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>Share rides responsibly and maintain punctuality</li>
+            <li>Maintain vehicle safety standards (for riders)</li>
+            <li>Respect fellow passengers and drivers</li>
+            <li>Provide accurate information in your profile</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">2. Safety Guidelines</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>All drivers must have valid driving licenses</li>
+            <li>Vehicles must be properly insured and maintained</li>
+            <li>Report any safety concerns immediately</li>
+            <li>Use the SOS feature in emergencies</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">3. Payment & Cancellation</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>Payments are processed securely through our platform</li>
+            <li>Cancellations should be made at least 2 hours before departure</li>
+            <li>Late cancellations may incur a fee</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">4. Account Termination</h5>
+          <p className="text-gray-600">
+            We reserve the right to suspend or terminate accounts that violate these terms,
+            engage in fraudulent activity, or receive multiple negative reviews.
+          </p>
+        </div>
+      </Modal>
+
+      {/* Privacy Policy Modal */}
+      <Modal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+        title="Privacy Policy"
+        size="lg"
+        footer={
+          <Button onClick={() => setShowPrivacyModal(false)}>
+            I Understand
+          </Button>
+        }
+      >
+        <div className="prose prose-sm max-w-none">
+          <h4 className="text-lg font-semibold text-gray-900 mb-3">Your Privacy Matters</h4>
+          <p className="text-gray-600 mb-4">
+            LOOPLANE is committed to protecting your personal information. Here's how we handle your data:
+          </p>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">1. Information We Collect</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>Name, email address, and phone number</li>
+            <li>Profile photo and vehicle details (for riders)</li>
+            <li>Location data during active rides</li>
+            <li>Payment information (processed securely)</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">2. How We Use Your Data</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>To facilitate carpooling and match riders with passengers</li>
+            <li>To process payments and communicate updates</li>
+            <li>To improve our services and user experience</li>
+            <li>To ensure safety and resolve disputes</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">3. Data Protection</h5>
+          <ul className="list-disc pl-5 text-gray-600 space-y-1">
+            <li>Your data is encrypted and stored securely</li>
+            <li>We never sell your personal information to third parties</li>
+            <li>Location data is only shared during active rides</li>
+            <li>You can request data deletion at any time</li>
+          </ul>
+
+          <h5 className="font-semibold text-gray-800 mt-4 mb-2">4. Your Rights</h5>
+          <p className="text-gray-600">
+            You have the right to access, modify, or delete your personal data.
+            Contact our support team for any privacy-related requests.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 };
