@@ -14,15 +14,33 @@ const api = axios.create({
   }
 })
 
-// Response interceptor for error handling
+// Response interceptor for error handling - Handle suspended/deleted accounts
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't redirect on 401 for auth endpoints
-    if (error.response?.status === 401 && !error.config.url.includes('/auth')) {
-      // Redirect to login if unauthorized (but not for login/register attempts)
+    const response = error.response
+    
+    // Handle suspended/deleted/inactive accounts - force logout
+    if (response?.status === 403 && response?.data?.forceLogout) {
+      // Clear any local storage
+      localStorage.clear()
+      
+      // Show alert with the message
+      const message = response.data.message || 'Your account has been suspended. Please contact support.'
+      alert(message)
+      
+      // Force redirect to login
       window.location.href = '/login'
+      return Promise.reject(error)
     }
+    
+    // Handle 401 when session is invalid
+    if (response?.status === 401 && response?.data?.forceLogout) {
+      localStorage.clear()
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
+    
     return Promise.reject(error)
   }
 )
