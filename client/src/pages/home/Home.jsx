@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import Footer from '../../components/layout/Footer';
 
 const Home = () => {
   const { user, isAuthenticated } = useAuth();
@@ -21,6 +22,9 @@ const Home = () => {
 
   return (
     <div className="min-h-screen">
+      {/* Landing Page Navbar */}
+      <LandingNavbar />
+      
       {/* Hero Section */}
       <HeroSection />
       
@@ -38,7 +42,122 @@ const Home = () => {
       
       {/* CTA Section */}
       <CTASection />
+      
+      {/* Footer */}
+      <Footer />
     </div>
+  );
+};
+
+// Landing Page Navbar - Transparent overlay on hero
+const LandingNavbar = () => {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  return (
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+      isScrolled ? 'bg-white shadow-lg' : 'bg-transparent'
+    }`}>
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link to="/" className="flex items-center space-x-2">
+            <i className={`fas fa-car-side text-2xl ${isScrolled ? 'text-emerald-500' : 'text-white'}`}></i>
+            <span className={`text-xl font-bold ${isScrolled ? 'text-gray-800' : 'text-white'}`}>
+              LOOPLANE
+            </span>
+          </Link>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-6">
+            <a href="#how-it-works" className={`font-medium transition ${
+              isScrolled ? 'text-gray-600 hover:text-emerald-500' : 'text-white/90 hover:text-white'
+            }`}>
+              How it Works
+            </a>
+            <a href="#features" className={`font-medium transition ${
+              isScrolled ? 'text-gray-600 hover:text-emerald-500' : 'text-white/90 hover:text-white'
+            }`}>
+              Features
+            </a>
+            <Link 
+              to="/login" 
+              className={`font-medium transition ${
+                isScrolled ? 'text-gray-600 hover:text-emerald-500' : 'text-white/90 hover:text-white'
+              }`}
+            >
+              Login
+            </Link>
+            <Link 
+              to="/register" 
+              className={`px-5 py-2 rounded-lg font-semibold transition ${
+                isScrolled 
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-600' 
+                  : 'bg-white text-emerald-600 hover:bg-gray-100'
+              }`}
+            >
+              Sign Up Free
+            </Link>
+          </div>
+
+          {/* Mobile Menu Button */}
+          <button 
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className={`md:hidden p-2 rounded-lg ${isScrolled ? 'text-gray-600' : 'text-white'}`}
+          >
+            <i className={`fas ${mobileMenuOpen ? 'fa-times' : 'fa-bars'} text-xl`}></i>
+          </button>
+        </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className={`md:hidden py-4 border-t ${isScrolled ? 'border-gray-200 bg-white' : 'border-white/20 bg-emerald-600'}`}>
+            <div className="flex flex-col space-y-3">
+              <a 
+                href="#how-it-works" 
+                className={`px-4 py-2 font-medium ${isScrolled ? 'text-gray-600' : 'text-white'}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                How it Works
+              </a>
+              <a 
+                href="#features" 
+                className={`px-4 py-2 font-medium ${isScrolled ? 'text-gray-600' : 'text-white'}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Features
+              </a>
+              <Link 
+                to="/login" 
+                className={`px-4 py-2 font-medium ${isScrolled ? 'text-gray-600' : 'text-white'}`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Login
+              </Link>
+              <Link 
+                to="/register" 
+                className={`mx-4 py-2 text-center rounded-lg font-semibold ${
+                  isScrolled 
+                    ? 'bg-emerald-500 text-white' 
+                    : 'bg-white text-emerald-600'
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Sign Up Free
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+    </nav>
   );
 };
 
@@ -75,37 +194,18 @@ const HeroSection = () => {
           {/* Right Content - Illustration */}
           <div className="hidden lg:block">
             <div className="relative">
-              <img 
-                src="/images/hero-illustration.svg" 
-                alt="Carpooling illustration"
-                className="w-full h-auto"
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                }}
-              />
-              {/* Floating Cards */}
-              <div className="absolute top-10 right-0 bg-white rounded-xl p-4 shadow-lg animate-bounce">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                    <i className="fas fa-leaf text-green-500"></i>
+              {/* Modern SVG Illustration instead of external image */}
+              <div className="w-full h-96 flex items-center justify-center">
+                <div className="relative">
+                  {/* Main Car Icon */}
+                  <div className="text-9xl text-white/80 animate-pulse">
+                    <i className="fas fa-car-side"></i>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">Eco-Friendly</p>
-                    <p className="text-xs text-gray-500">Reduce emissions</p>
-                  </div>
+                  {/* Road underneath */}
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-48 h-2 bg-gray-300 rounded-full"></div>
                 </div>
               </div>
-              <div className="absolute bottom-20 left-0 bg-white rounded-xl p-4 shadow-lg animate-pulse">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <i className="fas fa-shield-alt text-blue-500"></i>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">Verified Users</p>
-                    <p className="text-xs text-gray-500">Safe & Secure</p>
-                  </div>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>
@@ -136,7 +236,9 @@ const QuickSearchForm = () => {
       
       <div className="space-y-4">
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500">📍</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-green-500">
+            <i className="fas fa-location-dot"></i>
+          </span>
           <input
             type="text"
             value={from}
@@ -147,7 +249,9 @@ const QuickSearchForm = () => {
         </div>
         
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-red-500">📍</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-red-500">
+            <i className="fas fa-location-dot"></i>
+          </span>
           <input
             type="text"
             value={to}
@@ -158,21 +262,24 @@ const QuickSearchForm = () => {
         </div>
         
         <div className="relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500">📅</span>
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 pointer-events-none z-10">
+            <i className="far fa-calendar-alt"></i>
+          </span>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             min={new Date().toISOString().split('T')[0]}
-            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            placeholder="Select date"
+            className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
           />
         </div>
         
         <button
           type="submit"
-          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center"
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2"
         >
-          🔍 Search Rides
+          <i className="fas fa-search"></i> Search Rides
         </button>
       </div>
       
@@ -264,7 +371,7 @@ const HowItWorksSection = () => {
   ];
 
   return (
-    <section className="py-16 bg-gray-50">
+    <section id="how-it-works" className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
@@ -337,7 +444,7 @@ const FeaturesSection = () => {
   ];
 
   return (
-    <section className="py-16 bg-white">
+    <section id="features" className="py-16 bg-white">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
@@ -373,28 +480,31 @@ const TestimonialsSection = () => {
     {
       name: 'Priya Sharma',
       location: 'Hyderabad',
-      image: '/images/testimonials/user1.jpg',
       rating: 5,
       text: 'LOOPLANE has made my daily commute so much affordable! I save almost ₹3000 every month and made some great friends too.'
     },
     {
       name: 'Rahul Verma',
       location: 'Bangalore',
-      image: '/images/testimonials/user2.jpg',
       rating: 5,
       text: 'As a driver, I love how easy it is to post rides and find passengers. The OTP system makes everything secure.'
     },
     {
       name: 'Sneha Reddy',
       location: 'Chennai',
-      image: '/images/testimonials/user3.jpg',
       rating: 5,
       text: 'The SOS feature gives my parents peace of mind when I travel. Best carpooling app for women travelers!'
     }
   ];
 
+  // Generate color from name
+  const getColor = (name) => {
+    const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
+    return colors[name.charCodeAt(0) % colors.length];
+  };
+
   return (
-    <section className="py-16 bg-emerald-50">
+    <section id="testimonials" className="py-16 bg-emerald-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
@@ -409,19 +519,11 @@ const TestimonialsSection = () => {
           {testimonials.map((testimonial, index) => (
             <div 
               key={index} 
-              className="bg-white rounded-xl p-6 shadow-md"
+              className="bg-white rounded-xl p-6 shadow-md hover:shadow-lg transition"
             >
               <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-gray-200 rounded-full overflow-hidden mr-4">
-                  <img 
-                    src={testimonial.image} 
-                    alt={testimonial.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      e.target.parentElement.innerHTML = `<div class="w-full h-full flex items-center justify-center bg-emerald-100 text-emerald-600 font-bold text-xl">${testimonial.name.charAt(0)}</div>`;
-                    }}
-                  />
+                <div className={`w-12 h-12 ${getColor(testimonial.name)} rounded-full flex items-center justify-center text-white font-bold text-xl mr-4`}>
+                  {testimonial.name.charAt(0)}
                 </div>
                 <div>
                   <h4 className="font-semibold text-gray-800">{testimonial.name}</h4>
@@ -459,15 +561,15 @@ const CTASection = () => {
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Link 
             to="/register" 
-            className="bg-white text-emerald-600 hover:bg-gray-100 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center"
+            className="bg-white text-emerald-600 hover:bg-gray-100 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center gap-2"
           >
-            ✨ Sign Up Free
+            <i className="fas fa-sparkles"></i> Sign Up Free
           </Link>
           <Link 
             to="/find-ride" 
-            className="border-2 border-white text-white hover:bg-white hover:text-emerald-600 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center"
+            className="border-2 border-white text-white hover:bg-white hover:text-emerald-600 font-semibold px-8 py-4 rounded-lg transition inline-flex items-center justify-center gap-2"
           >
-            🔍 Find a Ride
+            <i className="fas fa-search"></i> Find a Ride
           </Link>
         </div>
         
