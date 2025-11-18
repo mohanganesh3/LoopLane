@@ -1,12 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { useAuth } from '../../context/AuthContext';
-import { Card, LoadingSpinner, Badge } from '../../components/common';
+import { Card, LoadingSpinner, Badge, Alert } from '../../components/common';
 import userService from '../../services/userService';
+import { getUserDisplayName } from '../../utils/imageHelpers';
+import { setRides } from '../../redux/slices/ridesSlice';
+import { setGlobalLoading, addAlert } from '../../redux/slices/uiSlice';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { user } = useAuth();
+  
+  // Redux state for global UI
+  const globalLoading = useSelector((state) => state.ui.loading);
+  
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [stats, setStats] = useState({
     totalRides: 0,
     totalBookings: 0,
@@ -19,7 +30,7 @@ const Dashboard = () => {
   const [upcomingTrips, setUpcomingTrips] = useState([]);
   const [carbonReport, setCarbonReport] = useState({
     totalSaved: 0,
-    badge: { emoji: '🌱', name: 'Eco Starter' },
+    badge: { iconClass: 'fa-seedling', name: 'Eco Starter' },
     equivalentTrees: 0,
     totalTrips: 0,
     totalPassengersHelped: 0
@@ -30,19 +41,41 @@ const Dashboard = () => {
   }, []);
 
   const fetchDashboardData = async () => {
+    dispatch(setGlobalLoading(true));
     try {
       const data = await userService.getDashboard();
+      
+      // Check if rider needs to complete profile
+      if (data.requiresProfileCompletion) {
+        navigate('/complete-profile');
+        return;
+      }
+      
+      // Check if rider needs to upload documents (optional - show banner instead of redirect)
+      if (data.requiresDocuments) {
+        // Show a banner but don't redirect
+        setError('Please upload your driving license to start offering rides. Go to Profile > Documents to upload.');
+      }
+      
       if (data.stats) setStats(data.stats);
-      if (data.upcomingTrips) setUpcomingTrips(data.upcomingTrips);
+      if (data.upcomingTrips) {
+        setUpcomingTrips(data.upcomingTrips);
+        // Also store in Redux for global access
+        dispatch(setRides(data.upcomingTrips));
+      }
       if (data.carbonReport) setCarbonReport(data.carbonReport);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      setError('Failed to load dashboard data. Please try again.');
+      dispatch(addAlert({ type: 'error', message: 'Failed to load dashboard data' }));
     } finally {
       setLoading(false);
+      dispatch(setGlobalLoading(false));
     }
   };
 
   const isRider = user?.role === 'RIDER';
+  const displayName = getUserDisplayName(user);
 
   const formatDate = (date) => {
     return new Date(date).toLocaleDateString('en-IN', {
@@ -78,14 +111,16 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+    <div className="pb-12 bg-gray-50 min-h-screen">
       <div className="container mx-auto px-4">
+        {error && <Alert type="error" message={error} onClose={() => setError('')} className="mb-6" />}
+        
         {/* Welcome Header */}
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg p-8 mb-8 text-white">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold mb-2">
-                Welcome back, {user?.name || 'User'}! 👋
+                Welcome back, {displayName}! <i className="fas fa-hand-wave"></i>
               </h1>
               <p className="opacity-90">
                 {isRider ? 'Ready to share your ride?' : 'Ready to find your next ride?'}
@@ -95,16 +130,16 @@ const Dashboard = () => {
               {isRider ? (
                 <Link
                   to="/post-ride"
-                  className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition"
+                  className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition inline-flex items-center gap-2"
                 >
-                  ➕ Post New Ride
+                  <i className="fas fa-plus"></i> Post New Ride
                 </Link>
               ) : (
                 <Link
                   to="/find-ride"
-                  className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition"
+                  className="bg-white text-emerald-500 hover:bg-gray-100 px-6 py-3 rounded-lg font-semibold transition inline-flex items-center gap-2"
                 >
-                  🔍 Find Rides
+                  <i className="fas fa-search"></i> Find Rides
                 </Link>
               )}
             </div>
@@ -169,9 +204,9 @@ const Dashboard = () => {
                 <p className="text-gray-600 text-sm mb-1">Rating</p>
                 <div className="flex items-center">
                   <p className="text-3xl font-bold text-gray-800 mr-2">
-                    {stats.rating.toFixed(1)}
+                    {Number(stats.rating || 0).toFixed(1)}
                   </p>
-                  <div className="flex">{renderStars(stats.rating)}</div>
+                  <div className="flex">{renderStars(stats.rating || 0)}</div>
                 </div>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
@@ -197,7 +232,7 @@ const Dashboard = () => {
             >
               {upcomingTrips.length === 0 ? (
                 <div className="text-center py-12">
-                  <span className="text-gray-300 text-6xl mb-4 block">📅</span>
+                  <i className="fas fa-calendar-day text-gray-300 text-6xl mb-4 block"></i>
                   <p className="text-gray-600 mb-4">No upcoming trips</p>
                   <Link
                     to={isRider ? '/post-ride' : '/find-ride'}
@@ -225,11 +260,11 @@ const Dashboard = () => {
                             </div>
                             <div className="flex items-center space-x-3 mb-3">
                               <div className="text-lg font-bold text-gray-800">
-                                {ride.origin?.city || 'Origin'}
+                                {ride.route?.start?.city || ride.origin?.city || 'Origin'}
                               </div>
                               <i className="fas fa-arrow-right text-emerald-500"></i>
                               <div className="text-lg font-bold text-gray-800">
-                                {ride.destination?.city || 'Destination'}
+                                {ride.route?.destination?.city || ride.destination?.city || 'Destination'}
                               </div>
                             </div>
                             <div className="flex items-center space-x-4 text-sm text-gray-600">
@@ -282,23 +317,23 @@ const Dashboard = () => {
               <div className="bg-white rounded-lg p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Your Badge</span>
-                  <span className="text-3xl">{carbonReport.badge.emoji}</span>
+                  <i className={`fas ${carbonReport.badge.iconClass || 'fa-seedling'} text-3xl text-green-500`}></i>
                 </div>
                 <p className="text-sm font-semibold text-gray-800">
                   {carbonReport.badge.name}
                 </p>
                 <div className="border-t pt-3 space-y-2 text-xs text-gray-600">
                   <div className="flex justify-between">
-                    <span>🌳 Trees Equivalent</span>
+                    <span><i className="fas fa-tree text-green-600 mr-1"></i> Trees Equivalent</span>
                     <strong>{carbonReport.equivalentTrees}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span>🚗 Total Trips</span>
+                    <span><i className="fas fa-car text-blue-500 mr-1"></i> Total Trips</span>
                     <strong>{carbonReport.totalTrips}</strong>
                   </div>
                   {isRider && carbonReport.totalPassengersHelped > 0 && (
                     <div className="flex justify-between">
-                      <span>👥 Passengers Helped</span>
+                      <span><i className="fas fa-users text-purple-500 mr-1"></i> Passengers Helped</span>
                       <strong>{carbonReport.totalPassengersHelped}</strong>
                     </div>
                   )}
@@ -313,28 +348,28 @@ const Dashboard = () => {
                   to="/profile"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <span className="text-emerald-500 mr-3">👤</span>
+                  <i className="fas fa-user-circle text-emerald-500 mr-3 text-lg"></i>
                   <span className="text-gray-700">Edit Profile</span>
                 </Link>
                 <Link
                   to="/bookings"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <span className="text-emerald-500 mr-3">📋</span>
+                  <i className="fas fa-clipboard-list text-emerald-500 mr-3 text-lg"></i>
                   <span className="text-gray-700">My Bookings</span>
                 </Link>
                 <Link
                   to="/chat"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <span className="text-emerald-500 mr-3">💬</span>
+                  <i className="fas fa-comments text-emerald-500 mr-3 text-lg"></i>
                   <span className="text-gray-700">Messages</span>
                 </Link>
                 <Link
                   to="/notifications"
                   className="flex items-center p-3 hover:bg-gray-50 rounded-lg transition"
                 >
-                  <span className="text-emerald-500 mr-3">🔔</span>
+                  <i className="fas fa-bell text-emerald-500 mr-3 text-lg"></i>
                   <span className="text-gray-700">Notifications</span>
                 </Link>
               </div>
