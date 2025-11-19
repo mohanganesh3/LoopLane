@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LoadingSpinner, Alert, Button } from '../../components/common';
+import { LoadingSpinner, Alert, Button, ContributionCalculator } from '../../components/common';
 import LocationInput from '../../components/common/LocationInput';
 import userService from '../../services/userService';
 import rideService from '../../services/rideService';
@@ -12,6 +12,8 @@ const PostRide = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [vehicles, setVehicles] = useState([]);
+  const [pendingVehicles, setPendingVehicles] = useState([]);
+  const [allVehicles, setAllVehicles] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -22,15 +24,12 @@ const PostRide = () => {
     time: '',
     vehicleId: '',
     availableSeats: 4,
-    totalRidePrice: '',
-    instantBooking: true,
+    customPricePerSeat: '',
     ladiesOnly: false,
     notes: ''
   });
 
-  const [stops, setStops] = useState([]);
   const [distance, setDistance] = useState(null);
-  const [predictedPrice, setPredictedPrice] = useState(null);
   const [pricePerSeat, setPricePerSeat] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
@@ -39,52 +38,73 @@ const PostRide = () => {
     fetchVehicles();
   }, []);
 
+  // Recalculate distance when origin or destination change
   useEffect(() => {
-    if (formData.totalRidePrice && formData.availableSeats) {
-      const perSeat = Math.round(formData.totalRidePrice / formData.availableSeats);
-      setPricePerSeat(perSeat);
-    } else {
-      setPricePerSeat(null);
-    }
-  }, [formData.totalRidePrice, formData.availableSeats]);
-
-  useEffect(() => {
-    if (formData.origin && formData.destination) {
+    if (formData.origin && formData.destination && formData.origin.coordinates && formData.destination.coordinates) {
       calculateDistance(formData.origin, formData.destination);
     }
-  }, [formData.origin, formData.destination]);
+  }, [
+    formData.origin?.coordinates?.[0], 
+    formData.origin?.coordinates?.[1], 
+    formData.destination?.coordinates?.[0], 
+    formData.destination?.coordinates?.[1]
+  ]);
 
+  // Calculate distance between origin and destination
   const calculateDistance = async (origin, destination) => {
     try {
-      const [fromLon, fromLat] = origin.coordinates;
-      const [toLon, toLat] = destination.coordinates;
+      const coordsString = `${origin.coordinates[0]},${origin.coordinates[1]};${destination.coordinates[0]},${destination.coordinates[1]}`;
+      
+      console.log('🗺️ Calculating route:', coordsString);
 
       const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${fromLon},${fromLat};${toLon},${toLat}?overview=false`
+        `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`
       );
       const data = await response.json();
 
       if (data.code === 'Ok' && data.routes?.[0]) {
         const distanceKm = (data.routes[0].distance / 1000).toFixed(1);
+        const durationMins = Math.round(data.routes[0].duration / 60);
         setDistance(distanceKm);
-        
-        const predicted = Math.round(parseFloat(distanceKm) * 8);
-        setPredictedPrice(predicted);
-        
-        if (!formData.totalRidePrice) {
-          setFormData(prev => ({ ...prev, totalRidePrice: predicted }));
-        }
+        console.log('✅ Route distance:', distanceKm, 'km, Duration:', durationMins, 'mins');
       }
     } catch (err) {
       console.error('Distance calculation error:', err);
+      // Fallback: calculate straight-line distance
+      try {
+        const dist = haversineDistance(origin.coordinates, destination.coordinates);
+        setDistance(dist.toFixed(1));
+      } catch (e) {
+        console.error('Fallback distance calculation failed:', e);
+      }
     }
+  };
+
+  // Haversine formula for fallback distance calculation
+  const haversineDistance = (coord1, coord2) => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (coord2[1] - coord1[1]) * Math.PI / 180;
+    const dLon = (coord2[0] - coord1[0]) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(coord1[1] * Math.PI / 180) * Math.cos(coord2[1] * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
   };
 
   const fetchVehicles = async () => {
     try {
       const data = await userService.getProfile();
-      const approvedVehicles = (data.user?.vehicles || []).filter(v => v.status === 'APPROVED');
+      const userVehicles = data.user?.vehicles || [];
+      setAllVehicles(userVehicles);
+      
+      const approvedVehicles = userVehicles.filter(v => v.status === 'APPROVED');
+      const pendingVehiclesList = userVehicles.filter(v => v.status === 'PENDING');
+      
       setVehicles(approvedVehicles);
+      setPendingVehicles(pendingVehiclesList);
+      
       if (approvedVehicles.length > 0) {
         setFormData(prev => ({ ...prev, vehicleId: approvedVehicles[0]._id }));
       }
@@ -97,10 +117,22 @@ const PostRide = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // Prevent double submission
+    if (submitting) {
+      return;
+    }
+    
     setError('');
 
-    if (!formData.origin || !formData.destination) {
-      setError('Please select valid pickup and drop-off locations');
+    if (!formData.origin || !formData.origin.coordinates) {
+      setError('Please select a valid pickup location');
+      return;
+    }
+
+    if (!formData.destination || !formData.destination.coordinates) {
+      setError('Please select a valid drop-off location');
       return;
     }
 
@@ -109,8 +141,13 @@ const PostRide = () => {
       return;
     }
 
-    if (!formData.totalRidePrice || formData.totalRidePrice <= 0) {
-      setError('Please enter a valid total ride price');
+    if (!formData.date || !formData.time) {
+      setError('Please select departure date and time');
+      return;
+    }
+
+    if (!pricePerSeat || pricePerSeat <= 0) {
+      setError('Please wait for price calculation or enter a custom price per seat');
       return;
     }
 
@@ -129,17 +166,15 @@ const PostRide = () => {
         availableSeats: parseInt(formData.availableSeats),
         pricePerSeat: pricePerSeat,
         distance: parseFloat(distance) || 0,
-        instantBooking: formData.instantBooking,
         ladiesOnly: formData.ladiesOnly,
-        notes: formData.notes,
-        stops: stops.filter(s => s.location).map(s => s.location)
+        notes: formData.notes
       };
 
       const result = await rideService.postRide(rideData);
 
       if (result.success) {
         setSuccess('Ride posted successfully!');
-        setTimeout(() => navigate('/rides/my-rides'), 1500);
+        setTimeout(() => navigate('/my-rides'), 1500);
       } else {
         setError(result.message || 'Failed to post ride');
       }
@@ -154,18 +189,19 @@ const PostRide = () => {
     return <LoadingSpinner fullScreen text="Loading..." />;
   }
 
-  if (vehicles.length === 0) {
+  // Case 1: No vehicles at all - prompt to add vehicle
+  if (allVehicles.length === 0) {
     return (
-      <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 bg-gray-50 min-h-screen">
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <i className="fas fa-car text-gray-300 text-6xl mb-4"></i>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">No Approved Vehicles</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">No Vehicles Added</h2>
             <p className="text-gray-600 mb-6">
-              You need at least one approved vehicle to post rides.
+              You need to add a vehicle to post rides. Add your vehicle details and it will be verified by our team.
             </p>
             <Link
-              to="/user/profile"
+              to="/profile"
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition inline-block"
             >
               <i className="fas fa-plus-circle mr-2"></i>Add Vehicle
@@ -176,8 +212,122 @@ const PostRide = () => {
     );
   }
 
+  // Case 2: Has vehicles but none approved yet (all pending)
+  if (vehicles.length === 0 && pendingVehicles.length > 0) {
+    return (
+      <div className="pb-12 bg-gray-50 min-h-screen">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-clock text-yellow-600 text-3xl"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Vehicle Verification Pending</h2>
+            <p className="text-gray-600 mb-4">
+              Your vehicle is currently under review by our admin team. You'll be able to post rides once your vehicle is approved.
+            </p>
+            
+            {/* Show pending vehicles */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
+              <h3 className="font-semibold text-yellow-800 mb-3">
+                <i className="fas fa-car mr-2"></i>Pending Vehicles ({pendingVehicles.length})
+              </h3>
+              {pendingVehicles.map((vehicle, index) => (
+                <div key={vehicle._id || index} className="flex items-center gap-3 py-2 border-b border-yellow-200 last:border-0">
+                  <div className="w-10 h-10 bg-yellow-200 rounded-full flex items-center justify-center">
+                    <i className="fas fa-car-side text-yellow-700"></i>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">
+                      {vehicle.make} {vehicle.model}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {vehicle.vehicleNumber || vehicle.licensePlate || 'License plate pending'}
+                    </p>
+                  </div>
+                  <span className="ml-auto text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">
+                    Pending
+                  </span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Link
+                to="/profile"
+                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold transition inline-flex items-center justify-center"
+              >
+                <i className="fas fa-user mr-2"></i>View Profile
+              </Link>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition inline-flex items-center justify-center"
+              >
+                <i className="fas fa-sync-alt mr-2"></i>Check Status
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 mt-6">
+              <i className="fas fa-info-circle mr-1"></i>
+              Verification usually takes 24-48 hours. Contact support if it's taking longer.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Case 3: Has vehicles but none approved and none pending (all rejected)
+  if (vehicles.length === 0) {
+    const rejectedVehicles = allVehicles.filter(v => v.status === 'REJECTED');
+    return (
+      <div className="pb-12 bg-gray-50 min-h-screen">
+        <div className="container mx-auto px-4 max-w-4xl">
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <i className="fas fa-times-circle text-red-600 text-3xl"></i>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">No Approved Vehicles</h2>
+            <p className="text-gray-600 mb-4">
+              {rejectedVehicles.length > 0 
+                ? "Your vehicle verification was not successful. Please add a new vehicle with correct details."
+                : "You need at least one approved vehicle to post rides."
+              }
+            </p>
+            
+            {rejectedVehicles.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
+                <h3 className="font-semibold text-red-800 mb-2">
+                  <i className="fas fa-exclamation-triangle mr-2"></i>Rejected Vehicles
+                </h3>
+                {rejectedVehicles.map((vehicle, index) => (
+                  <div key={vehicle._id || index} className="py-2 border-b border-red-200 last:border-0">
+                    <p className="font-medium text-gray-800">
+                      {vehicle.make} {vehicle.model}
+                    </p>
+                    {vehicle.rejectionReason && (
+                      <p className="text-sm text-red-600 mt-1">
+                        Reason: {vehicle.rejectionReason}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <Link
+              to="/profile"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition inline-block"
+            >
+              <i className="fas fa-plus-circle mr-2"></i>Add New Vehicle
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+    <div className="pb-12 bg-gray-50 min-h-screen">
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg p-8 mb-8 text-white">
@@ -219,46 +369,6 @@ const PostRide = () => {
                   onChange={(loc) => setFormData(prev => ({ ...prev, destination: loc }))}
                   required
                 />
-
-                {/* Stops */}
-                <div>
-                  <label className="block text-gray-700 font-medium mb-2">
-                    <i className="fas fa-map-signs text-emerald-500 mr-2"></i>
-                    Stops Along the Way (Optional)
-                  </label>
-                  <div className="space-y-2">
-                    {stops.map((stop, index) => (
-                      <div key={index} className="flex gap-2">
-                        <div className="flex-1">
-                          <LocationInput
-                            placeholder="Stop location"
-                            icon="fa-map-marker"
-                            value={stop.location}
-                            onChange={(loc) => {
-                              const newStops = [...stops];
-                              newStops[index].location = loc;
-                              setStops(newStops);
-                            }}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setStops(stops.filter((_, i) => i !== index))}
-                          className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition h-fit mt-8"
-                        >
-                          <i className="fas fa-times"></i>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setStops([...stops, { location: null }])}
-                    className="mt-2 text-emerald-500 hover:text-emerald-700 font-semibold text-sm"
-                  >
-                    <i className="fas fa-plus-circle mr-1"></i>Add Stop
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -344,59 +454,51 @@ const PostRide = () => {
                 <i className="fas fa-rupee-sign text-emerald-500 mr-2"></i>Pricing
               </h2>
 
-              {/* Predicted Price */}
-              <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-400 rounded-lg">
-                <p className="text-sm text-blue-800 font-semibold mb-2">
-                  <i className="fas fa-calculator mr-2"></i>Predicted Total Ride Price
-                </p>
-                <div className="text-3xl font-bold text-blue-700">
-                  {predictedPrice ? (
-                    <>₹{predictedPrice} <span className="text-sm font-normal">({distance} km × ₹8)</span></>
-                  ) : (
-                    'Select locations first'
-                  )}
-                </div>
-                <p className="text-xs text-blue-600 mt-2">
-                  💡 Based on distance × ₹8 per km (you can adjust below)
-                </p>
-              </div>
-
-              {/* Total Ride Price Input */}
-              <div className="mb-4">
-                <label className="block text-gray-700 font-bold mb-2 text-lg">
-                  <i className="fas fa-hand-holding-usd text-green-600 mr-2"></i>
-                  Your Total Ride Price *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-4 top-4 text-gray-500 font-bold text-xl">₹</span>
-                  <input
-                    type="number"
-                    name="totalRidePrice"
-                    value={formData.totalRidePrice}
-                    onChange={(e) => setFormData(prev => ({ ...prev, totalRidePrice: e.target.value }))}
-                    min="1"
-                    placeholder="Enter total ride price"
-                    required
-                    className="w-full pl-12 pr-4 py-4 border-2 border-green-500 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-600 text-2xl font-bold text-green-700"
+              {/* Show ContributionCalculator when distance is available */}
+              {distance ? (
+                <div className="space-y-4">
+                  {/* BlaBlaCar-style Contribution Calculator with Interactive Slider */}
+                  <ContributionCalculator 
+                    distanceKm={parseFloat(distance)} 
+                    passengers={parseInt(formData.availableSeats)}
+                    onPriceCalculated={(price) => {
+                      setPricePerSeat(price);
+                    }}
+                    showBreakdown={true}
+                    allowSlider={true}
                   />
-                </div>
-                <p className="text-sm text-gray-600 mt-2">
-                  💰 Enter the total price for the entire ride (will be divided among passengers)
-                </p>
-              </div>
 
-              {/* Price Per Seat Display */}
-              <div className="p-4 bg-green-50 border-l-4 border-green-500 rounded">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-green-800 font-medium">Price per Seat (Auto-calculated)</p>
-                    <p className="text-xs text-green-600">Total price ÷ Available seats</p>
-                  </div>
-                  <div className="text-2xl font-bold text-green-700">
-                    {pricePerSeat ? `₹${pricePerSeat}` : '₹ -'}
+                  {/* Final Price Summary */}
+                  <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-green-800 font-medium">
+                          <i className="fas fa-check-circle mr-1"></i>
+                          Final Price Per Seat
+                        </p>
+                        <p className="text-xs text-green-600">
+                          Adjust using the slider above
+                        </p>
+                      </div>
+                      <div className="text-3xl font-bold text-green-700">
+                        {pricePerSeat ? `₹${pricePerSeat}` : '₹ -'}
+                      </div>
+                    </div>
+                    {pricePerSeat && formData.availableSeats && (
+                      <div className="mt-3 pt-3 border-t border-green-300 text-sm text-green-700">
+                        <i className="fas fa-calculator mr-1"></i>
+                        If all {formData.availableSeats} seats booked: You'll receive ₹{pricePerSeat * formData.availableSeats}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-500">
+                  <i className="fas fa-map-marked-alt text-4xl mb-3"></i>
+                  <p className="font-medium">Select pickup and drop-off locations</p>
+                  <p className="text-sm">Price will be calculated based on distance</p>
+                </div>
+              )}
             </div>
 
             {/* Preferences */}
@@ -406,25 +508,6 @@ const PostRide = () => {
               </h2>
 
               <div className="space-y-4">
-                {/* Instant Booking */}
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <h4 className="font-semibold text-gray-800">
-                      <i className="fas fa-bolt text-blue-600 mr-1"></i>Auto-Approve Bookings
-                    </h4>
-                    <p className="text-sm text-gray-600">Passengers can book without waiting for approval</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.instantBooking}
-                      onChange={(e) => setFormData(prev => ({ ...prev, instantBooking: e.target.checked }))}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                  </label>
-                </div>
-
                 {/* Ladies Only */}
                 {user?.gender === 'FEMALE' && (
                   <div className="flex items-center justify-between p-4 bg-pink-50 rounded-lg border border-pink-200">
@@ -463,7 +546,7 @@ const PostRide = () => {
             {/* Submit Buttons */}
             <div className="flex justify-end space-x-4">
               <Link
-                to="/user/dashboard"
+                to="/dashboard"
                 className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-semibold"
               >
                 Cancel
