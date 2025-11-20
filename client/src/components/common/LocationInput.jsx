@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import useLocationAutocomplete from '../../hooks/useLocationAutocomplete';
 
 const LocationInput = ({
@@ -12,23 +12,31 @@ const LocationInput = ({
 }) => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef(null);
+  const onChangeRef = useRef(onChange);
+  
+  // Keep onChange ref up to date without triggering effects
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
   
   const {
     query,
     setQuery,
     suggestions,
     loading,
+    error,
     selectedLocation,
     selectLocation,
     getShortName,
     getLocationIcon
   } = useLocationAutocomplete(value?.address || '');
 
+  // Use callback ref to avoid dependency issues
   useEffect(() => {
-    if (selectedLocation) {
-      onChange(selectedLocation);
+    if (selectedLocation && onChangeRef.current) {
+      onChangeRef.current(selectedLocation);
     }
-  }, [selectedLocation, onChange]);
+  }, [selectedLocation]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -75,9 +83,19 @@ const LocationInput = ({
               <i className="fas fa-spinner fa-spin mr-2"></i>
               Searching...
             </div>
+          ) : error && suggestions.length === 0 ? (
+            <div className="p-3 text-amber-600 text-sm flex items-start">
+              <i className="fas fa-exclamation-triangle mr-2 mt-0.5"></i>
+              <div>
+                <div>{error}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Tip: Try city names like "Chennai", "Bangalore", "Nellore"
+                </div>
+              </div>
+            </div>
           ) : suggestions.length === 0 ? (
             <div className="p-3 text-gray-500 text-sm">
-              {query.length >= 3 ? 'No locations found' : 'Type at least 3 characters'}
+              {query.length >= 3 ? 'No locations found. Try different spelling.' : 'Type at least 3 characters'}
             </div>
           ) : (
             suggestions.map((result, index) => (
