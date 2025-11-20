@@ -6,8 +6,10 @@
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 const Booking = require('../models/Booking');
+const Notification = require('../models/Notification');
 const routeMatching = require('../utils/routeMatching');
 const carbonCalculator = require('../utils/carbonCalculator');
+const autoReassignment = require('../utils/autoReassignment');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const helpers = require('../utils/helpers');
 const axios = require('axios');
@@ -94,10 +96,8 @@ exports.postRide = asyncHandler(async (req, res) => {
         vehicleId,
         availableSeats,
         pricePerSeat,
-        stops,
         originCoordinates,
         destinationCoordinates,
-        instantBooking,
         ladiesOnly,
         petsAllowed,
         smokingAllowed,
@@ -142,40 +142,48 @@ exports.postRide = asyncHandler(async (req, res) => {
     console.log('  From coords:', fromCoords, '[lon, lat]');
     console.log('  To coords:', toCoords, '[lon, lat]');
     
+    // Build waypoints: Start → Destination
+    const waypoints = [fromCoords, toCoords];
+    
+    console.log('  Total waypoints:', waypoints.length);
+    
     let distance = 0;
     let duration = 0;
     let geometry = null;
     
     try {
-        console.log('  Calling OSRM API...');
-        const routeData = await routeMatching.getRoute([fromCoords, toCoords]);
+        console.log('  Calling OSRM API with', waypoints.length, 'waypoints...');
+        const routeData = await routeMatching.getRoute(waypoints);
         // getRoute already returns distance in km and duration in minutes
         distance = routeData.distance; // Already in km
         duration = routeData.duration; // Already in minutes
         geometry = routeData.geometry;
         
         console.log('✅ [Route Calculation] OSRM Success!');
-        console.log('  Distance:', distance.toFixed(2), 'km');
-        console.log('  Duration:', Math.round(duration), 'mins');
+        console.log('  Total Distance:', distance.toFixed(2), 'km');
+        console.log('  Total Duration:', Math.round(duration), 'mins');
         console.log('  Geometry points:', geometry?.coordinates?.length || 0);
     } catch (error) {
         console.error('❌ [Route Calculation] OSRM Failed:', error.message);
         console.log('🔄 [Route Calculation] Using fallback calculation (Haversine formula)');
         
-        // Fallback to approximate calculation
-        const R = 6371; // Earth's radius in km
-        const dLat = (toCoords[1] - fromCoords[1]) * Math.PI / 180;
-        const dLon = (toCoords[0] - fromCoords[0]) * Math.PI / 180;
-        const a = 
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(fromCoords[1] * Math.PI / 180) * Math.cos(toCoords[1] * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        distance = R * c;
+        // Fallback to approximate calculation - sum all segments
+        distance = 0;
+        for (let i = 0; i < waypoints.length - 1; i++) {
+            const R = 6371; // Earth's radius in km
+            const dLat = (waypoints[i+1][1] - waypoints[i][1]) * Math.PI / 180;
+            const dLon = (waypoints[i+1][0] - waypoints[i][0]) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(waypoints[i][1] * Math.PI / 180) * Math.cos(waypoints[i+1][1] * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            distance += R * c;
+        }
         duration = (distance / 60) * 60; // Rough estimate: 60 km/h average speed
         geometry = {
             type: 'LineString',
-            coordinates: [fromCoords, toCoords]
+            coordinates: waypoints
         };
         
         console.log('✅ [Route Calculation] Fallback calculation complete');
@@ -184,7 +192,18 @@ exports.postRide = asyncHandler(async (req, res) => {
     }
 
     // Create ride with correct schema structure
-   // Step 1: Prepare the ride data
+    // ✅ GET USER'S DEFAULT PREFERENCES
+    const userPrefs = user.preferences || {};
+    const userRideComfort = userPrefs.rideComfort || {};
+    
+    // Use form values if provided, otherwise use user's default preferences
+    const useSmokingAllowed = smokingAllowed !== undefined 
+        ? (smokingAllowed === 'true' || smokingAllowed === true)
+        : (userRideComfort.smokingAllowed === true);
+    const usePetsAllowed = petsAllowed !== undefined 
+        ? (petsAllowed === 'true' || petsAllowed === true)
+        : (userRideComfort.petsAllowed === true);
+
 const rideData = {
     rider: user._id,
     vehicle: vehicle._id,
@@ -199,7 +218,6 @@ const rideData = {
             address: destinationCoordinates.address || toLocation,
             coordinates: toCoords
         },
-        intermediateStops: stops ? [stops] : [],
         geometry: geometry,
         distance: distance,
         duration: duration
@@ -217,10 +235,13 @@ const rideData = {
     },
     preferences: {
         gender: ladiesOnly ? 'FEMALE_ONLY' : 'ANY',
-        autoAcceptBookings: instantBooking === 'true' || instantBooking === true || false,
-        smoking: smokingAllowed || false,
-        pets: petsAllowed || false,
-        luggage: luggageAllowed ? 'LARGE_LUGGAGE' : 'MEDIUM_BAG'
+        autoAcceptBookings: false, // All bookings require rider approval
+        smoking: useSmokingAllowed,
+        pets: usePetsAllowed,
+        luggage: luggageAllowed ? 'LARGE_LUGGAGE' : 'MEDIUM_BAG',
+        // ✅ COPY RIDER'S MUSIC AND CONVERSATION PREFERENCES
+        music: userRideComfort.musicPreference || 'OPEN_TO_REQUESTS',
+        conversation: userRideComfort.conversationPreference || 'DEPENDS_ON_MOOD'
     },
     specialInstructions: notes || '',
     status: 'ACTIVE'
@@ -265,9 +286,16 @@ exports.showSearchPage = (req, res) => {
 
 /**
  * Search rides
+ * ✅ RESPECTS: Comfort preferences (smoking, pets, music), gender, verifiedUsersOnly
  */
 exports.searchRides = asyncHandler(async (req, res) => {
-    const { origin, destination, date, seats } = req.query;
+    const { origin, destination, date, seats, smokingAllowed, petsAllowed, verifiedOnly, genderPreference } = req.query;
+
+    console.log('🔍 [Search Rides] ========== NEW SEARCH REQUEST ==========');
+    console.log('  Origin:', origin);
+    console.log('  Destination:', destination);
+    console.log('  Date:', date);
+    console.log('  Seats:', seats);
 
     if (!origin || !destination) {
         throw new AppError('Origin and destination are required', 400);
@@ -277,23 +305,80 @@ exports.searchRides = asyncHandler(async (req, res) => {
     const originCoords = JSON.parse(origin);
     const destCoords = JSON.parse(destination);
 
-    // Parse date
+    console.log('  Parsed origin coords:', originCoords.coordinates);
+    console.log('  Parsed dest coords:', destCoords.coordinates);
+
+    // Parse date - search for the ENTIRE DAY
     const searchDate = date ? new Date(date) : new Date();
+    // Set to start of day
+    searchDate.setHours(0, 0, 0, 0);
     const endOfDay = new Date(searchDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Find rides near the route
-    const rides = await Ride.find({
+    console.log('  Search date range:', searchDate.toISOString(), 'to', endOfDay.toISOString());
+
+    // Build base query
+    const baseQuery = {
         'schedule.departureDateTime': { $gte: searchDate, $lte: endOfDay },
         'pricing.availableSeats': { $gte: parseInt(seats) || 1 },
         status: 'ACTIVE'
-    })
-    .populate('rider', 'profile.firstName profile.lastName profile.photo rating statistics name fullName displayName')
+    };
+
+    console.log('  Base query:', JSON.stringify(baseQuery, null, 2));
+
+    // ✅ APPLY PREFERENCE FILTERS
+    if (smokingAllowed === 'false') {
+        baseQuery['preferences.smoking'] = { $ne: true };
+    }
+    if (petsAllowed === 'false') {
+        baseQuery['preferences.pets'] = { $ne: true };
+    }
+    if (genderPreference === 'FEMALE_ONLY') {
+        baseQuery['preferences.gender'] = 'FEMALE_ONLY';
+    }
+
+    // Find rides near the route
+    let rides = await Ride.find(baseQuery)
+    .populate('rider', 'profile.firstName profile.lastName profile.photo profile.gender rating statistics name fullName displayName verificationStatus preferences.booking preferences.rideComfort preferences.privacy')
     .populate('vehicle', 'make model type')
     .lean();
 
-    console.log('Found rides:', rides.length);
-    console.log('Search coords:', { pickup: originCoords.coordinates, dropoff: destCoords.coordinates });
+    console.log('📊 [Search Rides] Found', rides.length, 'rides matching date/seats/status criteria');
+    
+    // Debug: Log all found rides
+    rides.forEach((ride, idx) => {
+        console.log(`  Ride ${idx + 1}: ${ride._id}`);
+        console.log(`    Status: ${ride.status}`);
+        console.log(`    Departure: ${ride.schedule?.departureDateTime}`);
+        console.log(`    Available seats: ${ride.pricing?.availableSeats}`);
+        console.log(`    Route: ${ride.route?.start?.name} → ${ride.route?.destination?.name}`);
+        console.log(`    Start coords:`, ride.route?.start?.coordinates);
+        console.log(`    End coords:`, ride.route?.destination?.coordinates);
+        console.log(`    Geometry points:`, ride.route?.geometry?.coordinates?.length || 0);
+    });
+
+    // ✅ FILTER BY VERIFIED RIDERS (if user preference set)
+    if (verifiedOnly === 'true') {
+        rides = rides.filter(ride => ride.rider?.verificationStatus === 'VERIFIED');
+    }
+
+    // ✅ FILTER BY CURRENT USER'S GENDER PREFERENCE
+    if (req.user) {
+        const currentUser = await User.findById(req.user._id).select('profile.gender preferences.booking');
+        const userGenderPref = currentUser?.preferences?.booking?.preferredCoRiderGender;
+        
+        if (userGenderPref && userGenderPref !== 'ANY') {
+            rides = rides.filter(ride => {
+                const riderGender = ride.rider?.profile?.gender;
+                if (userGenderPref === 'MALE_ONLY') return riderGender === 'MALE';
+                if (userGenderPref === 'FEMALE_ONLY') return riderGender === 'FEMALE';
+                if (userGenderPref === 'SAME_GENDER') return riderGender === currentUser.profile?.gender;
+                return true;
+            });
+        }
+    }
+
+    console.log('After gender filter:', rides.length, 'rides');
 
     // Filter out rides without proper route geometry and log reasons
     const ridesWithValidGeometry = rides.filter(ride => {
@@ -325,13 +410,18 @@ exports.searchRides = asyncHandler(async (req, res) => {
         dropoff: destCoords.coordinates
     };
 
+    console.log('🔍 [Route Matching] Passenger route:', passengerRoute);
+
     const matchedRides = routeMatching.findMatchingRides(
         passengerRoute,
         ridesWithValidGeometry,
         20
     );
 
-    console.log('Matched rides:', matchedRides.length);
+    console.log('✅ [Search Rides] Matched rides:', matchedRides.length);
+    matchedRides.forEach((match, idx) => {
+        console.log(`  Match ${idx + 1}: Score ${match.matchDetails.matchScore}, Quality: ${match.matchDetails.matchQuality}`);
+    });
 
     // Format results
     const results = matchedRides.map(match => {
@@ -343,8 +433,24 @@ exports.searchRides = asyncHandler(async (req, res) => {
             parseInt(seats) || 1
         );
         
+        // ✅ FILTER RIDER CONTACT INFO BASED ON PRIVACY SETTINGS
+        const riderData = { ...match.ride.rider };
+        const privacyPrefs = riderData.preferences?.privacy || {};
+        
+        // Hide phone if showPhone is false
+        if (privacyPrefs.showPhone === false) {
+            delete riderData.phone;
+        }
+        // Hide email if showEmail is false  
+        if (privacyPrefs.showEmail === false) {
+            delete riderData.email;
+        }
+        
+        // Update ride object with filtered rider data
+        const filteredRide = { ...match.ride, rider: riderData };
+        
         return {
-            ride: match.ride,
+            ride: filteredRide,
             matchScore: match.matchDetails.matchScore,
             matchQuality: match.matchDetails.matchQuality,
             detour: match.matchDetails.detourPercent,
@@ -379,11 +485,7 @@ exports.searchRides = asyncHandler(async (req, res) => {
         'Expires': '0'
     });
 
-    // If AJAX request, render partial EJS for results
-    if (req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest') {
-        return res.render('rides/partials/searchResults', { results });
-    }
-    // Otherwise, send JSON (or render full page as needed)
+    // Always return JSON for API routes (React frontend)
     res.status(200).json({
         success: true,
         count: results.length,
@@ -393,22 +495,52 @@ exports.searchRides = asyncHandler(async (req, res) => {
 
 /**
  * Show ride details
+ * ✅ RESPECTS: Profile visibility preferences
  */
 exports.showRideDetails = asyncHandler(async (req, res) => {
     const { rideId } = req.params;
 
     const ride = await Ride.findById(rideId)
-        .populate('rider', 'profile.firstName profile.lastName profile.photo rating bio vehicles statistics createdAt phone email')
+        .populate('rider', 'profile.firstName profile.lastName profile.photo profile.gender rating bio vehicles statistics createdAt phone email preferences verificationStatus')
         .populate({
             path: 'bookings',
             populate: {
                 path: 'passenger',
-                select: 'profile.firstName profile.lastName profile.photo rating email phone statistics verificationStatus badges createdAt'
+                select: 'profile.firstName profile.lastName profile.photo rating email phone statistics verificationStatus badges createdAt preferences'
             }
         });
 
     if (!ride) {
         throw new AppError('Ride not found', 404);
+    }
+
+    // ✅ CHECK PROFILE VISIBILITY
+    let showRiderContact = true;
+    const visibilityPref = ride.rider?.preferences?.privacy?.profileVisibility;
+    const showPhonePref = ride.rider?.preferences?.privacy?.showPhone;
+    const showEmailPref = ride.rider?.preferences?.privacy?.showEmail;
+    
+    if (visibilityPref === 'PRIVATE') {
+        // Only show contact info after booking is confirmed
+        const userBooking = req.user ? await Booking.findOne({
+            ride: ride._id,
+            passenger: req.user._id,
+            status: { $in: ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_PROGRESS', 'COMPLETED'] }
+        }) : null;
+        showRiderContact = !!userBooking;
+    } else if (visibilityPref === 'VERIFIED_ONLY') {
+        // Only show to verified users
+        showRiderContact = req.user?.verificationStatus === 'VERIFIED';
+    }
+
+    // Mask contact info if not allowed by visibility OR specific preferences
+    if (ride.rider) {
+        if (!showRiderContact || showPhonePref === false) {
+            ride.rider.phone = undefined;
+        }
+        if (!showRiderContact || showEmailPref === false) {
+            ride.rider.email = undefined;
+        }
     }
 
     // Check if current user has booked
@@ -457,14 +589,44 @@ exports.showRideDetails = asyncHandler(async (req, res) => {
         });
     }
 
-    res.render('rides/details', {
-        title: `Ride Details - LANE Carpool`,
-        user: req.user,
+    // Return JSON for React frontend
+    res.json({
+        success: true,
         ride,
         userBooking,
         reviews,
         bookingStats,
         confirmedBookings
+    });
+});
+
+/**
+ * Get bookings for a ride (API response for React frontend)
+ */
+exports.getRideBookings = asyncHandler(async (req, res) => {
+    const { rideId } = req.params;
+
+    const ride = await Ride.findById(rideId)
+        .populate({
+            path: 'bookings',
+            populate: {
+                path: 'passenger',
+                select: 'name profile.firstName profile.lastName profile.photo profilePhoto rating phone email'
+            }
+        });
+
+    if (!ride) {
+        throw new AppError('Ride not found', 404);
+    }
+
+    // Verify the requester is the rider
+    if (ride.rider.toString() !== req.user._id.toString()) {
+        throw new AppError('Not authorized to view these bookings', 403);
+    }
+
+    res.status(200).json({
+        success: true,
+        bookings: ride.bookings || []
     });
 });
 
@@ -532,9 +694,9 @@ exports.showMyRides = asyncHandler(async (req, res) => {
 
     const pagination = helpers.paginate(totalRides, page, limit);
 
-    res.render('rides/my-rides', {
-        title: 'My Rides - LANE Carpool',
-        user,
+    // Return JSON for React frontend
+    res.json({
+        success: true,
         rides,
         currentStatus: status,
         pagination
@@ -549,7 +711,7 @@ exports.showEditRidePage = asyncHandler(async (req, res) => {
     const user = req.user;
 
     const ride = await Ride.findById(rideId)
-        .populate('rider', 'name vehicles');
+        .populate('rider', 'profile.firstName profile.lastName name vehicles');
 
     if (!ride) {
         req.flash('error', 'Ride not found');
@@ -593,6 +755,10 @@ exports.showEditRidePage = asyncHandler(async (req, res) => {
  */
 exports.updateRide = asyncHandler(async (req, res) => {
     const { rideId } = req.params;
+    
+    console.log('📝 [Update Ride] Request received for ride:', rideId);
+    console.log('📝 [Update Ride] Request body:', JSON.stringify(req.body, null, 2));
+    
     const ride = await Ride.findById(rideId);
 
     if (!ride) {
@@ -658,19 +824,24 @@ exports.updateRide = asyncHandler(async (req, res) => {
 });
 
 /**
- * Cancel ride
+ * Cancel ride - Now with Smart Auto-Reassignment
+ * When a rider cancels, automatically finds alternative rides for passengers
  */
 exports.cancelRide = asyncHandler(async (req, res) => {
     const { rideId } = req.params;
     const { reason } = req.body;
 
-    const ride = await Ride.findById(rideId);
+    // Get Socket.io instance for real-time notifications
+    const io = req.app.get('io');
+
+    const ride = await Ride.findById(rideId)
+        .populate('rider', 'name profile');
 
     if (!ride) {
         throw new AppError('Ride not found', 404);
     }
 
-    if (ride.rider.toString() !== req.user._id.toString()) {
+    if (ride.rider._id.toString() !== req.user._id.toString()) {
         throw new AppError('Not authorized', 403);
     }
 
@@ -682,47 +853,129 @@ exports.cancelRide = asyncHandler(async (req, res) => {
         throw new AppError('Cannot cancel completed ride', 400);
     }
 
+    console.log('🚫 [Cancel Ride] Starting cancellation process for ride:', rideId);
+    console.log('   Reason:', reason || 'No reason provided');
+
+    // Update ride status
     ride.status = 'CANCELLED';
-    ride.cancellationDetails = {
-        cancelledBy: 'RIDER',
-        reason: reason || 'No reason provided',
-        cancelledAt: new Date()
+    ride.cancellation = {
+        cancelled: true,
+        cancelledBy: req.user._id,
+        cancelledAt: new Date(),
+        reason: reason || 'No reason provided'
     };
 
     await ride.save();
 
-    // Cancel all bookings and process refunds
-    const bookings = await Booking.find({
+    // Find all affected bookings
+    const affectedBookings = await Booking.find({
         ride: ride._id,
         status: { $in: ['CONFIRMED', 'PENDING'] }
-    });
+    }).populate('passenger', 'name profile email phone');
 
-    for (const booking of bookings) {
-        booking.status = 'CANCELLED';
-        booking.cancellation = {
-            cancelledBy: 'RIDER',
-            reason: 'Ride cancelled by rider',
-            cancelledAt: new Date()
-        };
+    console.log(`   Found ${affectedBookings.length} affected bookings`);
 
-        // Calculate full refund
-        if (booking.payment.status === 'SUCCESS') {
-            booking.payment.refund = {
-                amount: booking.payment.amount,
-                status: 'PENDING',
-                initiatedAt: new Date()
+    let reassignmentResults = null;
+
+    // Trigger auto-reassignment if there are affected bookings
+    if (affectedBookings.length > 0) {
+        console.log('🔄 [Cancel Ride] Initiating auto-reassignment...');
+        
+        try {
+            // Run auto-reassignment
+            reassignmentResults = await autoReassignment.findAlternativeRides(
+                ride,
+                affectedBookings,
+                io
+            );
+        } catch (reassignError) {
+            console.error('❌ [Cancel Ride] Auto-reassignment error:', reassignError);
+            // Continue with manual cancellation if auto-reassignment fails
+            reassignmentResults = {
+                totalBookings: affectedBookings.length,
+                reassigned: [],
+                noAlternative: affectedBookings.map(b => ({ bookingId: b._id, passengerId: b.passenger._id })),
+                errors: [{ error: reassignError.message }]
             };
         }
 
-        await booking.save();
+        // For bookings that couldn't be reassigned, ensure they are cancelled
+        for (const booking of affectedBookings) {
+            // Skip if already processed by auto-reassignment
+            const wasReassigned = reassignmentResults?.reassigned?.some(
+                r => r.bookingId.toString() === booking._id.toString()
+            );
+            
+            if (!wasReassigned && booking.status !== 'CANCELLED') {
+                booking.status = 'CANCELLED';
+                booking.cancellation = {
+                    cancelled: true,
+                    cancelledBy: 'RIDER',
+                    reason: 'Ride cancelled by rider',
+                    cancelledAt: new Date()
+                };
 
-        // TODO: Send notification to passenger
+                // Issue full refund
+                if (booking.payment.status === 'PAID' || booking.payment.status === 'PAYMENT_CONFIRMED') {
+                    booking.payment.refund = {
+                        amount: booking.totalPrice,
+                        status: 'PENDING',
+                        initiatedAt: new Date(),
+                        reason: 'Ride cancelled by rider'
+                    };
+                    booking.cancellation.refundIssued = true;
+                }
+
+                await booking.save();
+
+                // Send cancellation notification to passenger
+                const notification = await Notification.create({
+                    user: booking.passenger._id || booking.passenger,
+                    type: 'RIDE_CANCELLED',
+                    title: '❌ Ride Cancelled',
+                    message: `Your ride has been cancelled by the rider. ${booking.payment.refund ? 'A full refund has been initiated.' : ''}`,
+                    data: {
+                        bookingId: booking._id,
+                        rideId: ride._id,
+                        refundAmount: booking.payment.refund?.amount || 0
+                    },
+                    priority: 'HIGH'
+                });
+
+                // Send real-time notification
+                if (io) {
+                    const passengerId = (booking.passenger._id || booking.passenger).toString();
+                    io.to(`user-${passengerId}`).emit('ride-cancelled', {
+                        type: 'RIDE_CANCELLED',
+                        notification: notification,
+                        booking: {
+                            id: booking._id,
+                            rideId: ride._id,
+                            status: 'CANCELLED',
+                            refundAmount: booking.payment.refund?.amount || 0
+                        }
+                    });
+                }
+            }
+        }
     }
+
+    // Restore available seats for non-reassigned bookings
+    // (Reassigned bookings have their seats transferred to new ride)
+
+    console.log('✅ [Cancel Ride] Cancellation complete');
+    console.log('   Reassignment results:', reassignmentResults);
 
     res.status(200).json({
         success: true,
         message: 'Ride cancelled successfully',
-        refundedBookings: bookings.length
+        totalBookings: affectedBookings.length,
+        reassignment: reassignmentResults ? {
+            attempted: true,
+            reassigned: reassignmentResults.reassigned.length,
+            noAlternative: reassignmentResults.noAlternative.length,
+            details: reassignmentResults
+        } : null
     });
 });
 
@@ -1127,3 +1380,13 @@ exports.updateLocation = asyncHandler(async (req, res) => {
         deviation
     });
 });
+
+// ============================================
+// API FUNCTION ALIASES (for route compatibility)
+// ============================================
+
+// Alias for getMyRides
+exports.getMyRides = exports.showMyRides;
+
+// Alias for getRideDetails
+exports.getRideDetails = exports.showRideDetails;

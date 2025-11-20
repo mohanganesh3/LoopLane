@@ -90,8 +90,13 @@ const rideSchema = new mongoose.Schema({
         pets: { type: Boolean, default: false },
         music: {
             type: String,
-            enum: ['NO_MUSIC', 'LIGHT_MUSIC', 'OPEN_TO_REQUESTS'],
+            enum: ['NO_MUSIC', 'SOFT_MUSIC', 'ANY_MUSIC', 'LIGHT_MUSIC', 'OPEN_TO_REQUESTS'],
             default: 'OPEN_TO_REQUESTS'
+        },
+        conversation: {
+            type: String,
+            enum: ['QUIET', 'SOME_CHAT', 'CHATTY', 'DEPENDS_ON_MOOD'],
+            default: 'DEPENDS_ON_MOOD'
         },
         luggage: {
             type: String,
