@@ -1,13 +1,44 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Button, Card, Badge, LoadingSpinner, Alert } from '../../components/common';
+import { Button, Card, Badge, LoadingSpinner, Alert, ConfirmModal } from '../../components/common';
+import { useToast } from '../../components/common/Toast';
+import { useSocket } from '../../context/SocketContext';
 import bookingService from '../../services/bookingService';
+import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
+import { getRating, formatRating } from '../../utils/helpers';
+
+// Rider avatar component with fallback
+const RiderAvatar = ({ rider }) => {
+  const [imgError, setImgError] = useState(false);
+  const photoUrl = getUserPhoto(rider);
+  const displayName = getUserDisplayName(rider);
+  
+  if (photoUrl && !imgError) {
+    return (
+      <img
+        src={photoUrl}
+        className="w-12 h-12 rounded-full mr-4 object-cover"
+        alt={displayName}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  
+  return (
+    <div className={`w-12 h-12 rounded-full mr-4 ${getAvatarColor(displayName)} flex items-center justify-center text-white font-bold text-lg`}>
+      {getInitials(displayName)}
+    </div>
+  );
+};
 
 const MyBookings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { socket, isConnected } = useSocket();
+  const toast = useToast();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cancelBookingId, setCancelBookingId] = useState(null);
   const [pagination, setPagination] = useState({
     currentPage: 1,
     totalPages: 1,
@@ -30,12 +61,45 @@ const MyBookings = () => {
   useEffect(() => {
     fetchBookings();
   }, [currentStatus, currentPage]);
+  
+  // Listen for real-time booking updates
+  useEffect(() => {
+    if (socket && isConnected) {
+      const handleBookingConfirmed = (data) => {
+        toast?.success('Your booking has been confirmed!');
+        fetchBookings();
+      };
+      
+      const handleBookingRejected = (data) => {
+        toast?.error('Your booking request was rejected.');
+        fetchBookings();
+      };
+      
+      const handleBookingCancelled = (data) => {
+        toast?.warning('A booking has been cancelled.');
+        fetchBookings();
+      };
+      
+      socket.on('booking-confirmed', handleBookingConfirmed);
+      socket.on('booking-rejected', handleBookingRejected);
+      socket.on('booking-cancelled', handleBookingCancelled);
+      
+      return () => {
+        socket.off('booking-confirmed', handleBookingConfirmed);
+        socket.off('booking-rejected', handleBookingRejected);
+        socket.off('booking-cancelled', handleBookingCancelled);
+      };
+    }
+  }, [socket, isConnected]);
 
   const fetchBookings = async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await bookingService.getMyBookings(currentStatus, currentPage);
+      const data = await bookingService.getMyBookings({ 
+        status: currentStatus !== 'all' ? currentStatus.toUpperCase().replace('-', '_') : undefined,
+        page: currentPage 
+      });
       setBookings(data.bookings || []);
       setPagination(data.pagination || {});
     } catch (err) {
@@ -53,14 +117,20 @@ const MyBookings = () => {
     setSearchParams({ status: currentStatus, page: page.toString() });
   };
 
-  const handleCancelBooking = async (bookingId) => {
-    if (!window.confirm('Are you sure you want to cancel this booking?')) return;
+  const handleCancelBooking = (bookingId) => {
+    setCancelBookingId(bookingId);
+  };
 
+  const confirmCancelBooking = async () => {
+    if (!cancelBookingId) return;
+    
     try {
-      await bookingService.cancelBooking(bookingId);
+      await bookingService.cancelBooking(cancelBookingId);
+      setCancelBookingId(null);
       fetchBookings();
     } catch (err) {
       setError(err.message || 'Failed to cancel booking');
+      setCancelBookingId(null);
     }
   };
 
@@ -116,7 +186,7 @@ const MyBookings = () => {
   };
 
   return (
-    <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+    <div className="pb-12 bg-gray-50 min-h-screen">
       <div className="container mx-auto px-4">
         {/* Page Header */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
@@ -126,7 +196,7 @@ const MyBookings = () => {
               My Bookings
             </h1>
             <Link
-              to="/rides/search"
+              to="/find-ride"
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition"
             >
               <i className="fas fa-plus-circle mr-2"></i>
@@ -169,7 +239,7 @@ const MyBookings = () => {
                   : `No ${currentStatus} bookings at the moment`}
               </p>
               <Link
-                to="/rides/search"
+                to="/find-ride"
                 className="inline-block bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition"
               >
                 <i className="fas fa-search mr-2"></i>Find Rides
@@ -192,7 +262,7 @@ const MyBookings = () => {
                   {/* Price */}
                   <div className="text-right">
                     <div className="text-3xl font-bold text-emerald-500 mb-1">
-                      ₹{booking.totalAmount}
+                      ₹{booking.totalPrice || booking.totalAmount}
                     </div>
                     <p className="text-gray-600 text-sm">{booking.seatsBooked} seat(s)</p>
                   </div>
@@ -203,20 +273,16 @@ const MyBookings = () => {
                   <div className="border-t pt-4 mb-4">
                     {/* Driver Info */}
                     <div className="flex items-center mb-4">
-                      <img
-                        src={booking.ride.rider?.profilePhoto || '/images/default-avatar.png'}
-                        className="w-12 h-12 rounded-full mr-4 object-cover"
-                        alt={booking.ride.rider?.name || 'Driver'}
-                      />
+                      <RiderAvatar rider={booking.ride.rider} />
                       <div>
                         <h3 className="font-semibold text-gray-800">
-                          {booking.ride.rider?.name || 'Driver'}
+                          {getUserDisplayName(booking.ride.rider)}
                         </h3>
                         <div className="flex items-center text-sm text-gray-600">
                           <div className="mr-2">
-                            {renderStars(booking.ride.rider?.rating?.overall || 0)}
+                            {renderStars(getRating(booking.ride.rider?.rating))}
                           </div>
-                          <span>{(booking.ride.rider?.rating?.overall || 0).toFixed(1)}</span>
+                          <span>{formatRating(booking.ride.rider?.rating)}</span>
                         </div>
                       </div>
                     </div>
@@ -254,18 +320,57 @@ const MyBookings = () => {
                         <i className="fas fa-clock text-emerald-500 mr-2"></i>
                         {formatTime(booking.ride.schedule?.time)}
                       </div>
-                      {booking.ride.rider?.vehicle && (
+                      {(booking.ride.rider?.vehicles?.[0] || booking.ride.rider?.vehicle) && (
                         <div>
                           <i className="fas fa-car text-emerald-500 mr-2"></i>
-                          {booking.ride.rider.vehicle.model} ({booking.ride.rider.vehicle.color})
+                          {(booking.ride.rider.vehicles?.[0] || booking.ride.rider.vehicle)?.make} {(booking.ride.rider.vehicles?.[0] || booking.ride.rider.vehicle)?.model} ({(booking.ride.rider.vehicles?.[0] || booking.ride.rider.vehicle)?.color})
                         </div>
                       )}
-                      {booking.ride.rider?.vehicle?.registrationNumber && (
+                      {(booking.ride.rider?.vehicles?.[0]?.licensePlate || booking.ride.rider?.vehicle?.registrationNumber) && (
                         <div>
                           <i className="fas fa-id-card text-emerald-500 mr-2"></i>
-                          {booking.ride.rider.vehicle.registrationNumber}
+                          {booking.ride.rider.vehicles?.[0]?.licensePlate || booking.ride.rider.vehicle?.registrationNumber}
                         </div>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {/* OTP Display Section - Show prominently when needed */}
+                {booking.status === 'PICKUP_PENDING' && booking.verification?.pickup?.code && (
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-4 mb-4 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mr-4">
+                          <i className="fas fa-key text-2xl"></i>
+                        </div>
+                        <div>
+                          <h4 className="font-bold">Pickup OTP</h4>
+                          <p className="text-sm text-blue-100">Show to driver at pickup</p>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-4xl font-mono font-bold tracking-[0.3em]">{booking.verification.pickup.code}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {(booking.status === 'PICKED_UP' || booking.status === 'IN_TRANSIT') && booking.verification?.dropoff?.code && (
+                  <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-4 mb-4 text-white">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mr-4">
+                          <i className="fas fa-flag-checkered text-2xl"></i>
+                        </div>
+                        <div>
+                          <h4 className="font-bold">Dropoff OTP</h4>
+                          <p className="text-sm text-purple-100">Show to driver at destination</p>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-4xl font-mono font-bold tracking-[0.3em]">{booking.verification.dropoff.code}</p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -279,7 +384,7 @@ const MyBookings = () => {
                     <i className="fas fa-eye mr-2"></i>View Details
                   </Link>
 
-                  {['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT'].includes(booking.status) && (
+                  {['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'IN_PROGRESS'].includes(booking.status) && (
                     <Link
                       to={`/tracking/${booking._id}`}
                       className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition"
@@ -288,9 +393,9 @@ const MyBookings = () => {
                     </Link>
                   )}
 
-                  {booking.status === 'CONFIRMED' && (
+                  {['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'IN_PROGRESS'].includes(booking.status) && (
                     <Link
-                      to={`/chat/${booking.ride?._id}`}
+                      to={`/chat?bookingId=${booking._id}`}
                       className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition"
                     >
                       <i className="fas fa-comments mr-2"></i>Chat
@@ -308,7 +413,7 @@ const MyBookings = () => {
 
                   {booking.status === 'COMPLETED' && !booking.reviews?.passengerReviewed && (
                     <Link
-                      to={`/reviews/booking/${booking._id}`}
+                      to={`/bookings/${booking._id}/rate`}
                       className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold transition"
                     >
                       <i className="fas fa-star mr-2"></i>Write Review
@@ -376,6 +481,18 @@ const MyBookings = () => {
           </div>
         )}
       </div>
+
+      {/* Cancel Booking Confirmation Modal */}
+      <ConfirmModal
+        isOpen={!!cancelBookingId}
+        onClose={() => setCancelBookingId(null)}
+        onConfirm={confirmCancelBooking}
+        title="Cancel Booking"
+        message="Are you sure you want to cancel this booking? This action cannot be undone."
+        confirmText="Cancel Booking"
+        cancelText="Keep Booking"
+        variant="danger"
+      />
     </div>
   );
 };
