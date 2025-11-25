@@ -43,11 +43,12 @@ const Payment = () => {
 
   const handleApplyCoupon = () => {
     // Mock coupon validation
+    const totalAmount = booking.totalPrice || booking.totalAmount;
     if (couponCode.toUpperCase() === 'FIRST50') {
       setDiscount(50);
       setSuccess('Coupon applied! ₹50 discount');
     } else if (couponCode.toUpperCase() === 'SAVE10') {
-      const disc = Math.round(booking.totalAmount * 0.1);
+      const disc = Math.round(totalAmount * 0.1);
       setDiscount(disc);
       setSuccess(`Coupon applied! ₹${disc} discount (10% off)`);
     } else {
@@ -59,6 +60,8 @@ const Payment = () => {
   const handlePayment = async () => {
     setProcessing(true);
     setError('');
+
+    const totalAmount = booking.totalPrice || booking.totalAmount;
 
     // Validate payment method specific fields
     if (paymentMethod === 'upi' && !upiId) {
@@ -79,19 +82,19 @@ const Payment = () => {
       const paymentData = {
         bookingId,
         method: paymentMethod,
-        amount: booking.totalAmount - discount,
+        amount: totalAmount - discount,
         ...(paymentMethod === 'upi' && { upiId }),
         ...(paymentMethod === 'card' && { cardDetails }),
         ...(discount > 0 && { couponCode, discount })
       };
 
-      const response = await bookingService.processPayment(paymentData);
+      const response = await bookingService.completePayment(bookingId, paymentData);
       
       if (response.success) {
         navigate(`/bookings/${bookingId}/success`, { 
           state: { 
             paymentId: response.paymentId,
-            amount: booking.totalAmount - discount
+            amount: totalAmount - discount
           } 
         });
       } else {
@@ -128,6 +131,12 @@ const Payment = () => {
     );
   }
 
+  const totalAmount = booking.totalPrice || booking.totalAmount || 0;
+  const pickupAddress = booking.pickupPoint?.address || booking.ride?.route?.start?.address || 'Pickup';
+  const dropoffAddress = booking.dropoffPoint?.address || booking.ride?.route?.destination?.address || 'Dropoff';
+  const pricePerSeat = booking.ride?.pricing?.pricePerSeat || 0;
+  const rideDate = booking.ride?.schedule?.departureDateTime || booking.ride?.schedule?.date || booking.createdAt;
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-2xl mx-auto px-4">
@@ -144,16 +153,16 @@ const Payment = () => {
               <div className="w-3 h-3 rounded-full bg-red-500"></div>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-900">{booking.ride?.source?.address}</p>
+              <p className="text-sm font-medium text-gray-900">{pickupAddress}</p>
               <div className="h-8"></div>
-              <p className="text-sm font-medium text-gray-900">{booking.ride?.destination?.address}</p>
+              <p className="text-sm font-medium text-gray-900">{dropoffAddress}</p>
             </div>
           </div>
 
           <div className="border-t border-gray-200 pt-4 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Date</span>
-              <span className="text-gray-900">{new Date(booking.ride?.date).toLocaleDateString()}</span>
+              <span className="text-gray-900">{new Date(rideDate).toLocaleDateString()}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Seats</span>
@@ -161,11 +170,11 @@ const Payment = () => {
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Price per seat</span>
-              <span className="text-gray-900">₹{booking.ride?.pricePerSeat}</span>
+              <span className="text-gray-900">₹{pricePerSeat}</span>
             </div>
             <div className="flex justify-between text-base font-semibold pt-2 border-t border-gray-200">
               <span className="text-gray-900">Total Amount</span>
-              <span className="text-emerald-600">₹{booking.totalAmount}</span>
+              <span className="text-emerald-600">₹{totalAmount}</span>
             </div>
             {discount > 0 && (
               <>
@@ -175,7 +184,7 @@ const Payment = () => {
                 </div>
                 <div className="flex justify-between text-base font-semibold">
                   <span className="text-gray-900">Final Amount</span>
-                  <span className="text-emerald-600">₹{booking.totalAmount - discount}</span>
+                  <span className="text-emerald-600">₹{totalAmount - discount}</span>
                 </div>
               </>
             )}
@@ -361,7 +370,7 @@ const Payment = () => {
           loading={processing}
           className="w-full"
         >
-          Pay ₹{booking.totalAmount - discount}
+          Pay ₹{totalAmount - discount}
         </Button>
 
         <p className="text-xs text-gray-500 text-center mt-4">

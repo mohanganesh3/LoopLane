@@ -66,12 +66,12 @@ const PaymentFailed = () => {
             >
               View Booking
             </Link>
-            <Link 
-              to="/support"
-              className="block w-full py-3 px-4 text-emerald-500 font-medium hover:text-emerald-600 transition"
+            <a 
+              href="mailto:support@looplane.com?subject=Payment%20Issue%20-%20Booking%20ID%20"
+              className="block w-full py-3 px-4 text-emerald-500 font-medium hover:text-emerald-600 transition text-center"
             >
               Contact Support
-            </Link>
+            </a>
           </div>
         </div>
 
