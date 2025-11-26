@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { LoadingSpinner, Alert } from '../../components/common';
-import bookingService from '../../services/bookingService';
+import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 const RateBooking = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
+  // State
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -19,48 +23,99 @@ const RateBooking = () => {
     punctuality: 0,
     communication: 0,
     cleanliness: 0,
-    safety: 0
+    driving: 0
   });
-  const [review, setReview] = useState('');
-  const [wouldRecommend, setWouldRecommend] = useState(null);
+  const [comment, setComment] = useState('');
   const [tags, setTags] = useState([]);
 
+  // Available tags - these MUST match the backend enum
   const availableTags = [
-    { id: 'friendly', label: 'Friendly', icon: '😊' },
-    { id: 'onTime', label: 'On Time', icon: '⏰' },
-    { id: 'cleanCar', label: 'Clean Car', icon: '✨' },
-    { id: 'smoothRide', label: 'Smooth Ride', icon: '🚗' },
-    { id: 'goodMusic', label: 'Good Music', icon: '🎵' },
-    { id: 'safeDriving', label: 'Safe Driving', icon: '🛡️' },
-    { id: 'greatConversation', label: 'Great Conversation', icon: '💬' },
-    { id: 'comfortable', label: 'Comfortable', icon: '😌' }
+    { id: 'FRIENDLY', label: 'Friendly', icon: 'fa-smile' },
+    { id: 'ON_TIME', label: 'On Time', icon: 'fa-clock' },
+    { id: 'CLEAN_CAR', label: 'Clean Car', icon: 'fa-sparkles' },
+    { id: 'SMOOTH_DRIVER', label: 'Smooth Ride', icon: 'fa-car' },
+    { id: 'SAFE_DRIVER', label: 'Safe Driving', icon: 'fa-shield-alt' },
+    { id: 'GREAT_CONVERSATION', label: 'Great Conversation', icon: 'fa-comments' },
+    { id: 'GOOD_COMPANY', label: 'Good Company', icon: 'fa-users' },
+    { id: 'FLEXIBLE', label: 'Flexible', icon: 'fa-arrows-alt' }
   ];
 
+  // Fetch booking on mount
   useEffect(() => {
     fetchBooking();
   }, [id]);
 
   const fetchBooking = async () => {
     try {
-      const data = await bookingService.getBookingById(id);
-      setBooking(data.booking);
+      setLoading(true);
+      const response = await api.get(`/api/bookings/${id}`);
+      const bookingData = response.data.booking;
       
-      // Check if already rated
-      if (data.booking.rating) {
-        setError('You have already rated this booking');
+      if (!bookingData) {
+        setError('Booking not found');
+        return;
+      }
+      
+      setBooking(bookingData);
+      
+      // Check if already reviewed
+      if (bookingData.reviews?.passengerReviewed || bookingData.reviews?.riderReviewed) {
+        // Check if current user has reviewed
+        const currentUserId = user?._id;
+        const passengerId = bookingData.passenger?._id || bookingData.passenger;
+        
+        if (passengerId === currentUserId && bookingData.reviews?.passengerReviewed) {
+          setError('You have already reviewed this ride');
+        }
       }
     } catch (err) {
-      setError('Failed to load booking details');
+      console.error('Error fetching booking:', err);
+      setError(err.response?.data?.message || 'Failed to load booking details');
     } finally {
       setLoading(false);
     }
   };
 
+  // Determine user role and reviewee
+  const getUserRole = () => {
+    if (!booking || !user) return null;
+    
+    const passengerId = booking.passenger?._id || booking.passenger;
+    const driverId = booking.ride?.rider?._id || booking.ride?.rider;
+    const currentUserId = user._id;
+    
+    // Convert to strings for comparison
+    const passengerIdStr = passengerId?.toString();
+    const driverIdStr = driverId?.toString();
+    const currentUserIdStr = currentUserId?.toString();
+    
+    if (passengerIdStr === currentUserIdStr) {
+      return { role: 'passenger', revieweeId: driverIdStr };
+    } else if (driverIdStr === currentUserIdStr) {
+      return { role: 'driver', revieweeId: passengerIdStr };
+    }
+    
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Validate rating
     if (overallRating === 0) {
-      setError('Please provide an overall rating');
+      setError('Please select a star rating (1-5)');
+      return;
+    }
+
+    // Get user role and reviewee
+    const userRole = getUserRole();
+    if (!userRole) {
+      setError('Could not determine your role in this booking');
+      return;
+    }
+
+    if (!userRole.revieweeId) {
+      setError('Could not determine who to review');
       return;
     }
 
@@ -68,23 +123,54 @@ const RateBooking = () => {
     setError('');
 
     try {
+      // Build review data - only include non-zero ratings
       const reviewData = {
-        overallRating,
-        ratings,
-        review: review.trim(),
-        wouldRecommend,
-        tags
+        revieweeId: userRole.revieweeId,
+        rating: overallRating
       };
 
-      await bookingService.rateBooking(id, reviewData);
-      setSuccess(true);
+      // Only add optional ratings if they're set (non-zero)
+      if (ratings.punctuality > 0) reviewData.punctuality = ratings.punctuality;
+      if (ratings.communication > 0) reviewData.communication = ratings.communication;
+      if (ratings.cleanliness > 0) reviewData.cleanliness = ratings.cleanliness;
+      if (ratings.driving > 0) reviewData.driving = ratings.driving;
       
-      // Redirect after 2 seconds
-      setTimeout(() => {
-        navigate(`/bookings/${id}`);
-      }, 2000);
+      // Add comment if provided
+      if (comment.trim()) {
+        reviewData.comment = comment.trim();
+      }
+      
+      // Add tags if any selected
+      if (tags.length > 0) {
+        reviewData.tags = tags;
+      }
+
+      console.log('Submitting review:', reviewData);
+
+      // Make API call
+      const response = await api.post(`/api/reviews/booking/${id}`, reviewData);
+      
+      console.log('Review response:', response.data);
+      
+      if (response.data.success) {
+        setSuccess(true);
+        // Redirect after 2 seconds
+        setTimeout(() => {
+          navigate(`/bookings/${id}`);
+        }, 2000);
+      } else {
+        setError(response.data.message || 'Failed to submit review');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to submit rating');
+      console.error('Review submission error:', err);
+      
+      // Extract error message from response
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.error ||
+                          err.message || 
+                          'Failed to submit review. Please try again.';
+      
+      setError(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -98,13 +184,15 @@ const RateBooking = () => {
     );
   };
 
+  // Loading state
   if (loading) {
-    return <LoadingSpinner fullScreen text="Loading..." />;
+    return <LoadingSpinner fullScreen text="Loading booking..." />;
   }
 
+  // Success state
   if (success) {
     return (
-      <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+      <div className="min-h-screen bg-gray-50 pt-8 pb-12">
         <div className="container mx-auto px-4 max-w-2xl">
           <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -127,9 +215,10 @@ const RateBooking = () => {
     );
   }
 
+  // Error state (no booking)
   if (error && !booking) {
     return (
-      <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+      <div className="min-h-screen bg-gray-50 pt-8 pb-12">
         <div className="container mx-auto px-4 max-w-2xl">
           <Alert type="error" message={error} />
           <Link to="/bookings" className="text-emerald-500 hover:underline mt-4 inline-block">
@@ -140,13 +229,31 @@ const RateBooking = () => {
     );
   }
 
-  const driver = booking?.ride?.rider;
+  // Get reviewee info
+  const userRole = getUserRole();
+  const isPassenger = userRole?.role === 'passenger';
+  const reviewee = isPassenger ? booking?.ride?.rider : booking?.passenger;
+  
+  const revieweeName = reviewee?.profile?.firstName 
+    ? `${reviewee.profile.firstName} ${reviewee.profile.lastName?.charAt(0) || ''}.`
+    : reviewee?.name || (isPassenger ? 'Driver' : 'Passenger');
+  
+  const revieweePhoto = reviewee?.profile?.photo || reviewee?.profilePhoto || null;
+  
+  const pickupName = booking?.pickupPoint?.address || 
+                     booking?.pickupPoint?.name || 
+                     booking?.ride?.route?.start?.name || 
+                     'Pickup';
+  const dropoffName = booking?.dropoffPoint?.address || 
+                      booking?.dropoffPoint?.name || 
+                      booking?.ride?.route?.destination?.name || 
+                      'Dropoff';
 
   return (
-    <div className="pt-20 pb-12 bg-gray-50 min-h-screen">
+    <div className="min-h-screen bg-gray-50 pt-4 pb-12">
       <div className="container mx-auto px-4 max-w-2xl">
-        {/* Header */}
-        <Link to={`/bookings/${id}`} className="inline-flex items-center text-emerald-500 hover:text-emerald-700 mb-6">
+        {/* Back Link */}
+        <Link to={`/bookings/${id}`} className="inline-flex items-center text-emerald-500 hover:text-emerald-700 mb-4">
           <i className="fas fa-arrow-left mr-2"></i>Back to Booking
         </Link>
 
@@ -162,30 +269,42 @@ const RateBooking = () => {
             </p>
           </div>
 
-          {/* Driver Info */}
-          {driver && (
-            <div className="p-6 border-b bg-gray-50">
-              <div className="flex items-center">
+          {/* Reviewee Info */}
+          <div className="p-6 border-b bg-gray-50">
+            <div className="flex items-center">
+              {revieweePhoto ? (
                 <img
-                  src={driver.profilePhoto || '/images/default-avatar.png'}
-                  alt={driver.firstName}
+                  src={revieweePhoto}
+                  alt={revieweeName}
                   className="w-16 h-16 rounded-full object-cover border-4 border-white shadow"
+                  onError={(e) => { e.target.style.display = 'none'; }}
                 />
-                <div className="ml-4">
-                  <h3 className="text-lg font-semibold text-gray-800">
-                    {driver.firstName} {driver.lastName?.charAt(0)}.
-                  </h3>
-                  <p className="text-gray-500 text-sm">
-                    <i className="fas fa-map-marker-alt mr-1"></i>
-                    {booking.pickupPoint?.name || booking.ride?.source?.name} → {booking.dropoffPoint?.name || booking.ride?.destination?.name}
-                  </p>
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xl font-bold border-4 border-white shadow">
+                  {revieweeName.charAt(0).toUpperCase()}
                 </div>
+              )}
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {revieweeName}
+                </h3>
+                <p className="text-gray-500 text-sm">
+                  <i className="fas fa-map-marker-alt mr-1"></i>
+                  {pickupName} → {dropoffName}
+                </p>
               </div>
             </div>
-          )}
+          </div>
 
+          {/* Review Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-6">
-            {error && <Alert type="error" message={error} />}
+            {/* Error Alert */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                <i className="fas fa-exclamation-circle mr-2"></i>
+                {error}
+              </div>
+            )}
 
             {/* Overall Rating */}
             <div className="text-center">
@@ -232,7 +351,7 @@ const RateBooking = () => {
                 { key: 'punctuality', label: 'Punctuality', icon: 'fa-clock' },
                 { key: 'communication', label: 'Communication', icon: 'fa-comments' },
                 { key: 'cleanliness', label: 'Cleanliness', icon: 'fa-broom' },
-                { key: 'safety', label: 'Safety', icon: 'fa-shield-alt' }
+                { key: 'driving', label: 'Driving', icon: 'fa-car' }
               ].map(item => (
                 <div key={item.key} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
                   <span className="text-gray-700 flex items-center">
@@ -276,41 +395,10 @@ const RateBooking = () => {
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    <span className="mr-1">{tag.icon}</span>
+                    <i className={`fas ${tag.icon} mr-1`}></i>
                     {tag.label}
                   </button>
                 ))}
-              </div>
-            </div>
-
-            {/* Would Recommend */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Would you recommend this driver?
-              </label>
-              <div className="flex gap-4">
-                <button
-                  type="button"
-                  onClick={() => setWouldRecommend(true)}
-                  className={`flex-1 py-3 rounded-lg font-medium transition flex items-center justify-center ${
-                    wouldRecommend === true
-                      ? 'bg-green-500 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <i className="fas fa-thumbs-up mr-2"></i>Yes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWouldRecommend(false)}
-                  className={`flex-1 py-3 rounded-lg font-medium transition flex items-center justify-center ${
-                    wouldRecommend === false
-                      ? 'bg-red-500 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <i className="fas fa-thumbs-down mr-2"></i>No
-                </button>
               </div>
             </div>
 
@@ -320,15 +408,15 @@ const RateBooking = () => {
                 Write a review (optional)
               </label>
               <textarea
-                value={review}
-                onChange={(e) => setReview(e.target.value)}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
                 placeholder="Share your experience with others..."
                 rows={4}
                 maxLength={500}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
               />
               <p className="text-right text-xs text-gray-500 mt-1">
-                {review.length}/500
+                {comment.length}/500
               </p>
             </div>
 

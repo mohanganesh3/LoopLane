@@ -7,14 +7,20 @@ const Reviews = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('received');
   const [reviews, setReviews] = useState([]);
+  const [receivedCount, setReceivedCount] = useState(0);
+  const [givenCount, setGivenCount] = useState(0);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     fetchReviews();
-    fetchStats();
   }, [activeTab]);
+
+  useEffect(() => {
+    fetchStats();
+    fetchCounts();
+  }, [user]);
 
   const fetchReviews = async () => {
     try {
@@ -30,15 +36,34 @@ const Reviews = () => {
     }
   };
 
+  const fetchCounts = async () => {
+    try {
+      // Fetch both counts
+      const [received, given] = await Promise.all([
+        reviewService.getMyReceivedReviews(),
+        reviewService.getMyGivenReviews()
+      ]);
+      setReceivedCount(received.totalReviews || 0);
+      setGivenCount(given.totalReviews || 0);
+    } catch (err) {
+      console.error('Failed to load counts:', err);
+    }
+  };
+
   const fetchStats = async () => {
     try {
       if (user?._id) {
         const data = await reviewService.getUserReviewStats(user._id);
-        setStats(data);
+        setStats(data.stats || data);
       }
     } catch (err) {
       console.error('Failed to load stats:', err);
     }
+  };
+
+  // Get rating from review - handles both old and new schema
+  const getRating = (review) => {
+    return review.ratings?.overall || review.rating || 0;
   };
 
   const renderStars = (rating) => (
@@ -53,7 +78,7 @@ const Reviews = () => {
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
       ))}
-      <span className="ml-2 text-gray-600">{rating.toFixed(1)}</span>
+      <span className="ml-2 text-gray-600">{Number(rating || 0).toFixed(1)}</span>
     </div>
   );
 
@@ -65,22 +90,22 @@ const Reviews = () => {
           <p className="text-gray-600 mt-2">View and manage your reviews</p>
         </div>
 
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <p className="text-sm text-gray-500">Average Rating</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.averageRating?.toFixed(1) || '0.0'}</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <p className="text-sm text-gray-500">Reviews Received</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalReceived || 0}</p>
-            </div>
-            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-              <p className="text-sm text-gray-500">Reviews Given</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalGiven || 0}</p>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <p className="text-sm text-gray-500">Average Rating</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {Number(stats?.averageRating || 0).toFixed(1)}
+            </p>
           </div>
-        )}
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <p className="text-sm text-gray-500">Reviews Received</p>
+            <p className="text-2xl font-bold text-gray-900">{receivedCount}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+            <p className="text-sm text-gray-500">Reviews Given</p>
+            <p className="text-2xl font-bold text-gray-900">{givenCount}</p>
+          </div>
+        </div>
 
         <div className="flex border-b border-gray-200 mb-6">
           <button
@@ -118,29 +143,57 @@ const Reviews = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {reviews.map((review) => (
-              <div key={review._id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center">
-                    <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                      <span className="text-xl font-bold text-gray-500">
-                        {(activeTab === 'received' ? review.reviewer?.name : review.reviewee?.name)?.[0]?.toUpperCase()}
-                      </span>
+            {reviews.map((review) => {
+              const personData = activeTab === 'received' ? review.reviewer : review.reviewee;
+              const displayName = personData?.profile?.firstName 
+                ? `${personData.profile.firstName} ${personData.profile.lastName || ''}`
+                : personData?.name || 'Anonymous';
+              const displayInitial = (personData?.profile?.firstName || personData?.name || 'A')?.[0]?.toUpperCase();
+              const personPhoto = personData?.profile?.photo || personData?.profilePhoto;
+              const reviewRating = getRating(review);
+              
+              return (
+                <div key={review._id} className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center">
+                      {personPhoto ? (
+                        <img
+                          src={personPhoto}
+                          alt={displayName}
+                          className="w-12 h-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
+                          <span className="text-xl font-bold text-emerald-600">{displayInitial}</span>
+                        </div>
+                      )}
+                      <div className="ml-4">
+                        <h4 className="font-medium text-gray-900">{displayName}</h4>
+                        <p className="text-sm text-gray-500">
+                          {new Date(review.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div className="ml-4">
-                      <h4 className="font-medium text-gray-900">
-                        {activeTab === 'received' ? review.reviewer?.name : review.reviewee?.name}
-                      </h4>
-                      <p className="text-sm text-gray-500">
-                        {new Date(review.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
+                    {renderStars(reviewRating)}
                   </div>
-                  {renderStars(review.rating)}
+                  {review.comment && <p className="mt-4 text-gray-700">{review.comment}</p>}
+                  
+                  {/* Show tags if any */}
+                  {review.tags && review.tags.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {review.tags.map((tag, idx) => (
+                        <span 
+                          key={idx} 
+                          className="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs rounded-full"
+                        >
+                          {tag.replace(/_/g, ' ')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                {review.comment && <p className="mt-4 text-gray-700">{review.comment}</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

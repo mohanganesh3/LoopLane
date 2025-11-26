@@ -88,204 +88,170 @@ exports.submitReview = asyncHandler(async (req, res) => {
         tags
     } = req.body;
 
-    // ============================================
-    // STEP 1: VALIDATE BOOKING EXISTS
-    // ============================================
-    const booking = await Booking.findById(bookingId).populate('ride');
+    console.log('📝 [Review] ========================================');
+    console.log('📝 [Review] Submitting review for booking:', bookingId);
+    console.log('📝 [Review] Reviewer:', req.user._id);
+    console.log('📝 [Review] Reviewee:', revieweeId);
+    console.log('📝 [Review] Rating:', rating);
+    console.log('📝 [Review] ========================================');
+
+    // STEP 1: Validate booking exists
+    const booking = await Booking.findById(bookingId)
+        .populate('ride')
+        .populate('passenger', '_id');
 
     if (!booking) {
-        throw new AppError(
-            `❌ Booking Not Found: We couldn't find a booking with ID "${bookingId.substring(0, 8)}...". ` +
-            `This booking may have been deleted or the ID is incorrect. Please go back to your bookings list and try again.`,
-            404
-        );
+        console.log('❌ [Review] Booking not found');
+        return res.status(404).json({
+            success: false,
+            message: 'Booking not found'
+        });
     }
 
-    // ============================================
-    // STEP 2: VERIFY BOOKING IS COMPLETED
-    // ============================================
-    const isPaymentPaid = booking.payment && booking.payment.status === 'PAID';
-    const isDroppedOff = booking.status === 'DROPPED_OFF';
-    const isPickedUp = booking.status === 'PICKED_UP';
-    const isCompleted = booking.status === 'COMPLETED' || ((isDroppedOff || isPickedUp) && isPaymentPaid);
+    console.log('📝 [Review] Booking found, status:', booking.status);
 
-    if (!isCompleted) {
-        const statusMessages = {
-            'PENDING': 'The booking is still pending confirmation from the driver.',
-            'CONFIRMED': 'The ride has been confirmed but not yet started.',
-            'PICKUP_PENDING': 'The driver is on the way to pick you up.',
-            'PICKED_UP': 'The ride is currently in progress. Payment needs to be completed first.',
-            'DROPPED_OFF': 'You have been dropped off, but payment is still pending.',
-            'CANCELLED': 'This booking was cancelled and cannot be reviewed.',
-            'REJECTED': 'This booking was rejected and cannot be reviewed.'
-        };
-        
-        const currentStatusMessage = statusMessages[booking.status] || `Current status: ${booking.status}`;
-        
-        throw new AppError(
-            `⏳ Cannot Review Yet: You can only review rides that are fully completed. ${currentStatusMessage}\n\n` +
-            `✅ To leave a review:\n` +
-            `${!isCompleted && (booking.status === 'PICKED_UP' || booking.status === 'DROPPED_OFF') ? '• Complete the payment process\n' : ''}` +
-            `${booking.status === 'CONFIRMED' || booking.status === 'PICKUP_PENDING' ? '• Wait for the ride to be completed\n' : ''}` +
-            `${booking.status === 'PENDING' ? '• Wait for the driver to confirm the booking\n' : ''}` +
-            `• The review option will appear once the ride is fully completed with payment confirmed.`,
-            400
-        );
+    // STEP 2: Check booking status - allow DROPPED_OFF, COMPLETED, or IN_TRANSIT
+    const allowedStatuses = ['DROPPED_OFF', 'COMPLETED', 'PICKED_UP', 'IN_TRANSIT'];
+    if (!allowedStatuses.includes(booking.status)) {
+        console.log('❌ [Review] Invalid booking status:', booking.status);
+        return res.status(400).json({
+            success: false,
+            message: `Cannot review this booking. Current status: ${booking.status}. Reviews are only allowed for completed rides.`
+        });
     }
 
-    // ============================================
-    // STEP 3: VERIFY USER AUTHORIZATION
-    // ============================================
-    const isPassenger = booking.passenger.toString() === req.user._id.toString();
-    const isRider = booking.ride.rider.toString() === req.user._id.toString();
+    // STEP 3: Verify user is part of booking
+    const passengerId = booking.passenger._id?.toString() || booking.passenger.toString();
+    const riderId = booking.ride.rider?.toString();
+    const currentUserId = req.user._id.toString();
+
+    console.log('📝 [Review] PassengerId:', passengerId);
+    console.log('📝 [Review] RiderId:', riderId);
+    console.log('📝 [Review] CurrentUserId:', currentUserId);
+
+    const isPassenger = passengerId === currentUserId;
+    const isRider = riderId === currentUserId;
 
     if (!isPassenger && !isRider) {
-        throw new AppError(
-            `🚫 Unauthorized: You cannot review this ride because you were not part of it. ` +
-            `Only the passenger (${booking.passenger}) or the driver (${booking.ride.rider}) can leave a review. ` +
-            `Your user ID: ${req.user._id}. If you believe this is an error, please contact support.`,
-            403
-        );
+        console.log('❌ [Review] User not part of booking');
+        return res.status(403).json({
+            success: false,
+            message: 'You are not authorized to review this booking'
+        });
     }
 
-    // ============================================
-    // STEP 4: VERIFY REVIEWEE IS CORRECT
-    // ============================================
-    const expectedRevieweeId = isPassenger ? booking.ride.rider.toString() : booking.passenger.toString();
+    // STEP 4: Verify reviewee is correct
+    const expectedRevieweeId = isPassenger ? riderId : passengerId;
     
     if (revieweeId !== expectedRevieweeId) {
-        const userRole = isPassenger ? 'passenger' : 'driver';
-        const revieweeRole = isPassenger ? 'driver' : 'passenger';
-        
-        throw new AppError(
-            `⚠️ Invalid Reviewee: There's a mismatch in who you're trying to review. ` +
-            `You are the ${userRole} in this ride, so you should be reviewing the ${revieweeRole}. ` +
-            `Expected reviewee ID: ${expectedRevieweeId.substring(0, 8)}..., but received: ${revieweeId.substring(0, 8)}... ` +
-            `Please refresh the page and try again. If this persists, contact support.`,
-            400
-        );
+        console.log('❌ [Review] Reviewee mismatch. Expected:', expectedRevieweeId, 'Got:', revieweeId);
+        return res.status(400).json({
+            success: false,
+            message: 'Invalid reviewee. Please refresh the page and try again.'
+        });
     }
 
-    // ============================================
-    // STEP 5: CHECK FOR DUPLICATE REVIEW
-    // ============================================
+    // STEP 5: Check for duplicate review
     const existingReview = await Review.findOne({
         reviewer: req.user._id,
-        reviewee: revieweeId,
         booking: booking._id
     });
 
     if (existingReview) {
-        const reviewDate = new Date(existingReview.createdAt).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+        console.log('❌ [Review] Already reviewed');
+        return res.status(400).json({
+            success: false,
+            message: 'You have already reviewed this ride'
         });
-        
-        throw new AppError(
-            `✅ Already Reviewed: You have already submitted a review for this ride on ${reviewDate}. ` +
-            `Each ride can only be reviewed once to ensure authenticity. ` +
-            `Your review (${existingReview.ratings.overall}⭐) is already published and contributing to the ${isPassenger ? 'driver' : 'passenger'}'s rating. ` +
-            `If you need to update or remove your review, please contact support.`,
-            400
-        );
     }
 
-    // Determine review type
+    // STEP 6: Create review
     const reviewType = isPassenger ? 'DRIVER_REVIEW' : 'PASSENGER_REVIEW';
     
-    // ============================================
-    // STEP 6: PARSE AND VALIDATE TAGS
-    // ============================================
+    // Parse tags
     let parsedTags = [];
-    if (tags) {
-        try {
-            parsedTags = typeof tags === 'string' ? JSON.parse(tags) : tags;
-            // Convert tags to uppercase with underscores (e.g., "Friendly" -> "FRIENDLY")
-            parsedTags = Array.isArray(parsedTags) ? parsedTags.map(tag => 
-                tag.toUpperCase().replace(/\s+/g, '_')
-            ) : [];
-        } catch (e) {
-            parsedTags = [];
-        }
+    if (tags && Array.isArray(tags)) {
+        parsedTags = tags.map(tag => tag.toUpperCase().replace(/\s+/g, '_'));
     }
-    
-    // Create review with correct schema structure
-    const review = await Review.create({
-        reviewer: req.user._id,
-        reviewee: revieweeId,
-        booking: booking._id,
-        type: reviewType, // ✅ Required field
-        ratings: {
-            overall: parseFloat(rating), // ✅ Nested under ratings
-            categories: {
-                punctuality: punctuality ? parseFloat(punctuality) : undefined,
-                communication: communication ? parseFloat(communication) : undefined,
-                cleanliness: cleanliness ? parseFloat(cleanliness) : undefined,
-                driving: driving ? parseFloat(driving) : undefined,
-                friendliness: undefined,
-                respectfulness: undefined
-            }
-        },
-        tags: parsedTags, // ✅ Must match enum values
-        comment: comment || ''
-    });
 
-    // Update user's rating statistics
-    const ratingStats = await Review.calculateUserRating(revieweeId);
-    
-    // Update the User document with new rating
-    await User.findByIdAndUpdate(revieweeId, {
-        'rating.overall': ratingStats.avgRating || 0,
-        'rating.totalRatings': ratingStats.totalReviews || 0
-    });
-
-    // Mark booking as reviewed
-    if (isPassenger) {
-        booking.reviews.passengerReviewed = true;
-    } else {
-        booking.reviews.riderReviewed = true;
-    }
-    await booking.save();
-
-    // Get reviewer name safely
-    const reviewerName = User.getUserName(req.user);
-
-    // Send notification
-    await Notification.create({
-        user: revieweeId,
-        type: 'REVIEW_RECEIVED',
-        title: 'New Review Received! ⭐',
-        message: `${reviewerName} rated you ${rating} stars`,
-        data: {
-            reviewId: review._id,
-            bookingId: booking._id
-        }
-    });
-
-    // Send real-time notification
-    const io = req.app.get('io');
-    if (io) {
-        io.to(`user-${revieweeId}`).emit('notification', {
-            type: 'REVIEW_RECEIVED',
-            title: 'New Review Received! ⭐',
-            message: `${reviewerName} gave you ${rating} stars`,
-            data: {
-                reviewId: review._id,
-                bookingId: booking._id
+    try {
+        const review = await Review.create({
+            reviewer: req.user._id,
+            reviewee: revieweeId,
+            booking: booking._id,
+            type: reviewType,
+            ratings: {
+                overall: parseFloat(rating),
+                categories: {
+                    punctuality: punctuality ? parseFloat(punctuality) : undefined,
+                    communication: communication ? parseFloat(communication) : undefined,
+                    cleanliness: cleanliness ? parseFloat(cleanliness) : undefined,
+                    driving: driving ? parseFloat(driving) : undefined
+                }
             },
-            timestamp: new Date()
+            tags: parsedTags,
+            comment: comment || ''
+        });
+
+        console.log('✅ [Review] Review created:', review._id);
+
+        // Update user's rating
+        const ratingStats = await Review.calculateUserRating(revieweeId);
+        await User.findByIdAndUpdate(revieweeId, {
+            'rating.overall': ratingStats.avgRating || 0,
+            'rating.totalRatings': ratingStats.totalReviews || 0
+        });
+
+        // Mark booking as reviewed
+        if (isPassenger) {
+            booking.reviews = booking.reviews || {};
+            booking.reviews.passengerReviewed = true;
+        } else {
+            booking.reviews = booking.reviews || {};
+            booking.reviews.riderReviewed = true;
+        }
+        await booking.save();
+
+        // Send notification
+        try {
+            const reviewerName = req.user.profile?.firstName || req.user.name || 'Someone';
+            await Notification.create({
+                user: revieweeId,
+                type: 'REVIEW_RECEIVED',
+                title: 'New Review Received! ⭐',
+                message: `${reviewerName} rated you ${rating} stars`,
+                data: { reviewId: review._id, bookingId: booking._id }
+            });
+
+            // Real-time notification
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`user-${revieweeId}`).emit('notification', {
+                    type: 'REVIEW_RECEIVED',
+                    title: 'New Review Received! ⭐',
+                    message: `${reviewerName} gave you ${rating} stars`,
+                    timestamp: new Date()
+                });
+            }
+        } catch (notifError) {
+            console.error('⚠️ [Review] Notification error:', notifError.message);
+        }
+
+        console.log('✅ [Review] Review submitted successfully');
+        
+        return res.status(201).json({
+            success: true,
+            message: 'Review submitted successfully!',
+            review
+        });
+
+    } catch (createError) {
+        console.error('❌ [Review] Error creating review:', createError);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to create review: ' + createError.message
         });
     }
-
-    res.status(201).json({
-        success: true,
-        message: 'Review submitted successfully! Thank you for your feedback.',
-        review,
-        redirectUrl: `/bookings/${bookingId}`
-    });
 });
 
 /**
@@ -318,6 +284,81 @@ exports.getUserReviews = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: '$ratings.overall', // ✅ Fixed: Use ratings.overall
+                count: { $sum: 1 }
+            }
+        },
+        { $sort: { _id: -1 } }
+    ]);
+
+    const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    ratingBreakdown.forEach(item => {
+        breakdown[Math.floor(item._id)] = item.count;
+    });
+
+    res.status(200).json({
+        success: true,
+        totalReviews,
+        reviews,
+        ratingBreakdown: breakdown,
+        currentPage: page,
+        totalPages: Math.ceil(totalReviews / limit)
+    });
+});
+
+/**
+ * Get reviews given by current user
+ */
+exports.getMyGivenReviews = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+
+    const totalReviews = await Review.countDocuments({ reviewer: req.user._id });
+    const reviews = await Review.find({ reviewer: req.user._id })
+        .populate('reviewee', 'profile profilePhoto rating')
+        .populate('booking', 'bookingReference')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.status(200).json({
+        success: true,
+        totalReviews,
+        reviews,
+        currentPage: page,
+        totalPages: Math.ceil(totalReviews / limit)
+    });
+});
+
+/**
+ * Get reviews received by current user
+ */
+exports.getMyReceivedReviews = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = 10;
+    const skip = (page - 1) * limit;
+    
+    const mongoose = require('mongoose');
+
+    const totalReviews = await Review.countDocuments({ reviewee: req.user._id, isPublished: true });
+    const reviews = await Review.find({ reviewee: req.user._id, isPublished: true })
+        .populate('reviewer', 'profile profilePhoto rating')
+        .populate('booking', 'bookingReference')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    // Calculate rating breakdown
+    const ratingBreakdown = await Review.aggregate([
+        { 
+            $match: { 
+                reviewee: new mongoose.Types.ObjectId(req.user._id),
+                isPublished: true 
+            } 
+        },
+        {
+            $group: {
+                _id: '$ratings.overall',
                 count: { $sum: 1 }
             }
         },
