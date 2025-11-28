@@ -1,5 +1,5 @@
 /**
- * Admin Routes
+ * Admin Routes - API Only (React SPA)
  */
 
 const express = require('express');
@@ -12,65 +12,67 @@ const { isAuthenticated, isAdmin } = require('../middleware/auth');
 router.use(isAuthenticated);
 router.use(isAdmin);
 
-// Middleware to add unresolved deviations count to all admin pages
+// Middleware to count unresolved deviations for admin endpoints
 router.use(async (req, res, next) => {
     try {
         const unresolvedDeviations = await RouteDeviation.countDocuments({ 
             status: { $in: ['ACTIVE', 'ESCALATED'] } 
         });
-        res.locals.unresolvedDeviations = unresolvedDeviations;
+        req.unresolvedDeviations = unresolvedDeviations;
     } catch (error) {
         console.error('Error fetching unresolved deviations:', error);
-        res.locals.unresolvedDeviations = 0;
+        req.unresolvedDeviations = 0;
     }
     next();
 });
 
-// Dashboard
-router.get('/dashboard', adminController.showDashboard);
+// ========== API ROUTES (JSON responses for React frontend) ==========
 
-// Financial Dashboard
-router.get('/financial-dashboard', adminController.showFinancialDashboard);
+// Dashboard Stats API
+router.get('/stats', adminController.getDashboardStats);
 
-// User Management
-router.get('/users', adminController.showUsers);
+// User Management API
+router.get('/users', adminController.getUsers);
 router.get('/users/:id', adminController.getUserDetails);
+router.patch('/users/:id/status', adminController.updateUserStatus);
 router.post('/users/:id/suspend', adminController.suspendUser);
 router.post('/users/:id/activate', adminController.activateUser);
 router.delete('/users/:id', adminController.deleteUser);
 
-// Verification Requests
-router.get('/verifications', adminController.showVerificationRequests);
-router.get('/verifications/:userId', adminController.showVerificationDetails);
-router.post('/verifications/:userId/approve', adminController.approveVerification);
+// Verification API
+router.get('/verifications/pending', adminController.getPendingVerifications);
+router.post('/verifications/:userId/verify', adminController.approveVerification);
 router.post('/verifications/:userId/reject', adminController.rejectVerification);
 
-// Rides Management
-router.get('/rides', adminController.showRides);
-router.get('/rides/:rideId', adminController.showRideDetails);
+// Rides Management API
+router.get('/rides', adminController.getRides);
+router.get('/rides/:rideId', adminController.getRideDetails);
 router.post('/rides/:rideId/cancel', adminController.cancelRide);
 
-// Bookings Management
-router.get('/bookings', adminController.showBookings);
-router.get('/bookings/:bookingId', adminController.showBookingDetails);
+// Bookings Management API
+router.get('/bookings', adminController.getBookings);
+router.get('/bookings/:bookingId', adminController.getBookingDetails);
+router.post('/bookings/:bookingId/refund', adminController.refundBooking);
 
-// Reports
-router.get('/reports', adminController.showReports);
-router.get('/reports/:reportId', adminController.showReportDetails);
-router.post('/reports/:reportId/review', adminController.reviewReport);
+// Reports API - User Reports (complaints/issues)
+router.get('/reports', adminController.getReports);
+router.get('/reports/:reportId', adminController.getReportDetails);
+router.post('/reports/:reportId/action', adminController.takeReportAction);
 
-// Statistics
-router.get('/statistics', adminController.showStatistics);
+// Analytics API
+router.get('/analytics/revenue', adminController.getRevenueReport);
+router.get('/analytics/activity', adminController.getActivityReport);
+router.get('/analytics/rides', adminController.getRideAnalytics);
 
-// SOS Emergency Management (redirect to /sos/admin routes)
-router.get('/sos', (req, res) => res.redirect('/sos/admin/dashboard'));
-router.get('/sos/emergencies', (req, res) => res.redirect('/sos/admin/all'));
+// Emergency API
+router.get('/emergencies', adminController.getEmergencies);
+router.post('/emergencies/:emergencyId/resolve', adminController.resolveEmergency);
 
-// Settings
-router.get('/settings', adminController.showSettings);
-router.post('/settings', adminController.updateSettings);
+// Settings API
+router.get('/settings', adminController.getSettings);
+router.put('/settings', adminController.updateSettings);
 
-// Notifications
+// Notifications API
 router.get('/notifications', adminController.getNotifications);
 router.post('/notifications/:notificationId/read', adminController.markNotificationAsRead);
 

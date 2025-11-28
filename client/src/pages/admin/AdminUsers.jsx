@@ -1,10 +1,43 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import adminService from '../../services/adminService';
 import { Alert, Button } from '../../components/common';
+import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
+import { formatRating } from '../../utils/helpers';
+
+// Avatar component with fallback for admin pages
+const UserAvatar = ({ user, size = 'md' }) => {
+  const [imgError, setImgError] = useState(false);
+  const photoUrl = getUserPhoto(user);
+  const displayName = getUserDisplayName(user);
+  
+  const sizeClasses = {
+    sm: 'w-10 h-10 text-sm',
+    md: 'w-14 h-14 text-lg',
+    lg: 'w-20 h-20 text-2xl'
+  };
+  
+  if (photoUrl && !imgError) {
+    return (
+      <img
+        src={photoUrl}
+        alt={displayName}
+        className={`${sizeClasses[size]} rounded-full object-cover`}
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+  
+  return (
+    <div className={`${sizeClasses[size]} rounded-full ${getAvatarColor(displayName)} flex items-center justify-center text-white font-bold`}>
+      {getInitials(displayName)}
+    </div>
+  );
+};
 
 const AdminUsers = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,7 +64,44 @@ const AdminUsers = () => {
   const [activateNotes, setActivateNotes] = useState('');
 
   useEffect(() => {
-    fetchUsers();
+    let isMounted = true;
+    
+    const loadUsers = async () => {
+      setLoading(true);
+      try {
+        const params = {
+          search: searchParams.get('search') || '',
+          role: searchParams.get('role') || 'all',
+          status: searchParams.get('status') || 'all',
+          page: searchParams.get('page') || 1
+        };
+        
+        const response = await adminService.getAllUsers(params);
+        if (isMounted) {
+          if (response && response.success) {
+            setUsers(response.users || []);
+            setPagination(response.pagination || { page: 1, pages: 1, total: response.users?.length || 0 });
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          // Don't show error for auth issues - let the route guard handle it
+          if (err.response?.status !== 401 && err.response?.status !== 403) {
+            setError(err.response?.data?.message || err.message || 'Failed to load users');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadUsers();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   const fetchUsers = async () => {
@@ -45,12 +115,14 @@ const AdminUsers = () => {
       };
       
       const response = await adminService.getAllUsers(params);
-      if (response.success) {
-        setUsers(response.users);
-        setPagination(response.pagination || { page: 1, pages: 1, total: response.users.length });
+      if (response && response.success) {
+        setUsers(response.users || []);
+        setPagination(response.pagination || { page: 1, pages: 1, total: response.users?.length || 0 });
       }
     } catch (err) {
-      setError(err.message || 'Failed to load users');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        setError(err.response?.data?.message || err.message || 'Failed to load users');
+      }
     } finally {
       setLoading(false);
     }
@@ -153,9 +225,9 @@ const AdminUsers = () => {
 
   const getRoleBadge = (role) => {
     if (role === 'RIDER') {
-      return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">🚗 Rider</span>;
+      return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800"><i className="fas fa-car mr-1"></i> Rider</span>;
     }
-    return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">👤 Passenger</span>;
+    return <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800"><i className="fas fa-user mr-1"></i> Passenger</span>;
   };
 
   const getStatusBadge = (status) => {
@@ -237,7 +309,7 @@ const AdminUsers = () => {
                 onClick={applyFilters}
                 className="w-full px-6 py-2 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition"
               >
-                🔍 Search
+                <i className="fas fa-search mr-1"></i> Search
               </button>
             </div>
           </div>
@@ -246,7 +318,7 @@ const AdminUsers = () => {
         {/* Users List */}
         <div className="bg-white rounded-xl p-6 shadow-sm">
           <h3 className="text-lg font-semibold text-gray-900 mb-6">
-            👥 All Users ({pagination.total || users.length})
+            <i className="fas fa-users mr-2"></i>All Users ({pagination.total || users.length})
           </h3>
 
           <div className="space-y-4">
@@ -255,19 +327,15 @@ const AdminUsers = () => {
                 key={user._id}
                 className="flex items-center gap-5 p-5 bg-gray-50 rounded-xl border border-gray-200 hover:shadow-md hover:-translate-y-0.5 transition-all"
               >
-                <img
-                  src={user.profile?.photo || '/images/default-avatar.png'}
-                  alt={user.profile?.firstName}
-                  className="w-14 h-14 rounded-full object-cover"
-                />
+                <UserAvatar user={user} size="md" />
                 
                 <div className="flex-1">
                   <div className="font-semibold text-gray-900 text-lg">
-                    {user.profile?.firstName} {user.profile?.lastName}
+                    {getUserDisplayName(user)}
                   </div>
                   <div className="flex flex-wrap gap-4 text-sm text-gray-500 mt-1">
-                    <span>📧 {user.email}</span>
-                    <span>📱 {user.phone}</span>
+                    <span><i className="fas fa-envelope mr-1"></i> {user.email}</span>
+                    <span><i className="fas fa-phone mr-1"></i> {user.phone}</span>
                     {getRoleBadge(user.role)}
                     {getStatusBadge(user.accountStatus)}
                   </div>
@@ -275,10 +343,10 @@ const AdminUsers = () => {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => viewUser(user._id)}
+                    onClick={() => navigate(`/admin/users/${user._id}`)}
                     className="px-4 py-2 bg-blue-500 text-white text-sm rounded-lg font-semibold hover:bg-blue-600 transition"
                   >
-                    👁️ View
+                    <i className="fas fa-eye mr-1"></i> View
                   </button>
                   
                   {user.accountStatus === 'ACTIVE' && (
@@ -286,7 +354,7 @@ const AdminUsers = () => {
                       onClick={() => openSuspendModal(user._id)}
                       className="px-4 py-2 bg-yellow-500 text-white text-sm rounded-lg font-semibold hover:bg-yellow-600 transition"
                     >
-                      🚫 Suspend
+                      <i className="fas fa-ban mr-1"></i> Suspend
                     </button>
                   )}
                   
@@ -295,7 +363,7 @@ const AdminUsers = () => {
                       onClick={() => openActivateModal(user._id)}
                       className="px-4 py-2 bg-emerald-500 text-white text-sm rounded-lg font-semibold hover:bg-emerald-600 transition"
                     >
-                      ✅ Activate
+                      <i className="fas fa-check-circle mr-1"></i> Activate
                     </button>
                   )}
                   
@@ -303,7 +371,7 @@ const AdminUsers = () => {
                     onClick={() => handleDelete(user._id)}
                     className="px-4 py-2 bg-red-500 text-white text-sm rounded-lg font-semibold hover:bg-red-600 transition"
                   >
-                    🗑️ Delete
+                    <i className="fas fa-trash mr-1"></i> Delete
                   </button>
                 </div>
               </div>
@@ -311,7 +379,7 @@ const AdminUsers = () => {
 
             {users.length === 0 && (
               <div className="text-center py-12 text-gray-500">
-                <div className="text-4xl mb-4">👥</div>
+                <div className="text-4xl mb-4"><i className="fas fa-users"></i></div>
                 <p>No users found matching your criteria</p>
               </div>
             )}
@@ -360,14 +428,10 @@ const AdminUsers = () => {
             ) : selectedUser ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-4 pb-4 border-b border-gray-200">
-                  <img
-                    src={selectedUser.profile?.photo || '/images/default-avatar.png'}
-                    alt=""
-                    className="w-20 h-20 rounded-full object-cover"
-                  />
+                  <UserAvatar user={selectedUser} size="lg" />
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900">
-                      {selectedUser.profile?.firstName} {selectedUser.profile?.lastName}
+                      {getUserDisplayName(selectedUser)}
                     </h3>
                     <p className="text-gray-500">{selectedUser.email}</p>
                   </div>
@@ -379,7 +443,7 @@ const AdminUsers = () => {
                   { label: 'Status', value: selectedUser.accountStatus },
                   { label: 'Joined', value: new Date(selectedUser.createdAt).toLocaleDateString() },
                   { label: 'Total Rides', value: selectedUser.stats?.totalRides || 0 },
-                  { label: 'Rating', value: `${(selectedUser.rating?.overall || 0).toFixed(1)} ⭐` }
+                  { label: 'Rating', value: <><span>{formatRating(selectedUser.rating)}</span> <i className="fas fa-star text-yellow-400"></i></> }
                 ].map((item, index) => (
                   <div key={index} className="flex py-3 border-b border-gray-100">
                     <span className="font-semibold text-gray-700 w-32">{item.label}:</span>

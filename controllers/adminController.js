@@ -963,38 +963,6 @@ exports.reviewReport = asyncHandler(async (req, res) => {
 });
 
 /**
- * Show all users
- */
-exports.showUsers = asyncHandler(async (req, res) => {
-    const { role = 'all', status = 'active' } = req.query;
-    const page = parseInt(req.query.page) || 1;
-    const limit = 20;
-    const skip = (page - 1) * limit;
-
-    const query = {};
-    if (role !== 'all') query.role = role.toUpperCase();
-    if (status === 'active') query.isActive = true;
-    if (status === 'suspended') query.isActive = false;
-
-    const totalUsers = await User.countDocuments(query);
-    const users = await User.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
-
-    const pagination = helpers.paginate(totalUsers, page, limit);
-
-    res.render('admin/users', {
-        title: 'Manage Users - Admin',
-        user: req.user,
-        users,
-        currentRole: role,
-        currentStatus: status,
-        pagination
-    });
-});
-
-/**
  * Suspend/Unsuspend user
  */
 exports.toggleUserStatus = asyncHandler(async (req, res) => {
@@ -1698,3 +1666,711 @@ exports.showFinancialDashboard = asyncHandler(async (req, res) => {
     });
 });
 
+// ========== API METHODS (JSON responses for React frontend) ==========
+
+/**
+ * Get Dashboard Stats API
+ */
+exports.getDashboardStats = asyncHandler(async (req, res) => {
+    const totalUsers = await User.countDocuments();
+    const activeRides = await Ride.countDocuments({ status: 'ACTIVE' });
+    const completedRides = await Ride.countDocuments({ status: 'COMPLETED' });
+    const pendingVerifications = await User.countDocuments({ 
+        role: 'RIDER', 
+        verificationStatus: { $in: ['PENDING', 'UNDER_REVIEW'] }
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayBookings = await Booking.countDocuments({
+        createdAt: { $gte: today }
+    });
+
+    const revenueData = await Booking.aggregate([
+        { 
+            $match: { 
+                status: { $in: ['COMPLETED', 'DROPPED_OFF'] },
+                totalPrice: { $gt: 0 }
+            } 
+        },
+        { 
+            $group: { 
+                _id: null, 
+                total: { $sum: '$totalPrice' }
+            } 
+        }
+    ]);
+
+    const recentActivities = await Notification.find({ type: { $in: ['RIDE_CREATED', 'BOOKING_CREATED', 'USER_REGISTERED'] } })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+
+    res.json({
+        success: true,
+        stats: {
+            totalUsers,
+            activeRides,
+            completedRides,
+            pendingVerifications,
+            totalRevenue: revenueData[0]?.total || 0,
+            todayBookings
+        },
+        recentActivities: recentActivities.map(a => ({
+            icon: a.type === 'RIDE_CREATED' ? '🚗' : a.type === 'BOOKING_CREATED' ? '📋' : '👤',
+            message: a.message,
+            time: a.createdAt
+        }))
+    });
+});
+
+/**
+ * Get Users API
+ */
+exports.getUsers = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    
+    const filter = {};
+    // Exclude admin users from the list
+    filter.role = { $ne: 'ADMIN' };
+    
+    if (req.query.role && req.query.role !== 'all') {
+        filter.role = req.query.role.toUpperCase();
+    }
+    if (req.query.status && req.query.status !== 'all') {
+        filter.accountStatus = req.query.status.toUpperCase();
+    }
+    if (req.query.search) {
+        const searchRegex = new RegExp(req.query.search, 'i');
+        filter.$or = [
+            { email: searchRegex },
+            { 'profile.firstName': searchRegex },
+            { 'profile.lastName': searchRegex }
+        ];
+    }
+
+    const totalUsers = await User.countDocuments(filter);
+    const users = await User.find(filter)
+        .select('profile email role accountStatus createdAt verificationStatus')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json({
+        success: true,
+        users,
+        pagination: {
+            page,
+            limit,
+            total: totalUsers,
+            pages: Math.ceil(totalUsers / limit)
+        }
+    });
+});
+
+/**
+ * Update User Status API
+ */
+exports.updateUserStatus = asyncHandler(async (req, res) => {
+    const { status } = req.body;
+    const validStatuses = ['ACTIVE', 'SUSPENDED', 'DELETED'];
+    
+    if (!validStatuses.includes(status)) {
+        return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { 
+            accountStatus: status,
+            isActive: status === 'ACTIVE',
+            isSuspended: status === 'SUSPENDED'
+        },
+        { new: true }
+    );
+
+    if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({ success: true, message: `User status updated to ${status}`, user });
+});
+
+/**
+ * Get Pending Verifications API
+ */
+exports.getPendingVerifications = asyncHandler(async (req, res) => {
+    const verifications = await User.find({
+        role: 'RIDER',
+        verificationStatus: { $in: ['PENDING', 'UNDER_REVIEW'] }
+    })
+    .select('profile email phone verificationStatus documents vehicles createdAt')
+    .sort({ createdAt: -1 });
+
+    res.json({ success: true, verifications });
+});
+
+/**
+ * Get Rides API
+ */
+exports.getRides = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (req.query.status && req.query.status !== 'all') {
+        filter.status = req.query.status.toUpperCase();
+    }
+
+    const totalRides = await Ride.countDocuments(filter);
+    const rides = await Ride.find(filter)
+        .populate('rider', 'profile email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json({
+        success: true,
+        rides,
+        pagination: {
+            page,
+            limit,
+            total: totalRides,
+            pages: Math.ceil(totalRides / limit)
+        }
+    });
+});
+
+/**
+ * Get Ride Details API
+ */
+exports.getRideDetails = asyncHandler(async (req, res) => {
+    const ride = await Ride.findById(req.params.rideId)
+        .populate('rider', 'profile email phone');
+
+    if (!ride) {
+        return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    const bookings = await Booking.find({ ride: ride._id })
+        .populate('passenger', 'profile email');
+
+    res.json({ success: true, ride, bookings });
+});
+
+/**
+ * Get Bookings API
+ */
+exports.getBookings = asyncHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+    if (req.query.status && req.query.status !== 'all') {
+        filter.status = req.query.status.toUpperCase();
+    }
+
+    // Get stats for all statuses
+    const [
+        totalAll,
+        totalPending,
+        totalConfirmed,
+        totalCompleted,
+        totalCancelled
+    ] = await Promise.all([
+        Booking.countDocuments({}),
+        Booking.countDocuments({ status: 'PENDING' }),
+        Booking.countDocuments({ status: 'CONFIRMED' }),
+        Booking.countDocuments({ status: { $in: ['COMPLETED', 'DROPPED_OFF'] } }),
+        Booking.countDocuments({ status: 'CANCELLED' })
+    ]);
+
+    const totalBookings = await Booking.countDocuments(filter);
+    const bookings = await Booking.find(filter)
+        .populate('passenger', 'profile email')
+        .populate({
+            path: 'ride',
+            select: 'route departureTime schedule',
+            populate: { path: 'rider', select: 'profile email' }
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+
+    res.json({
+        success: true,
+        bookings,
+        pagination: {
+            page,
+            limit,
+            total: totalBookings,
+            pages: Math.ceil(totalBookings / limit)
+        },
+        stats: {
+            all: totalAll,
+            pending: totalPending,
+            confirmed: totalConfirmed,
+            completed: totalCompleted,
+            cancelled: totalCancelled
+        }
+    });
+});
+
+/**
+ * Get Booking Details API
+ */
+exports.getBookingDetails = asyncHandler(async (req, res) => {
+    const booking = await Booking.findById(req.params.bookingId)
+        .populate('passenger', 'profile email phone')
+        .populate({
+            path: 'ride',
+            populate: { path: 'rider', select: 'profile email phone' }
+        });
+
+    if (!booking) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    res.json({ success: true, booking });
+});
+
+/**
+ * Refund Booking API
+ */
+exports.refundBooking = asyncHandler(async (req, res) => {
+    const { amount } = req.body;
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    booking.payment.status = 'REFUNDED';
+    booking.payment.refundedAt = new Date();
+    booking.payment.refundAmount = amount || booking.totalPrice;
+    await booking.save();
+
+    await Notification.create({
+        user: booking.passenger,
+        type: 'PAYMENT_REFUNDED',
+        title: 'Refund Processed',
+        message: `₹${amount || booking.totalPrice} has been refunded.`
+    });
+
+    res.json({ success: true, message: 'Refund processed successfully' });
+});
+
+/**
+ * Get Revenue Report API
+ */
+exports.getRevenueReport = asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    const revenueData = await Booking.aggregate([
+        {
+            $match: {
+                createdAt: { $gte: start, $lte: end },
+                status: { $in: ['COMPLETED', 'DROPPED_OFF'] },
+                totalPrice: { $gt: 0 }
+            }
+        },
+        {
+            $group: {
+                _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                revenue: { $sum: '$totalPrice' },
+                count: { $sum: 1 }
+            }
+        },
+        { $sort: { _id: 1 } }
+    ]);
+
+    const totalRevenue = revenueData.reduce((sum, d) => sum + d.revenue, 0);
+
+    res.json({
+        success: true,
+        data: revenueData,
+        totalRevenue,
+        startDate: start,
+        endDate: end
+    });
+});
+
+/**
+ * Get Activity Report API
+ */
+exports.getActivityReport = asyncHandler(async (req, res) => {
+    const { startDate, endDate } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    const [userActivity, rideActivity, bookingActivity] = await Promise.all([
+        User.aggregate([
+            { $match: { createdAt: { $gte: start, $lte: end } } },
+            { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+        ]),
+        Ride.aggregate([
+            { $match: { createdAt: { $gte: start, $lte: end } } },
+            { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+        ]),
+        Booking.aggregate([
+            { $match: { createdAt: { $gte: start, $lte: end } } },
+            { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+            { $sort: { _id: 1 } }
+        ])
+    ]);
+
+    res.json({
+        success: true,
+        userActivity,
+        rideActivity,
+        bookingActivity,
+        startDate: start,
+        endDate: end
+    });
+});
+
+/**
+ * Get Ride Analytics API
+ */
+exports.getRideAnalytics = asyncHandler(async (req, res) => {
+    const { period = 'week' } = req.query;
+    
+    let startDate = new Date();
+    if (period === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (period === 'month') startDate.setMonth(startDate.getMonth() - 1);
+    else startDate.setFullYear(startDate.getFullYear() - 1);
+
+    const analytics = await Ride.aggregate([
+        { $match: { createdAt: { $gte: startDate } } },
+        {
+            $group: {
+                _id: '$status',
+                count: { $sum: 1 },
+                totalDistance: { $sum: '$route.distance' }
+            }
+        }
+    ]);
+
+    const popularRoutes = await Ride.aggregate([
+        { $match: { status: 'COMPLETED', createdAt: { $gte: startDate } } },
+        {
+            $group: {
+                _id: {
+                    origin: '$route.start.name',
+                    destination: '$route.destination.name'
+                },
+                count: { $sum: 1 }
+            }
+        },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+    ]);
+
+    res.json({ success: true, analytics, popularRoutes, period });
+});
+
+/**
+ * Get Emergencies API
+ */
+exports.getEmergencies = asyncHandler(async (req, res) => {
+    const Emergency = require('../models/Emergency');
+    
+    const emergencies = await Emergency.find()
+        .populate('user', 'profile email phone')
+        .populate('ride')
+        .populate('booking')
+        .sort({ createdAt: -1 })
+        .limit(50);
+
+    res.json({ success: true, emergencies });
+});
+
+/**
+ * Resolve Emergency API
+ */
+exports.resolveEmergency = asyncHandler(async (req, res) => {
+    const Emergency = require('../models/Emergency');
+    const { resolution } = req.body;
+
+    const emergency = await Emergency.findByIdAndUpdate(
+        req.params.emergencyId,
+        {
+            status: 'RESOLVED',
+            resolvedAt: new Date(),
+            resolvedBy: req.user._id,
+            resolution
+        },
+        { new: true }
+    );
+
+    if (!emergency) {
+        return res.status(404).json({ success: false, message: 'Emergency not found' });
+    }
+
+    res.json({ success: true, message: 'Emergency resolved', emergency });
+});
+
+/**
+ * Get Reports API (User Complaints/Issues)
+ */
+exports.getReports = asyncHandler(async (req, res) => {
+    const { status, page = 1, limit = 20 } = req.query;
+    
+    const query = {};
+    if (status && status !== 'all') {
+        query.status = status.toUpperCase();
+    }
+
+    const reports = await Report.find(query)
+        .populate('reporter', 'profile email phone')
+        .populate('reported', 'profile email phone')
+        .populate('ride', 'route.start.name route.destination.name date')
+        .populate('booking')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit));
+
+    const total = await Report.countDocuments(query);
+
+    // Get counts by status
+    const statusCounts = await Report.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+        success: true,
+        reports,
+        pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total,
+            pages: Math.ceil(total / limit)
+        },
+        statusCounts: statusCounts.reduce((acc, s) => {
+            acc[s._id] = s.count;
+            return acc;
+        }, {})
+    });
+});
+
+/**
+ * Get Report Details API
+ */
+exports.getReportDetails = asyncHandler(async (req, res) => {
+    const report = await Report.findById(req.params.reportId)
+        .populate('reporter', 'profile email phone accountStatus')
+        .populate('reported', 'profile email phone accountStatus')
+        .populate('ride')
+        .populate('booking')
+        .populate('reviewedBy', 'profile email');
+
+    if (!report) {
+        return res.status(404).json({ success: false, message: 'Report not found' });
+    }
+
+    res.json({ success: true, report });
+});
+
+/**
+ * Take Action on Report API
+ */
+exports.takeReportAction = asyncHandler(async (req, res) => {
+    const { action, reason } = req.body;
+    const report = await Report.findById(req.params.reportId)
+        .populate('reported');
+
+    if (!report) {
+        return res.status(404).json({ success: false, message: 'Report not found' });
+    }
+
+    // Update report status
+    report.status = action === 'dismiss' ? 'DISMISSED' : 'RESOLVED';
+    report.adminNotes = reason;
+    report.reviewedBy = req.user._id;
+    report.reviewedAt = new Date();
+    await report.save();
+
+    // Take action on the reported user if needed
+    if (report.reported && action !== 'dismiss') {
+        const reportedUser = await User.findById(report.reported._id);
+        
+        if (action === 'warn') {
+            reportedUser.warnings = (reportedUser.warnings || 0) + 1;
+            await Notification.create({
+                user: reportedUser._id,
+                type: 'WARNING',
+                title: 'Account Warning',
+                message: reason || 'You have received a warning for violating community guidelines.'
+            });
+        } else if (action === 'suspend') {
+            reportedUser.accountStatus = 'SUSPENDED';
+            reportedUser.suspendedAt = new Date();
+            reportedUser.suspensionReason = reason;
+            await Notification.create({
+                user: reportedUser._id,
+                type: 'ACCOUNT_SUSPENDED',
+                title: 'Account Suspended',
+                message: reason || 'Your account has been suspended due to policy violations.'
+            });
+        } else if (action === 'ban') {
+            reportedUser.accountStatus = 'BANNED';
+            reportedUser.bannedAt = new Date();
+            reportedUser.banReason = reason;
+        }
+        
+        await reportedUser.save();
+    }
+
+    res.json({
+        success: true,
+        message: `Report ${action === 'dismiss' ? 'dismissed' : 'resolved'} successfully`,
+        report
+    });
+});
+
+/**
+ * Get Settings API
+ */
+exports.getSettings = asyncHandler(async (req, res) => {
+    let settings = await Settings.findOne();
+    
+    if (!settings) {
+        // Create default settings if none exist
+        settings = await Settings.create({
+            platformFee: 50,
+            platformFeeType: 'FIXED',
+            platformFeePercentage: 10,
+            minimumFare: 20,
+            pricePerKm: 8,
+            maxSeatsPerRide: 4,
+            maxDistanceKm: 500,
+            bookingCancellationHours: 2,
+            riderCancellationPenalty: 50,
+            passengerCancellationPenalty: 25,
+            verificationRequired: true,
+            phoneVerificationRequired: true,
+            emailVerificationRequired: false,
+            documentVerificationRequired: true,
+            trustScoreMinimum: 3.0,
+            reviewsEnabled: true,
+            chatEnabled: true,
+            sosEnabled: true,
+            maintenanceMode: false
+        });
+    }
+
+    res.json({ success: true, settings });
+});
+
+/**
+ * Update Settings API
+ */
+exports.updateSettings = asyncHandler(async (req, res) => {
+    let settings = await Settings.findOne();
+    
+    if (!settings) {
+        settings = new Settings();
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+        'platformFee', 'platformFeeType', 'platformFeePercentage',
+        'minimumFare', 'pricePerKm', 'maxSeatsPerRide', 'maxDistanceKm',
+        'bookingCancellationHours', 'riderCancellationPenalty', 'passengerCancellationPenalty',
+        'verificationRequired', 'phoneVerificationRequired', 'emailVerificationRequired',
+        'documentVerificationRequired', 'trustScoreMinimum',
+        'reviewsEnabled', 'chatEnabled', 'sosEnabled', 'maintenanceMode'
+    ];
+
+    allowedFields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            settings[field] = req.body[field];
+        }
+    });
+
+    settings.updatedBy = req.user._id;
+    settings.updatedAt = new Date();
+    await settings.save();
+
+    res.json({
+        success: true,
+        message: 'Settings updated successfully',
+        settings
+    });
+});
+
+/**
+ * Mark Notification as Read API
+ */
+exports.markNotificationAsRead = asyncHandler(async (req, res) => {
+    const notification = await Notification.findByIdAndUpdate(
+        req.params.notificationId,
+        { read: true, readAt: new Date() },
+        { new: true }
+    );
+
+    if (!notification) {
+        return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+
+    res.json({ success: true, notification });
+});
+
+/**
+ * Update User Status API
+ */
+exports.updateUserStatus = asyncHandler(async (req, res) => {
+    const { status, reason } = req.body;
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    user.accountStatus = status;
+    if (status === 'SUSPENDED') {
+        user.suspendedAt = new Date();
+        user.suspensionReason = reason;
+    } else if (status === 'ACTIVE') {
+        user.suspendedAt = null;
+        user.suspensionReason = null;
+    }
+    
+    await user.save();
+
+    res.json({
+        success: true,
+        message: `User status updated to ${status}`,
+        user: {
+            _id: user._id,
+            email: user.email,
+            accountStatus: user.accountStatus
+        }
+    });
+});
+
+/**
+ * Get Ride Details API
+ */
+exports.getRideDetails = asyncHandler(async (req, res) => {
+    const ride = await Ride.findById(req.params.rideId)
+        .populate('rider', 'profile email phone')
+        .populate({
+            path: 'bookings',
+            populate: { path: 'passenger', select: 'profile email phone' }
+        });
+
+    if (!ride) {
+        return res.status(404).json({ success: false, message: 'Ride not found' });
+    }
+
+    res.json({ success: true, ride });
+});
