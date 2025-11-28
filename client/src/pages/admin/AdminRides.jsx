@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import adminService from '../../services/adminService';
 import { Alert } from '../../components/common';
 
 const AdminRides = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -16,18 +17,49 @@ const AdminRides = () => {
   });
 
   useEffect(() => {
-    fetchRides();
+    let isMounted = true;
+    
+    const loadRides = async () => {
+      setLoading(true);
+      try {
+        const response = await adminService.getRides(filters);
+        if (isMounted) {
+          if (response && response.success) {
+            setRides(response.rides || []);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          // Don't show error for auth issues
+          if (err.response?.status !== 401 && err.response?.status !== 403) {
+            setError(err.response?.data?.message || err.message || 'Failed to load rides');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadRides();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   const fetchRides = async () => {
     setLoading(true);
     try {
       const response = await adminService.getRides(filters);
-      if (response.success) {
+      if (response && response.success) {
         setRides(response.rides || []);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load rides');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        setError(err.response?.data?.message || err.message || 'Failed to load rides');
+      }
     } finally {
       setLoading(false);
     }
@@ -84,7 +116,7 @@ const AdminRides = () => {
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">🚗 Rides Management</h1>
+        <h1 className="text-2xl font-bold text-gray-800"><i className="fas fa-car mr-2"></i>Rides Management</h1>
         <p className="text-gray-600 mt-1">Monitor and manage all rides in the system</p>
       </div>
 
@@ -133,7 +165,7 @@ const AdminRides = () => {
               onClick={applyFilters}
               className="w-full bg-indigo-500 text-white px-6 py-2 rounded-lg hover:bg-indigo-600 transition font-semibold"
             >
-              🔍 Search
+              <i className="fas fa-search mr-1"></i> Search
             </button>
           </div>
         </div>
@@ -141,13 +173,13 @@ const AdminRides = () => {
 
       {/* Rides Count */}
       <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        🚗 All Rides ({rides.length})
+        <i className="fas fa-car mr-2"></i>All Rides ({rides.length})
       </h3>
 
       {/* Rides List */}
       {rides.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-          <div className="text-6xl text-gray-300 mb-4">🚗</div>
+          <div className="text-6xl text-gray-300 mb-4"><i className="fas fa-car"></i></div>
           <h3 className="text-xl font-semibold text-gray-600 mb-2">No Rides Found</h3>
           <p className="text-gray-500">No rides match your search criteria.</p>
         </div>
@@ -161,10 +193,10 @@ const AdminRides = () => {
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center space-x-2 text-lg font-semibold text-gray-800">
                   <span className="text-green-500">●</span>
-                  <span>{ride.from?.address?.split(',')[0] || 'Unknown'}</span>
+                  <span>{ride.route?.start?.address?.split(',')[0] || ride.from?.address?.split(',')[0] || 'Unknown'}</span>
                   <span className="text-gray-400">→</span>
-                  <span className="text-red-500">📍</span>
-                  <span>{ride.to?.address?.split(',')[0] || 'Unknown'}</span>
+                  <i className="fas fa-map-marker-alt text-red-500"></i>
+                  <span>{ride.route?.destination?.address?.split(',')[0] || ride.to?.address?.split(',')[0] || 'Unknown'}</span>
                 </div>
                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getStatusBadge(ride.status)}`}>
                   {ride.status}
@@ -191,39 +223,39 @@ const AdminRides = () => {
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Seats</p>
-                  <p className="font-semibold text-gray-800">{ride.availableSeats || 0} available</p>
+                  <p className="font-semibold text-gray-800">{ride.pricing?.availableSeats || ride.availableSeats || 0} available</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Price/Seat</p>
-                  <p className="font-bold text-emerald-600">₹{ride.pricePerSeat || 0}</p>
+                  <p className="font-bold text-emerald-600">₹{ride.pricing?.pricePerSeat || ride.pricePerSeat || 0}</p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Distance</p>
                   <p className="font-semibold text-gray-800">
-                    {ride.distance ? `${ride.distance.toFixed(1)} km` : 'N/A'}
+                    {(ride.route?.distance?.value || ride.distance) ? `${((ride.route?.distance?.value || ride.distance) / 1000).toFixed(1)} km` : 'N/A'}
                   </p>
                 </div>
                 <div>
                   <p className="text-gray-500 text-sm">Duration</p>
                   <p className="font-semibold text-gray-800">
-                    {ride.duration ? `${Math.round(ride.duration)} min` : 'N/A'}
+                    {(ride.route?.duration?.value || ride.duration) ? `${Math.round((ride.route?.duration?.value || ride.duration) / 60)} min` : 'N/A'}
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => window.open(`/admin/rides/${ride._id}`, '_blank')}
+                  onClick={() => navigate(`/admin/rides/${ride._id}`)}
                   className="px-4 py-2 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition text-sm"
                 >
-                  👁️ View Details
+                  <i className="fas fa-eye mr-1"></i> View Details
                 </button>
                 {ride.status === 'ACTIVE' && (
                   <button
                     onClick={() => handleCancelRide(ride._id)}
                     className="px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition text-sm"
                   >
-                    ❌ Cancel Ride
+                    <i className="fas fa-times-circle mr-1"></i> Cancel Ride
                   </button>
                 )}
               </div>

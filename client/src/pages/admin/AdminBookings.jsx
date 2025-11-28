@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import adminService from '../../services/adminService';
 import { Alert } from '../../components/common';
 
 const AdminBookings = () => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,7 +24,44 @@ const AdminBookings = () => {
   });
 
   useEffect(() => {
-    fetchBookings();
+    let isMounted = true;
+    
+    const loadBookings = async () => {
+      setLoading(true);
+      try {
+        const page = searchParams.get('page') || 1;
+        const status = searchParams.get('status') || 'all';
+        setCurrentStatus(status);
+        
+        const response = await adminService.getBookings({ page, status });
+        if (isMounted) {
+          if (response && response.success) {
+            setBookings(response.bookings || []);
+            setPagination(response.pagination || { page: 1, pages: 1, total: 0 });
+            if (response.stats) {
+              setStats(response.stats);
+            }
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          // Don't show error for auth issues
+          if (err.response?.status !== 401 && err.response?.status !== 403) {
+            setError(err.response?.data?.message || err.message || 'Failed to load bookings');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadBookings();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   const fetchBookings = async () => {
@@ -34,7 +72,7 @@ const AdminBookings = () => {
       setCurrentStatus(status);
       
       const response = await adminService.getBookings({ page, status });
-      if (response.success) {
+      if (response && response.success) {
         setBookings(response.bookings || []);
         setPagination(response.pagination || { page: 1, pages: 1, total: 0 });
         if (response.stats) {
@@ -42,7 +80,9 @@ const AdminBookings = () => {
         }
       }
     } catch (err) {
-      setError(err.message || 'Failed to load bookings');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        setError(err.response?.data?.message || err.message || 'Failed to load bookings');
+      }
     } finally {
       setLoading(false);
     }
@@ -98,11 +138,11 @@ const AdminBookings = () => {
       <div className="bg-white rounded-xl shadow-md p-4 mb-6">
         <div className="flex flex-wrap gap-3">
           {[
-            { key: 'all', label: '📊 All Bookings', count: stats.all || pagination.total },
-            { key: 'PENDING', label: '🕐 Pending', count: stats.pending },
-            { key: 'CONFIRMED', label: '✅ Confirmed', count: stats.confirmed },
-            { key: 'COMPLETED', label: '🏁 Completed', count: stats.completed },
-            { key: 'CANCELLED', label: '❌ Cancelled', count: stats.cancelled }
+            { key: 'all', label: <><i className="fas fa-chart-bar mr-1"></i> All Bookings</>, count: stats.all || pagination.total },
+            { key: 'PENDING', label: <><i className="fas fa-clock mr-1"></i> Pending</>, count: stats.pending },
+            { key: 'CONFIRMED', label: <><i className="fas fa-check-circle mr-1"></i> Confirmed</>, count: stats.confirmed },
+            { key: 'COMPLETED', label: <><i className="fas fa-flag-checkered mr-1"></i> Completed</>, count: stats.completed },
+            { key: 'CANCELLED', label: <><i className="fas fa-times-circle mr-1"></i> Cancelled</>, count: stats.cancelled }
           ].map(({ key, label, count }) => (
             <button
               key={key}
@@ -129,7 +169,7 @@ const AdminBookings = () => {
       {/* Bookings List */}
       {bookings.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-          <div className="text-6xl text-gray-300 mb-4">📑</div>
+          <div className="text-6xl text-gray-300 mb-4"><i className="fas fa-file-alt"></i></div>
           <h3 className="text-xl font-semibold text-gray-600 mb-2">No Bookings Found</h3>
           <p className="text-gray-500">No bookings match your filter criteria.</p>
         </div>
@@ -172,10 +212,10 @@ const AdminBookings = () => {
                 <div>
                   <p className="text-gray-500 text-sm">Route</p>
                   <p className="font-semibold text-gray-800 text-sm">
-                    📍 {booking.ride?.from?.address?.substring(0, 25) || 'Unknown'}...
+                    <i className="fas fa-map-marker-alt text-green-500 mr-1"></i> {(booking.ride?.route?.start?.address || booking.ride?.from?.address)?.substring(0, 25) || 'Unknown'}...
                   </p>
                   <p className="font-semibold text-gray-800 text-sm">
-                    🏁 {booking.ride?.to?.address?.substring(0, 25) || 'Unknown'}...
+                    <i className="fas fa-flag-checkered text-red-500 mr-1"></i> {(booking.ride?.route?.destination?.address || booking.ride?.to?.address)?.substring(0, 25) || 'Unknown'}...
                   </p>
                 </div>
 
@@ -187,7 +227,7 @@ const AdminBookings = () => {
                 <div>
                   <p className="text-gray-500 text-sm">Price</p>
                   <p className="font-bold text-emerald-600 text-lg">
-                    ₹{booking.totalAmount || booking.pricing?.total || 0}
+                    ₹{booking.totalPrice || booking.totalAmount || booking.pricing?.total || 0}
                   </p>
                 </div>
 
@@ -219,19 +259,19 @@ const AdminBookings = () => {
                 <div className="mt-4 pt-4 border-t flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <img
-                      src={booking.ride.rider.profilePhoto || '/images/default-avatar.png'}
+                      src={booking.ride.rider.profile?.photo || booking.ride.rider.profilePhoto || '/images/default-avatar.png'}
                       className="w-10 h-10 rounded-full object-cover"
                       alt="Driver"
                     />
                     <div>
                       <p className="text-sm text-gray-500">Driver</p>
                       <p className="font-semibold text-gray-800">
-                        {booking.ride.rider.profile?.firstName || booking.ride.rider.name || 'Unknown'}
+                        {booking.ride.rider.profile?.firstName || booking.ride.rider.firstName || booking.ride.rider.name || 'Unknown'}
                       </p>
                     </div>
                   </div>
                   <button
-                    onClick={() => window.open(`/admin/bookings/${booking._id}`, '_blank')}
+                    onClick={() => navigate(`/admin/bookings/${booking._id}`)}
                     className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg font-semibold hover:bg-indigo-200 transition text-sm"
                   >
                     View Details →
