@@ -13,7 +13,7 @@ export const useTracking = (bookingId) => {
   const connect = useCallback(() => {
     if (socketRef.current?.connected) return;
 
-    socketRef.current = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+    socketRef.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000', {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
@@ -83,23 +83,28 @@ export const useDriverTracking = (rideId) => {
       return;
     }
 
-    socketRef.current = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
+    socketRef.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000', {
       withCredentials: true
     });
 
     socketRef.current.on('connect', () => {
-      socketRef.current.emit('driver-start-tracking', { rideId });
+      // Join the ride room for broadcasting
+      socketRef.current.emit('join-ride', rideId);
       setIsSharing(true);
 
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
           const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
             lat: position.coords.latitude,
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy,
+            speed: position.coords.speed,
             timestamp: position.timestamp
           };
-          socketRef.current.emit('driver-location-update', { rideId, location });
+          // Use location-update event which backend handles
+          socketRef.current.emit('location-update', { rideId, location });
         },
         (err) => {
           setError(err.message);
@@ -118,7 +123,6 @@ export const useDriverTracking = (rideId) => {
       navigator.geolocation.clearWatch(watchIdRef.current);
     }
     if (socketRef.current) {
-      socketRef.current.emit('driver-stop-tracking', { rideId });
       socketRef.current.disconnect();
     }
     setIsSharing(false);
@@ -126,7 +130,8 @@ export const useDriverTracking = (rideId) => {
 
   const updateRideStatus = useCallback((status) => {
     if (socketRef.current?.connected) {
-      socketRef.current.emit('update-ride-status', { rideId, status });
+      // Emit to the ride room so passengers receive the status update
+      socketRef.current.emit('ride-status-update', { rideId, status });
     }
   }, [rideId]);
 

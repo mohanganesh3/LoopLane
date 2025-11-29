@@ -21,11 +21,11 @@ const DriverTracking = () => {
   const [currentStatus, setCurrentStatus] = useState('not_started');
 
   const statusOptions = [
-    { value: 'not_started', label: 'Not Started', icon: '⏸️' },
-    { value: 'on_way_to_pickup', label: 'On Way to Pickup', icon: '🚗' },
-    { value: 'arrived_at_pickup', label: 'Arrived at Pickup', icon: '📍' },
-    { value: 'ride_started', label: 'Ride Started', icon: '🛣️' },
-    { value: 'completed', label: 'Completed', icon: '✅' }
+    { value: 'not_started', label: 'Not Started', iconClass: 'fa-pause' },
+    { value: 'on_way_to_pickup', label: 'On Way to Pickup', iconClass: 'fa-car-side' },
+    { value: 'arrived_at_pickup', label: 'Arrived at Pickup', iconClass: 'fa-map-marker-alt' },
+    { value: 'ride_started', label: 'Ride Started', iconClass: 'fa-road' },
+    { value: 'completed', label: 'Completed', iconClass: 'fa-check-circle' }
   ];
 
   useEffect(() => {
@@ -126,7 +126,7 @@ const DriverTracking = () => {
                         : 'border-gray-200 hover:border-emerald-400'
                   } ${!isSharing && status.value !== 'not_started' ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
-                  <span className="text-2xl mr-4">{status.icon}</span>
+                  <i className={`fas ${status.iconClass} text-2xl mr-4`}></i>
                   <span className={`font-medium ${isActive ? 'text-emerald-700' : 'text-gray-700'}`}>
                     {status.label}
                   </span>
@@ -162,15 +162,15 @@ const DriverTracking = () => {
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900 mb-6">{ride.source?.address}</p>
-                <p className="text-sm font-medium text-gray-900">{ride.destination?.address}</p>
+                <p className="text-sm font-medium text-gray-900 mb-6">{ride.route?.start?.address || ride.source?.address}</p>
+                <p className="text-sm font-medium text-gray-900">{ride.route?.destination?.address || ride.destination?.address}</p>
               </div>
             </div>
 
             <div className="border-t border-gray-200 pt-4">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Passengers</span>
-                <span className="text-gray-900">{ride.bookedSeats || 0} booked</span>
+                <span className="text-gray-900">{ride.pricing?.bookedSeats || ride.bookedSeats || 0} booked</span>
               </div>
             </div>
           </div>

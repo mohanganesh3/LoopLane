@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
 
-const SOS = () => {
+const Safety = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { bookingId, driverLocation } = location.state || {};
@@ -43,26 +43,26 @@ const SOS = () => {
         });
       }
 
-      // Call SOS API
+      // Call Safety API
       const response = await api.post('/api/sos/trigger', {
         location: {
           latitude: currentLocation?.latitude || currentLocation?.lat,
           longitude: currentLocation?.longitude || currentLocation?.lng,
           address: currentLocation?.address || null
         },
-        type: 'SOS',
-        description: 'Emergency SOS triggered by user',
+        type: 'SAFETY',
+        description: 'Safety alert triggered by user',
         bookingId
       });
 
       if (response.data.success) {
         setEmergency(response.data.emergency);
       } else {
-        setError(response.data.message || 'Failed to trigger emergency');
+        setError(response.data.message || 'Failed to trigger safety alert');
       }
     } catch (err) {
-      console.error('SOS Error:', err);
-      setError(err.response?.data?.message || 'Failed to trigger emergency. Please call emergency services directly.');
+      console.error('Safety Error:', err);
+      setError(err.response?.data?.message || 'Failed to trigger safety alert. Please call emergency services directly.');
     }
   };
 
@@ -80,7 +80,7 @@ const SOS = () => {
     }
   };
 
-  const handleActivateSOS = () => {
+  const handleActivateSafety = () => {
     setActivated(true);
   };
 
@@ -94,11 +94,11 @@ const SOS = () => {
       <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-4">
         <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center mb-8 animate-pulse">
           <svg className="w-16 h-16 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
         <h1 className="text-2xl font-bold text-white mb-4">
-          {emergency ? 'Emergency Alert Active' : 'Calling Emergency Services'}
+          {emergency ? 'Safety Alert Active' : 'Activating Safety Alert'}
         </h1>
         <p className="text-white/80 text-center mb-8">
           {emergency 
@@ -116,7 +116,7 @@ const SOS = () => {
         <div className="bg-white/20 rounded-lg p-4 mb-8 w-full max-w-sm">
           <p className="text-white text-sm text-center">
             {emergency 
-              ? `Emergency ID: ${emergency._id?.slice(-8).toUpperCase()}`
+              ? `Alert ID: ${emergency._id?.slice(-8).toUpperCase()}`
               : 'Your location is being shared with emergency contacts'
             }
           </p>
@@ -157,15 +157,17 @@ const SOS = () => {
       {!activated ? (
         <>
           <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold text-white mb-4">Emergency SOS</h1>
+            <h1 className="text-3xl font-bold text-white mb-4">Safety Alert</h1>
             <p className="text-gray-400">Press the button below if you need help</p>
           </div>
 
           <button
-            onClick={handleActivateSOS}
+            onClick={handleActivateSafety}
             className="w-48 h-48 rounded-full bg-red-600 hover:bg-red-700 transition shadow-lg shadow-red-600/50 flex items-center justify-center mb-12"
           >
-            <span className="text-white text-4xl font-bold">SOS</span>
+            <svg className="w-20 h-20 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
           </button>
 
           <div className="text-center text-gray-400 text-sm max-w-xs">
@@ -189,8 +191,8 @@ const SOS = () => {
       ) : (
         <>
           <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold text-white mb-4">Activating SOS</h1>
-            <p className="text-gray-400">Emergency will be triggered in</p>
+            <h1 className="text-3xl font-bold text-white mb-4">Activating Safety Alert</h1>
+            <p className="text-gray-400">Alert will be sent in</p>
           </div>
 
           <div className="w-48 h-48 rounded-full bg-red-600 flex items-center justify-center mb-8 relative">
@@ -262,4 +264,4 @@ const SOS = () => {
   );
 };
 
-export default SOS;
+export default Safety;
