@@ -13,7 +13,38 @@ const AdminReports = () => {
   const [selectedImage, setSelectedImage] = useState(null);
 
   useEffect(() => {
-    fetchReports();
+    let isMounted = true;
+    
+    const loadReports = async () => {
+      setLoading(true);
+      try {
+        const status = searchParams.get('status') || 'PENDING';
+        setCurrentStatus(status);
+        const response = await adminService.getReports({ status });
+        if (isMounted) {
+          if (response && response.success) {
+            setReports(response.reports || []);
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          // Don't show error for auth issues
+          if (err.response?.status !== 401 && err.response?.status !== 403) {
+            setError(err.response?.data?.message || err.message || 'Failed to load reports');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+    
+    loadReports();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [searchParams]);
 
   const fetchReports = async () => {
@@ -22,11 +53,13 @@ const AdminReports = () => {
       const status = searchParams.get('status') || 'PENDING';
       setCurrentStatus(status);
       const response = await adminService.getReports({ status });
-      if (response.success) {
+      if (response && response.success) {
         setReports(response.reports || []);
       }
     } catch (err) {
-      setError(err.message || 'Failed to load reports');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        setError(err.response?.data?.message || err.message || 'Failed to load reports');
+      }
     } finally {
       setLoading(false);
     }
@@ -97,7 +130,7 @@ const AdminReports = () => {
   return (
     <div className="p-6">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">📋 Reports Management</h1>
+        <h1 className="text-2xl font-bold text-gray-800"><i className="fas fa-clipboard mr-2"></i>Reports Management</h1>
         <p className="text-gray-600 mt-1">Review and handle user reports</p>
       </div>
 
@@ -108,10 +141,10 @@ const AdminReports = () => {
       <div className="bg-white rounded-xl shadow-md p-4 mb-6">
         <div className="flex flex-wrap gap-3">
           {[
-            { key: 'PENDING', label: '🔴 Pending', count: stats.pending },
-            { key: 'UNDER_REVIEW', label: '🔍 In Review', count: stats.inReview },
-            { key: 'RESOLVED', label: '✅ Resolved', count: stats.resolved },
-            { key: 'all', label: '📊 All Reports', count: stats.all }
+            { key: 'PENDING', label: <><i className="fas fa-circle text-red-500 mr-1"></i> Pending</>, count: stats.pending },
+            { key: 'UNDER_REVIEW', label: <><i className="fas fa-search mr-1"></i> In Review</>, count: stats.inReview },
+            { key: 'RESOLVED', label: <><i className="fas fa-check-circle mr-1"></i> Resolved</>, count: stats.resolved },
+            { key: 'all', label: <><i className="fas fa-chart-bar mr-1"></i> All Reports</>, count: stats.all }
           ].map(({ key, label, count }) => (
             <button
               key={key}
@@ -131,7 +164,7 @@ const AdminReports = () => {
       {/* Reports List */}
       {reports.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-          <div className="text-6xl text-gray-300 mb-4">✅</div>
+          <div className="text-6xl text-gray-300 mb-4"><i className="fas fa-check-circle"></i></div>
           <h3 className="text-xl font-semibold text-gray-600 mb-2">No Reports Found</h3>
           <p className="text-gray-500">All reports have been handled!</p>
         </div>
@@ -149,7 +182,7 @@ const AdminReports = () => {
                     {report.category?.replace('_', ' ')}
                   </span>
                   <span className="text-gray-500 text-sm">
-                    📅 {new Date(report.createdAt).toLocaleString()}
+                    <i className="fas fa-calendar mr-1"></i> {new Date(report.createdAt).toLocaleString()}
                   </span>
                 </div>
                 <span className="text-gray-400 text-xs">ID: #{report._id.toString().slice(-6)}</span>
@@ -187,7 +220,7 @@ const AdminReports = () => {
 
               {/* Description */}
               <div className="p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg mb-4">
-                <p className="text-sm font-semibold text-gray-700 mb-2">📝 Description:</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2"><i className="fas fa-pen mr-1"></i> Description:</p>
                 <p className="text-gray-700">{report.description}</p>
               </div>
 
@@ -195,7 +228,7 @@ const AdminReports = () => {
               {report.evidence && report.evidence.length > 0 && (
                 <div className="mb-4">
                   <p className="text-sm font-semibold text-gray-700 mb-2">
-                    📎 Evidence ({report.evidence.length} items):
+                    <i className="fas fa-paperclip mr-1"></i> Evidence ({report.evidence.length} items):
                   </p>
                   <div className="flex gap-2 flex-wrap">
                     {report.evidence.map((ev, idx) => (
@@ -217,31 +250,31 @@ const AdminReports = () => {
                   onClick={() => promptAndAction(report._id, 'NO_ACTION', 'Add investigation notes:')}
                   className="px-4 py-2 bg-indigo-500 text-white rounded-lg font-semibold hover:bg-indigo-600 transition text-sm"
                 >
-                  🔍 Investigate
+                  <i className="fas fa-search mr-1"></i> Investigate
                 </button>
                 <button
                   onClick={() => promptAndAction(report._id, 'WARNING', 'Enter warning reason:')}
                   className="px-4 py-2 bg-yellow-400 text-yellow-900 rounded-lg font-semibold hover:bg-yellow-500 transition text-sm"
                 >
-                  ⚠️ Warn
+                  <i className="fas fa-exclamation-triangle mr-1"></i> Warn
                 </button>
                 <button
                   onClick={() => promptAndAction(report._id, 'SUSPENSION', 'Enter suspension reason:')}
                   className="px-4 py-2 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600 transition text-sm"
                 >
-                  🚫 Suspend
+                  <i className="fas fa-ban mr-1"></i> Suspend
                 </button>
                 <button
                   onClick={() => promptAndAction(report._id, 'BAN', 'Enter ban reason:')}
                   className="px-4 py-2 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition text-sm"
                 >
-                  🛑 Ban
+                  <i className="fas fa-hand-paper mr-1"></i> Ban
                 </button>
                 <button
                   onClick={() => promptAndAction(report._id, 'DISMISSED', 'Enter dismissal reason:')}
                   className="px-4 py-2 bg-gray-500 text-white rounded-lg font-semibold hover:bg-gray-600 transition text-sm"
                 >
-                  ❌ Dismiss
+                  <i className="fas fa-times-circle mr-1"></i> Dismiss
                 </button>
               </div>
 

@@ -1,6 +1,9 @@
 export { default as AdminDashboard } from './AdminDashboard';
 export { default as AdminUsers } from './AdminUsers';
+export { default as AdminUserDetails } from './AdminUserDetails';
 export { default as AdminRides } from './AdminRides';
+export { default as AdminRideDetails } from './AdminRideDetails';
 export { default as AdminBookings } from './AdminBookings';
-export { default as AdminReports } from './AdminReports';
+export { default as AdminBookingDetails } from './AdminBookingDetails';
 export { default as AdminVerifications } from './AdminVerifications';
+export { default as AdminSafety } from './AdminSafety';
