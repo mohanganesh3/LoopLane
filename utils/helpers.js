@@ -330,3 +330,97 @@ exports.groupBy = (array, key) => {
         return result;
     }, {});
 };
+
+/**
+ * Filter user data based on their privacy preferences
+ * Used to hide phone/email when user has disabled sharing
+ * @param {object} userData - User data object (can be Mongoose doc or plain object)
+ * @param {object} options - Options for filtering
+ * @param {boolean} options.isConfirmedBooking - If true, show phone for confirmed bookings
+ * @param {boolean} options.isRideInProgress - If true, always show contact for safety
+ * @returns {object} Filtered user data
+ */
+exports.filterUserPrivacy = (userData, options = {}) => {
+    if (!userData) return userData;
+    
+    // Convert Mongoose document to plain object if needed
+    const user = userData.toObject ? userData.toObject() : { ...userData };
+    const prefs = user.preferences?.privacy || {};
+    
+    // During active rides (CONFIRMED, IN_PROGRESS), always show contact for safety
+    if (options.isRideInProgress || options.isConfirmedBooking) {
+        return user;
+    }
+    
+    // Hide phone if showPhone is false
+    if (prefs.showPhone === false) {
+        user.phone = null;
+        user.phoneHidden = true;
+    }
+    
+    // Hide email if showEmail is false
+    if (prefs.showEmail === false) {
+        user.email = null;
+        user.emailHidden = true;
+    }
+    
+    return user;
+};
+
+/**
+ * Check if a user can view another user's profile based on visibility settings
+ * @param {object} profileOwner - User whose profile is being viewed
+ * @param {object} viewer - User trying to view the profile
+ * @param {boolean} hasConfirmedBooking - If there's a confirmed booking between them
+ * @returns {object} { canView: boolean, reason: string }
+ */
+exports.canViewProfile = (profileOwner, viewer, hasConfirmedBooking = false) => {
+    if (!profileOwner || !viewer) {
+        return { canView: false, reason: 'Invalid users' };
+    }
+    
+    // User can always view their own profile
+    if (profileOwner._id?.toString() === viewer._id?.toString()) {
+        return { canView: true, reason: 'Own profile' };
+    }
+    
+    // Admins can view any profile
+    if (viewer.role === 'ADMIN') {
+        return { canView: true, reason: 'Admin access' };
+    }
+    
+    // If there's a confirmed booking, they can view each other
+    if (hasConfirmedBooking) {
+        return { canView: true, reason: 'Confirmed booking' };
+    }
+    
+    const visibility = profileOwner.preferences?.privacy?.profileVisibility || 'PUBLIC';
+    
+    switch (visibility) {
+        case 'PUBLIC':
+            return { canView: true, reason: 'Public profile' };
+        
+        case 'VERIFIED_ONLY':
+            if (viewer.verificationStatus === 'VERIFIED') {
+                return { canView: true, reason: 'Verified viewer' };
+            }
+            return { canView: false, reason: 'This user only shows their profile to verified members' };
+        
+        case 'PRIVATE':
+            return { canView: false, reason: 'This user has a private profile' };
+        
+        default:
+            return { canView: true, reason: 'Default public' };
+    }
+};
+
+/**
+ * Check if location sharing is allowed for a user
+ * @param {object} user - User object with preferences
+ * @returns {boolean} True if location sharing is allowed
+ */
+exports.canShareLocation = (user) => {
+    if (!user) return false;
+    // Default to true if not set
+    return user.preferences?.privacy?.shareLocation !== false;
+};

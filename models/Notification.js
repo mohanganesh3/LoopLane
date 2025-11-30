@@ -23,14 +23,19 @@ const notificationSchema = new mongoose.Schema({
             'BOOKING_ACCEPTED',        // Alias for BOOKING_CONFIRMED
             'BOOKING_REJECTED',
             'BOOKING_CANCELLED',
+            'BOOKING_REASSIGNED',      // NEW: Auto-reassignment successful
+            'NEW_BOOKING_REASSIGNED',  // NEW: Rider receives reassigned passenger
             'RIDE_STARTING',
             'RIDE_STARTED',
             'RIDE_COMPLETED',
+            'RIDE_CANCELLED',
+            'RIDE_CANCELLED_NO_ALTERNATIVE', // NEW: Ride cancelled, no alternatives
             'PICKUP_CONFIRMED',        // New: Pickup OTP verified
             'DROPOFF_CONFIRMED',       // New: Dropoff OTP verified
             'JOURNEY_COMPLETED',       // New: Individual journey done
             'PAYMENT_RECEIVED',
             'PAYMENT_PENDING',         // New: Payment reminder
+            'PAYMENT_REFUNDED',        // New: Payment refunded
             'REVIEW_RECEIVED',
             'REVIEW_REMINDER',         // New: Prompt to review
             'MESSAGE_RECEIVED',
@@ -46,10 +51,8 @@ const notificationSchema = new mongoose.Schema({
             'ACCOUNT_ACTIVATED',
             'ACCOUNT_BANNED',
             'WARNING',
-            'RIDE_CANCELLED',
             'NEW_REPORT',              // New: User report filed
             'REPORT_RESOLVED',
-            'PAYMENT_REFUNDED',        // New: Payment refunded
             'SYSTEM_ALERT',            // New: System alerts/warnings
             'PRICE_DROP',
             'SYSTEM_UPDATE',

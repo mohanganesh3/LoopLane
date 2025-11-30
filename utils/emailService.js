@@ -1,13 +1,50 @@
 /**
  * Email Service Utility
  * Functions to send various types of emails
+ * ✅ RESPECTS USER NOTIFICATION PREFERENCES
  */
 
 const transporter = require('../config/email');
+const User = require('../models/User');
 
 class EmailService {
     /**
+     * ✅ CHECK IF USER ALLOWS EMAIL NOTIFICATIONS
+     * @param {string|object} userOrId - User object or user ID
+     * @returns {Promise<boolean>} - Whether email is allowed
+     */
+    static async canSendEmail(userOrId) {
+        try {
+            let user = userOrId;
+            if (typeof userOrId === 'string') {
+                user = await User.findById(userOrId).select('preferences.notifications.email');
+            }
+            // Default to true if preference not set
+            return user?.preferences?.notifications?.email !== false;
+        } catch (error) {
+            console.error('Error checking email preference:', error);
+            return true; // Default to sending if check fails
+        }
+    }
+
+    /**
+     * ✅ CHECK IF USER ALLOWS EMAIL NOTIFICATIONS (by email address)
+     * @param {string} email - User email address
+     * @returns {Promise<boolean>} - Whether email is allowed
+     */
+    static async canSendEmailByAddress(email) {
+        try {
+            const user = await User.findOne({ email }).select('preferences.notifications.email');
+            if (!user) return true; // If user not found, send anyway
+            return user?.preferences?.notifications?.email !== false;
+        } catch (error) {
+            console.error('Error checking email preference by address:', error);
+            return true;
+        }
+    }
+    /**
      * Send OTP verification email
+     * ⚠️ OTP EMAILS ARE ALWAYS SENT (Security critical - no preference check)
      */
     static async sendOTP(email, otp, name) {
         const mailOptions = {
@@ -44,8 +81,15 @@ class EmailService {
 
     /**
      * Send verification approval email (for riders)
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendVerificationApproval(email, name) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmailByAddress(email)) {
+            console.log(`📧 Email skipped (user preference): Verification approval to ${email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: email,
@@ -78,8 +122,15 @@ class EmailService {
 
     /**
      * Send booking confirmation email
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendBookingConfirmation(email, bookingDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmailByAddress(email)) {
+            console.log(`📧 Email skipped (user preference): Booking confirmation to ${email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: email,
@@ -120,6 +171,7 @@ class EmailService {
 
     /**
      * Send emergency SOS alert email
+     * ⚠️ EMERGENCY EMAILS ARE ALWAYS SENT (Safety critical - no preference check)
      */
     static async sendSOSAlert(email, emergencyDetails) {
         const mailOptions = {
@@ -171,8 +223,15 @@ class EmailService {
 
     /**
      * Send ride starting reminder
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendRideReminder(email, rideDetails, hoursUntil) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmailByAddress(email)) {
+            console.log(`📧 Email skipped (user preference): Ride reminder to ${email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: email,
@@ -204,8 +263,15 @@ class EmailService {
 
     /**
      * Send booking request email to rider
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendBookingRequestEmail(rider, bookingDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmail(rider)) {
+            console.log(`📧 Email skipped (user preference): Booking request to ${rider.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: rider.email,
@@ -252,8 +318,15 @@ class EmailService {
 
     /**
      * Send booking accepted notification
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendBookingAcceptedEmail(passenger, bookingDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmail(passenger)) {
+            console.log(`📧 Email skipped (user preference): Booking accepted to ${passenger.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: passenger.email,
@@ -321,8 +394,15 @@ class EmailService {
 
     /**
      * Send booking rejected notification
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendBookingRejectedEmail(passenger, bookingDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmail(passenger)) {
+            console.log(`📧 Email skipped (user preference): Booking rejected to ${passenger.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
         const mailOptions = {
             from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
             to: passenger.email,
@@ -385,8 +465,14 @@ class EmailService {
 
     /**
      * Send generic notification email
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
      */
     static async sendNotification(email, subject, message, buttonText = null, buttonUrl = null) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmailByAddress(email)) {
+            console.log(`📧 Email skipped (user preference): Notification to ${email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
         let buttonHtml = '';
         if (buttonText && buttonUrl) {
             buttonHtml = `
@@ -427,6 +513,7 @@ class EmailService {
 
     /**
      * Send password reset OTP email
+     * ⚠️ PASSWORD RESET EMAILS ARE ALWAYS SENT (Security critical - no preference check)
      */
     static async sendPasswordResetOTP(email, otp, name) {
         const mailOptions = {
@@ -494,6 +581,7 @@ class EmailService {
 
     /**
      * Send password reset confirmation email
+     * ⚠️ PASSWORD RESET EMAILS ARE ALWAYS SENT (Security critical - no preference check)
      */
     static async sendPasswordResetConfirmation(email, name) {
         const mailOptions = {
@@ -571,6 +659,7 @@ class EmailService {
 
     /**
      * Send Emergency SOS Alert to Guardian Emails
+     * ⚠️ EMERGENCY EMAILS ARE ALWAYS SENT (Safety critical - no preference check)
      */
     static async sendEmergencyAlert(emails, emergencyDetails) {
         const { userName, userEmail, userPhone, location, locationUrl, time, emergencyId, type } = emergencyDetails;
@@ -656,6 +745,184 @@ class EmailService {
         } catch (error) {
             console.error('❌ Error sending emergency alert email:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Send ride started email with pickup OTP
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
+     */
+    static async sendRideStartedEmail(passenger, rideDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmail(passenger)) {
+            console.log(`📧 Email skipped (user preference): Ride started to ${passenger.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
+        const mailOptions = {
+            from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
+            to: passenger.email,
+            subject: '🚗 Your Rider is On The Way!',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #2ECC71; color: white; padding: 20px; text-align: center;">
+                        <h1 style="margin: 0;">🚗 Rider On The Way!</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: #f9f9f9;">
+                        <p style="font-size: 16px;">Hi ${passenger.profile?.firstName || passenger.name || 'there'},</p>
+                        <p><strong>${rideDetails.riderName}</strong> has started the ride and is on the way to pick you up!</p>
+                        
+                        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #ffc107; text-align: center;">
+                            <p style="margin: 0 0 10px 0; color: #856404; font-size: 14px;">YOUR PICKUP OTP</p>
+                            <h1 style="color: #856404; font-size: 48px; margin: 0; letter-spacing: 8px;">${rideDetails.pickupOTP}</h1>
+                            <p style="margin: 10px 0 0 0; color: #856404; font-size: 12px;">Share this with the rider when they arrive</p>
+                        </div>
+
+                        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                            <p><strong>📍 Pickup Location:</strong> ${rideDetails.pickupLocation}</p>
+                            <p><strong>⏰ Estimated Time:</strong> ${rideDetails.estimatedPickupTime}</p>
+                            <p><strong>🎫 Booking Ref:</strong> ${rideDetails.bookingReference}</p>
+                        </div>
+
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${rideDetails.trackingUrl}" 
+                               style="background-color: #3498DB; color: white; padding: 15px 40px; 
+                                      text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                                📍 Track Live Location
+                            </a>
+                        </div>
+
+                        <p>Please be ready at the pickup location. Have a safe journey! 🚗</p>
+                    </div>
+                </div>
+            `
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+            console.log(`✅ Ride started email sent to ${passenger.email}`);
+            return true;
+        } catch (error) {
+            console.error('❌ Error sending ride started email:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Send pickup confirmed email with dropoff OTP
+     * ✅ RESPECTS EMAIL NOTIFICATION PREFERENCE
+     */
+    static async sendPickupConfirmedEmail(passenger, rideDetails) {
+        // ✅ Check user preference before sending
+        if (!await this.canSendEmail(passenger)) {
+            console.log(`📧 Email skipped (user preference): Pickup confirmed to ${passenger.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
+        const mailOptions = {
+            from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
+            to: passenger.email,
+            subject: '✅ Pickup Confirmed - You\'re On Your Way!',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #2ECC71; color: white; padding: 20px; text-align: center;">
+                        <h1 style="margin: 0;">✅ Pickup Confirmed!</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: #f9f9f9;">
+                        <p style="font-size: 16px;">Hi ${passenger.profile?.firstName || passenger.name || 'there'},</p>
+                        <p>You've been picked up by <strong>${rideDetails.riderName}</strong>! Enjoy your ride.</p>
+                        
+                        <div style="background-color: #d4edda; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #28a745; text-align: center;">
+                            <p style="margin: 0 0 10px 0; color: #155724; font-size: 14px;">YOUR DROPOFF OTP</p>
+                            <h1 style="color: #155724; font-size: 48px; margin: 0; letter-spacing: 8px;">${rideDetails.dropoffOTP}</h1>
+                            <p style="margin: 10px 0 0 0; color: #155724; font-size: 12px;">Share this with the rider when you reach your destination</p>
+                        </div>
+
+                        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                            <p><strong>📍 Dropoff Location:</strong> ${rideDetails.dropoffLocation}</p>
+                            <p><strong>🎫 Booking Ref:</strong> ${rideDetails.bookingReference}</p>
+                        </div>
+
+                        <p>Have a safe journey! 🚗</p>
+                    </div>
+                </div>
+            `
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+            console.log(`✅ Pickup confirmed email sent to ${passenger.email}`);
+            return true;
+        } catch (error) {
+            console.error('❌ Error sending pickup confirmed email:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Send ride alert for matching routes
+     * ✅ RESPECTS RIDE ALERTS PREFERENCE
+     */
+    static async sendRideAlert(user, rideDetails) {
+        // ✅ Check user preference for ride alerts
+        if (user?.preferences?.notifications?.rideAlerts === false) {
+            console.log(`📧 Email skipped (ride alerts disabled): Ride alert to ${user.email}`);
+            return { skipped: true, reason: 'User disabled ride alerts' };
+        }
+        
+        // ✅ Also check general email preference
+        if (!await this.canSendEmail(user)) {
+            console.log(`📧 Email skipped (email disabled): Ride alert to ${user.email}`);
+            return { skipped: true, reason: 'User disabled email notifications' };
+        }
+
+        const mailOptions = {
+            from: `"${process.env.APP_NAME}" <${process.env.EMAIL_FROM}>`,
+            to: user.email,
+            subject: '🚗 New Ride Matches Your Route!',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background-color: #3498DB; color: white; padding: 20px; text-align: center;">
+                        <h1 style="margin: 0;">🚗 New Ride Alert!</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: #f9f9f9;">
+                        <p style="font-size: 16px;">Hi ${user.profile?.firstName || user.name || 'there'},</p>
+                        <p>A new ride has been posted that matches your saved route!</p>
+                        
+                        <div style="background-color: white; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #3498DB;">
+                            <p><strong>📍 From:</strong> ${rideDetails.from}</p>
+                            <p><strong>📍 To:</strong> ${rideDetails.to}</p>
+                            <p><strong>📅 Date:</strong> ${rideDetails.date}</p>
+                            <p><strong>⏰ Time:</strong> ${rideDetails.time}</p>
+                            <p><strong>💺 Available Seats:</strong> ${rideDetails.availableSeats}</p>
+                            <p><strong>💰 Price:</strong> ₹${rideDetails.pricePerSeat}/seat</p>
+                        </div>
+
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${rideDetails.rideUrl}" 
+                               style="background-color: #2ECC71; color: white; padding: 15px 40px; 
+                                      text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+                                View & Book Ride
+                            </a>
+                        </div>
+
+                        <hr style="margin: 20px 0; border: none; border-top: 1px solid #ddd;">
+                        <p style="color: #888; font-size: 12px; text-align: center;">
+                            You're receiving this because you have ride alerts enabled.<br>
+                            <a href="${process.env.APP_URL || 'http://localhost:3000'}/user/settings">Manage notification preferences</a>
+                        </p>
+                    </div>
+                </div>
+            `
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+            console.log(`✅ Ride alert email sent to ${user.email}`);
+            return true;
+        } catch (error) {
+            console.error('❌ Error sending ride alert email:', error);
+            return false;
         }
     }
 }

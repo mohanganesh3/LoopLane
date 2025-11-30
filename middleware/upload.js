@@ -15,12 +15,28 @@ const createUpload = (storage) => {
             fileSize: 10 * 1024 * 1024 // 10MB limit
         },
         fileFilter: (req, file, cb) => {
-            // Allowed file types
+            console.log('📁 [Upload] File received:', {
+                fieldname: file.fieldname,
+                originalname: file.originalname,
+                mimetype: file.mimetype
+            });
+            
+            // For images, check image mimetypes
+            if (file.fieldname === 'profilePhoto') {
+                const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+                if (allowedImageTypes.includes(file.mimetype)) {
+                    return cb(null, true);
+                } else {
+                    return cb(new Error('Invalid image type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+                }
+            }
+            
+            // For other files, check general allowed types
             const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
             const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
             const mimetype = allowedTypes.test(file.mimetype);
             
-            if (extname && mimetype) {
+            if (extname || mimetype) {
                 return cb(null, true);
             } else {
                 cb(new Error('Invalid file type. Only JPEG, PNG, PDF, and DOC files are allowed.'));
@@ -69,8 +85,11 @@ module.exports = {
     // Multiple fields
     fields: (fields) => documentUpload.fields(fields),
     
-    // Profile photo upload
+    // Profile photo upload (single file)
     profilePhoto: profileUpload.single('profilePhoto'),
+    
+    // Profile photo upload (fields - for compatibility with existing routes)
+    profilePhotoFields: profileUpload.fields([{ name: 'profilePhoto', maxCount: 1 }]),
     
     // Document uploads for riders
     riderDocuments: riderDocumentsUpload,

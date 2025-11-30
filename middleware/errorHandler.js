@@ -78,24 +78,10 @@ const errorHandler = (err, req, res, next) => {
         error = new AppError(message, 401);
     }
 
-    // Check if request expects JSON
-    const acceptsJson = req.xhr || 
-                        (req.headers.accept && req.headers.accept.indexOf('json') > -1) ||
-                        (req.headers['content-type'] && req.headers['content-type'].indexOf('json') > -1);
-    
-    if (acceptsJson) {
-        return res.status(error.statusCode).json({
-            success: false,
-            message: error.message,
-            error: process.env.NODE_ENV === 'development' ? err : {}
-        });
-    }
-
-    // Render error page
-    res.status(error.statusCode).render('pages/error', {
-        title: 'Error',
+    // Always return JSON response (React frontend handles all rendering)
+    return res.status(error.statusCode).json({
+        success: false,
         message: error.message,
-        statusCode: error.statusCode,
         error: process.env.NODE_ENV === 'development' ? err : {}
     });
 };

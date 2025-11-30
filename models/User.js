@@ -34,9 +34,12 @@ const userSchema = new mongoose.Schema({
     // Verification Status
     verificationStatus: {
         type: String,
-        enum: ['PENDING', 'VERIFIED', 'REJECTED', 'UNDER_REVIEW'],
-        default: 'PENDING'
+        enum: ['UNVERIFIED', 'PENDING', 'VERIFIED', 'REJECTED', 'DOCUMENTS_REQUESTED'],
+        default: 'UNVERIFIED'
     },
+    verificationRejectionReason: String,
+    documentsRequestedMessage: String,
+    documentsRequestedAt: Date,
     emailVerified: {
         type: Boolean,
         default: false
@@ -156,6 +159,62 @@ const userSchema = new mongoose.Schema({
         }
     },
     
+    // ✅ TRUST SCORE SYSTEM (Like BlaBlaCar/Uber)
+    trustScore: {
+        level: { 
+            type: String, 
+            enum: ['NEWCOMER', 'REGULAR', 'EXPERIENCED', 'AMBASSADOR', 'EXPERT'], 
+            default: 'NEWCOMER' 
+        },
+        score: { type: Number, default: 0, min: 0, max: 100 }, // 0-100 score
+        lastCalculated: { type: Date, default: Date.now },
+        factors: {
+            profileComplete: { type: Number, default: 0 }, // 0-20 points
+            verificationBonus: { type: Number, default: 0 }, // 0-20 points
+            ratingBonus: { type: Number, default: 0 }, // 0-20 points
+            experienceBonus: { type: Number, default: 0 }, // 0-20 points based on completed rides
+            reliabilityBonus: { type: Number, default: 0 } // 0-20 points based on cancellation rate
+        }
+    },
+    
+    // ✅ BADGES SYSTEM (Gamification like Lyft Rewards)
+    badges: [{
+        type: { 
+            type: String, 
+            enum: [
+                'VERIFIED_ID', 'VERIFIED_LICENSE', 'VERIFIED_VEHICLE',
+                'FIRST_RIDE', 'TEN_RIDES', 'FIFTY_RIDES', 'HUNDRED_RIDES',
+                'FIVE_STAR_DRIVER', 'ECO_CHAMPION', 'SUPER_HOST',
+                'QUICK_RESPONDER', 'RELIABLE_DRIVER', 'TOP_RATED',
+                'EARLY_ADOPTER', 'COMMUNITY_HELPER'
+            ] 
+        },
+        earnedAt: { type: Date, default: Date.now },
+        description: String
+    }],
+    
+    // ✅ CANCELLATION TRACKING (Like Uber/Lyft)
+    cancellationRate: {
+        totalBookings: { type: Number, default: 0 },
+        cancelledByUser: { type: Number, default: 0 },
+        rate: { type: Number, default: 0 }, // percentage 0-100
+        lastUpdated: { type: Date, default: Date.now },
+        recentCancellations: [{ // Last 5 cancellations for review
+            rideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
+            reason: String,
+            cancelledAt: Date,
+            wasLastMinute: Boolean // Within 2 hours of departure
+        }]
+    },
+    
+    // ✅ RESPONSE TIME TRACKING (Like BlaBlaCar)
+    responseMetrics: {
+        averageResponseTime: { type: Number, default: 0 }, // in minutes
+        totalResponses: { type: Number, default: 0 },
+        quickResponder: { type: Boolean, default: false }, // Responds within 1 hour
+        lastResponseAt: Date
+    },
+    
     // Statistics
     statistics: {
         totalRidesPosted: { type: Number, default: 0 },
@@ -165,19 +224,66 @@ const userSchema = new mongoose.Schema({
         totalEarnings: { type: Number, default: 0 },
         totalSpent: { type: Number, default: 0 },
         carbonSaved: { type: Number, default: 0 }, // in kg
-        totalDistance: { type: Number, default: 0 } // in km
+        totalDistance: { type: Number, default: 0 }, // in km
+        // ✅ NEW: More detailed stats
+        ridesAsDriver: { type: Number, default: 0 },
+        ridesAsPassenger: { type: Number, default: 0 },
+        totalPassengersCarried: { type: Number, default: 0 },
+        memberSince: { type: Date, default: Date.now },
+        lastRideAt: Date
     },
     
     // Preferences
     preferences: {
+        // Notification Preferences
         notifications: {
             email: { type: Boolean, default: true },
             sms: { type: Boolean, default: true },
-            push: { type: Boolean, default: true }
+            push: { type: Boolean, default: true },
+            rideAlerts: { type: Boolean, default: true } // Get notified about new rides matching route
         },
+        // Privacy Settings
         privacy: {
             showPhone: { type: Boolean, default: false },
-            showEmail: { type: Boolean, default: false }
+            showEmail: { type: Boolean, default: false },
+            shareLocation: { type: Boolean, default: true }, // Allow live location sharing during rides
+            profileVisibility: { 
+                type: String, 
+                enum: ['PUBLIC', 'VERIFIED_ONLY', 'PRIVATE'], 
+                default: 'PUBLIC' 
+            }
+        },
+        // Security
+        security: {
+            twoFactorEnabled: { type: Boolean, default: false },
+            twoFactorSecret: String,
+            twoFactorBackupCodes: [String]
+        },
+        // Ride Comfort Preferences
+        rideComfort: {
+            musicPreference: { 
+                type: String, 
+                enum: ['NO_MUSIC', 'SOFT_MUSIC', 'ANY_MUSIC', 'OPEN_TO_REQUESTS'], 
+                default: 'OPEN_TO_REQUESTS' 
+            },
+            smokingAllowed: { type: Boolean, default: false },
+            petsAllowed: { type: Boolean, default: false },
+            conversationPreference: { 
+                type: String, 
+                enum: ['QUIET', 'SOME_CHAT', 'CHATTY', 'DEPENDS_ON_MOOD'], 
+                default: 'DEPENDS_ON_MOOD' 
+            }
+        },
+        // Booking Preferences (for Riders)
+        booking: {
+            instantBooking: { type: Boolean, default: false }, // Allow instant booking without approval
+            verifiedUsersOnly: { type: Boolean, default: false }, // Only accept verified users
+            maxDetourKm: { type: Number, default: 10 }, // Maximum detour in km
+            preferredCoRiderGender: { 
+                type: String, 
+                enum: ['ANY', 'MALE_ONLY', 'FEMALE_ONLY', 'SAME_GENDER'], 
+                default: 'ANY' 
+            }
         },
         language: { type: String, default: 'en' },
         currency: { type: String, default: 'INR' }

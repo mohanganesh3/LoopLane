@@ -59,110 +59,106 @@ const seedSampleData = async () => {
         console.log('Clearing existing data...');
         await User.deleteMany({ role: { $ne: 'ADMIN' } });
 
-        // Create sample riders
-        const riders = [
-            {
-                email: 'john@example.com',
-                phone: '9876543210',
-                password: 'Password@123',
-                role: 'RIDER',
-                emailVerified: true,
-                phoneVerified: true,
-                verificationStatus: 'VERIFIED',
-                profile: {
-                    firstName: 'John',
-                    lastName: 'Doe',
-                    bio: 'Experienced driver with 5 years of carpooling'
-                },
-                address: {
-                    address: '123 Main St',
-                    city: 'Mumbai',
-                    state: 'Maharashtra',
-                    pincode: '400001'
-                },
-                vehicles: [
-                    {
-                        type: 'SEDAN',
-                        make: 'Honda',
-                        model: 'City',
-                        year: 2020,
-                        registrationNumber: 'MH01AB1234',
-                        color: 'White',
-                        seatingCapacity: 4,
-                        isVerified: true
-                    }
-                ]
+        // Create sample riders - use create() instead of insertMany() to trigger password hashing
+        const rider1 = await User.create({
+            email: 'john@example.com',
+            phone: '9876543210',
+            password: 'Password@123',
+            role: 'RIDER',
+            emailVerified: true,
+            phoneVerified: true,
+            verificationStatus: 'VERIFIED',
+            profile: {
+                firstName: 'John',
+                lastName: 'Doe',
+                bio: 'Experienced driver with 5 years of carpooling'
             },
-            {
-                email: 'sarah@example.com',
-                phone: '9876543211',
-                password: 'Password@123',
-                role: 'RIDER',
-                emailVerified: true,
-                phoneVerified: true,
-                verificationStatus: 'VERIFIED',
-                profile: {
-                    firstName: 'Sarah',
-                    lastName: 'Smith',
-                    bio: 'Love driving and meeting new people'
-                },
-                address: {
-                    address: '456 Park Ave',
-                    city: 'Pune',
-                    state: 'Maharashtra',
-                    pincode: '411001'
-                },
-                vehicles: [
-                    {
-                        type: 'SUV',
-                        make: 'Toyota',
-                        model: 'Fortuner',
-                        year: 2021,
-                        registrationNumber: 'MH12CD5678',
-                        color: 'Black',
-                        seatingCapacity: 6,
-                        isVerified: true
-                    }
-                ]
+            vehicles: [
+                {
+                    type: 'SEDAN',
+                    make: 'Honda',
+                    model: 'City',
+                    year: 2020,
+                    licensePlate: 'MH01AB1234',
+                    color: 'White',
+                    seats: 4,
+                    status: 'APPROVED'
+                }
+            ],
+            documents: {
+                driverLicense: {
+                    frontImage: '/uploads/sample-license.jpg',
+                    status: 'APPROVED'
+                }
             }
-        ];
+        });
 
-        await User.insertMany(riders);
+        const rider2 = await User.create({
+            email: 'sarah@example.com',
+            phone: '9876543211',
+            password: 'Password@123',
+            role: 'RIDER',
+            emailVerified: true,
+            phoneVerified: true,
+            verificationStatus: 'VERIFIED',
+            profile: {
+                firstName: 'Sarah',
+                lastName: 'Smith',
+                bio: 'Love driving and meeting new people'
+            },
+            vehicles: [
+                {
+                    type: 'SUV',
+                    make: 'Toyota',
+                    model: 'Fortuner',
+                    year: 2021,
+                    licensePlate: 'MH12CD5678',
+                    color: 'Black',
+                    seats: 6,
+                    status: 'APPROVED'
+                }
+            ],
+            documents: {
+                driverLicense: {
+                    frontImage: '/uploads/sample-license.jpg',
+                    status: 'APPROVED'
+                }
+            }
+        });
+
         console.log('✅ Sample riders created');
 
         // Create sample passengers (auto-verified, no documents needed)
-        const passengers = [
-            {
-                email: 'alice@example.com',
-                phone: '9876543212',
-                password: 'Password@123',
-                role: 'PASSENGER',
-                emailVerified: true,
-                phoneVerified: true,
-                verificationStatus: 'VERIFIED', // Passengers are auto-verified
-                profile: {
-                    firstName: 'Alice',
-                    lastName: 'Johnson',
-                    bio: 'Regular commuter looking for eco-friendly rides'
-                }
-            },
-            {
-                email: 'bob@example.com',
-                phone: '9876543213',
-                password: 'Password@123',
-                role: 'PASSENGER',
-                emailVerified: true,
-                phoneVerified: true,
-                verificationStatus: 'VERIFIED', // Passengers are auto-verified
-                profile: {
-                    firstName: 'Bob',
-                    lastName: 'Williams',
-                    bio: 'Student traveling to campus daily'
-                }
+        const passenger1 = await User.create({
+            email: 'alice@example.com',
+            phone: '9876543212',
+            password: 'Password@123',
+            role: 'PASSENGER',
+            emailVerified: true,
+            phoneVerified: true,
+            verificationStatus: 'VERIFIED',
+            profile: {
+                firstName: 'Alice',
+                lastName: 'Johnson',
+                bio: 'Regular commuter looking for eco-friendly rides'
             }
-        ];
+        });
 
-        await User.insertMany(passengers);
+        const passenger2 = await User.create({
+            email: 'bob@example.com',
+            phone: '9876543213',
+            password: 'Password@123',
+            role: 'PASSENGER',
+            emailVerified: true,
+            phoneVerified: true,
+            verificationStatus: 'VERIFIED',
+            profile: {
+                firstName: 'Bob',
+                lastName: 'Williams',
+                bio: 'Student traveling to campus daily'
+            }
+        });
+
         console.log('✅ Sample passengers created');
 
         console.log('\n✅ Sample data seeding completed!');
