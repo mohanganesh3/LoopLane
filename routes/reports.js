@@ -1,5 +1,6 @@
 /**
- * Report Routes
+ * Report Routes - API Only (React SPA)
+ * User report/complaint system
  */
 
 const express = require('express');
@@ -11,10 +12,7 @@ const {
     handleValidationErrors
 } = require('../middleware/validation');
 
-// Show Report Page
-router.get('/create', isAuthenticated, reportController.showReportPage);
-
-// Submit Report
+// Submit Report API
 router.post('/create',
     isAuthenticated,
     validateReport,
@@ -22,11 +20,11 @@ router.post('/create',
     reportController.submitReport
 );
 
-// My Reports (specific routes MUST come before parameterized routes)
-router.get('/my-reports', isAuthenticated, reportController.showMyReports);
+// My Reports API
+router.get('/my-reports', isAuthenticated, reportController.getMyReports);
 router.get('/my/reports', isAuthenticated, reportController.getMyReports);
 
-// Report Details (parameterized route comes LAST)
+// Report Details API
 router.get('/:reportId', isAuthenticated, reportController.getReportDetails);
 
 module.exports = router;

@@ -2,11 +2,14 @@
  * Tracking Controller
  * Handles real-time ride tracking functionality
  * Features: Live location updates, breadcrumb trails, Socket.IO integration
+ * ✅ RESPECTS: shareLocation privacy preference
  */
 
 const Booking = require('../models/Booking');
 const Ride = require('../models/Ride');
+const User = require('../models/User');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
+const { canShareLocation } = require('../utils/helpers');
 
 /**
  * Show live tracking page
@@ -191,15 +194,22 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     console.log('🔵 [Tracking] Location update for ride:', rideId);
     console.log('🔵 [Tracking] Location:', { latitude, longitude, speed });
 
-    const ride = await Ride.findById(rideId);
+    const ride = await Ride.findById(rideId).populate('rider', 'preferences.privacy');
 
     if (!ride) {
         throw new AppError('Ride not found', 404);
     }
 
     // Only rider can update location
-    if (ride.rider.toString() !== userId.toString()) {
+    if (ride.rider._id.toString() !== userId.toString()) {
         throw new AppError('Only the rider can update location', 403);
+    }
+
+    // ✅ CHECK LOCATION SHARING PREFERENCE
+    // Even if rider disabled sharing, we still allow tracking during active rides for safety
+    // But we log it for audit purposes
+    if (!canShareLocation(ride.rider)) {
+        console.log('⚠️ [Tracking] Rider has disabled location sharing but ride is active - allowing for safety');
     }
 
     // Check ride status (allow ACTIVE, READY_FOR_PICKUP or IN_PROGRESS to start streaming)

@@ -1,5 +1,5 @@
 /**
- * Tracking Routes
+ * Tracking Routes - API Only (React SPA)
  * Real-time ride tracking functionality
  */
 
@@ -11,28 +11,13 @@ const { isAuthenticated } = require('../middleware/auth');
 // All tracking routes require authentication
 router.use(isAuthenticated);
 
-/**
- * Show driver/rider live location broadcast page
- * GET /tracking/broadcast/:rideId
- */
-router.get('/broadcast/:rideId', trackingController.showDriverBroadcastPage);
-
-/**
- * Show live tracking page (for passengers)
- * GET /tracking/:bookingId
- */
-router.get('/:bookingId', trackingController.showTrackingPage);
-
-/**
- * Get current tracking data (API)
- * GET /api/tracking/:bookingId
- */
+// Get current tracking data API
 router.get('/api/:bookingId', trackingController.getTrackingData);
 
-/**
- * Update driver location (API)
- * POST /api/tracking/:rideId/location
- */
+// Update driver location API
 router.post('/api/:rideId/location', trackingController.updateLocation);
+
+// Get tracking info for a booking
+router.get('/:bookingId', trackingController.getTrackingData);
 
 module.exports = router;
