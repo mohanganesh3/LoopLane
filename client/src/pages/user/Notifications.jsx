@@ -70,18 +70,18 @@ const Notifications = () => {
 
   const getNotificationIcon = (type) => {
     const icons = {
-      'BOOKING_REQUEST': '🎫',
-      'BOOKING_ACCEPTED': '✅',
-      'BOOKING_REJECTED': '❌',
-      'BOOKING_CANCELLED': '🚫',
-      'RIDE_STARTED': '▶️',
-      'RIDE_COMPLETED': '🏁',
-      'PAYMENT_RECEIVED': '💰',
-      'REVIEW_RECEIVED': '⭐',
-      'MESSAGE_RECEIVED': '💬',
-      'SOS_ALERT': '🚨'
+      'BOOKING_REQUEST': 'fa-ticket-alt',
+      'BOOKING_ACCEPTED': 'fa-check-circle',
+      'BOOKING_REJECTED': 'fa-times-circle',
+      'BOOKING_CANCELLED': 'fa-ban',
+      'RIDE_STARTED': 'fa-play-circle',
+      'RIDE_COMPLETED': 'fa-flag-checkered',
+      'PAYMENT_RECEIVED': 'fa-money-bill-wave',
+      'REVIEW_RECEIVED': 'fa-star',
+      'MESSAGE_RECEIVED': 'fa-comment-dots',
+      'SOS_ALERT': 'fa-exclamation-circle'
     };
-    return icons[type] || '🔔';
+    return icons[type] || 'fa-bell';
   };
 
   const getNotificationColor = (type) => {
@@ -214,8 +214,8 @@ const Notifications = () => {
               >
                 <div className="flex items-start space-x-4">
                   <div className="flex-shrink-0">
-                    <div className={`w-12 h-12 rounded-full ${getNotificationColor(notification.type)} flex items-center justify-center text-2xl`}>
-                      {getNotificationIcon(notification.type)}
+                    <div className={`w-12 h-12 rounded-full ${getNotificationColor(notification.type)} flex items-center justify-center`}>
+                      <i className={`fas ${getNotificationIcon(notification.type)} text-white text-xl`}></i>
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">

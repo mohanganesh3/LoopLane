@@ -132,20 +132,55 @@ chatSchema.methods.addMessage = function(senderId, content, type = 'TEXT', locat
 };
 
 // Method to mark messages as read
-chatSchema.methods.markAsRead = function(userId) {
-    this.messages.forEach(msg => {
-        if (msg.sender.toString() !== userId.toString()) {
-            const alreadyRead = msg.readBy.some(r => r.user.toString() === userId.toString());
-            if (!alreadyRead) {
-                msg.readBy.push({
+// ✅ EDGE CASE FIX: Uses atomic update to prevent race conditions
+chatSchema.methods.markAsRead = async function(userId) {
+    const Chat = this.constructor;
+    const userIdStr = userId.toString();
+    
+    console.log(`📖 [markAsRead] Marking messages as read for user: ${userIdStr} in chat: ${this._id}`);
+    
+    // Use updateOne with arrayFilters to update all unread messages atomically
+    const result = await Chat.updateOne(
+        { _id: this._id },
+        {
+            $addToSet: {
+                'messages.$[unreadMsg].readBy': {
                     user: userId,
                     readAt: new Date()
-                });
+                }
             }
+        },
+        {
+            arrayFilters: [
+                {
+                    'unreadMsg.sender': { $ne: userId },
+                    'unreadMsg.readBy.user': { $ne: userId }
+                }
+            ]
         }
+    );
+    
+    console.log(`📖 [markAsRead] Update result:`, {
+        matchedCount: result.matchedCount,
+        modifiedCount: result.modifiedCount
     });
     
-    return this.save();
+    // Reload the document to get fresh data
+    const updatedChat = await Chat.findById(this._id);
+    if (updatedChat) {
+        this.messages = updatedChat.messages;
+    }
+    
+    return this;
+};
+
+// Method to check if user has any unread messages (messages not in readBy array)
+chatSchema.methods.hasUnreadMessages = function(userId) {
+    return this.messages.some(msg => {
+        return msg.sender.toString() !== userId.toString() &&
+               !msg.readBy.some(r => r.user.toString() === userId.toString()) &&
+               !msg.deleted;
+    });
 };
 
 // Method to get unread count for a user

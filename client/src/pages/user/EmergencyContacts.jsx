@@ -156,7 +156,7 @@ const EmergencyContacts = () => {
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-            <span className="text-3xl mr-3">🛡️</span>
+            <i className="fas fa-shield-alt text-3xl mr-3 text-emerald-500"></i>
             Emergency Contacts
           </h1>
           <p className="text-gray-600 mt-2">
@@ -171,7 +171,7 @@ const EmergencyContacts = () => {
         {/* Info Banner */}
         <div className="bg-blue-50 border-l-4 border-blue-500 rounded-lg p-6 mb-6">
           <h3 className="font-semibold text-blue-800 mb-2 flex items-center">
-            <span className="mr-2">ℹ️</span> How it Works
+            <i className="fas fa-info-circle mr-2"></i> How it Works
           </h3>
           <ul className="text-sm text-blue-700 space-y-1 ml-6 list-disc">
             <li>When you trigger SOS, all your emergency contacts receive immediate SMS and email alerts</li>
@@ -184,7 +184,7 @@ const EmergencyContacts = () => {
         {/* Add Contact Form */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-            <span className="text-2xl mr-2">➕</span> Add New Emergency Contact
+            <i className="fas fa-plus-circle text-2xl mr-2 text-emerald-500"></i> Add New Emergency Contact
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -263,7 +263,7 @@ const EmergencyContacts = () => {
             </div>
 
             <Button type="submit" className="w-full md:w-auto">
-              💾 Add Contact
+              <i className="fas fa-save mr-1"></i> Add Contact
             </Button>
           </form>
         </div>
@@ -272,7 +272,7 @@ const EmergencyContacts = () => {
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
             <span>
-              <span className="text-2xl mr-2">👥</span>
+              <i className="fas fa-users text-2xl mr-2 text-emerald-500"></i>
               Your Emergency Contacts ({contacts.length}/5)
             </span>
             <span className="text-sm font-normal text-gray-500">Maximum 5 contacts</span>
@@ -280,7 +280,7 @@ const EmergencyContacts = () => {
 
           {contacts.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-5xl text-gray-300 mb-4">👤</div>
+              <i className="fas fa-user-plus text-5xl text-gray-300 mb-4"></i>
               <p className="text-gray-500">No emergency contacts added yet.</p>
               <p className="text-sm text-gray-400 mt-2">Add your first contact above to get started.</p>
             </div>
@@ -301,20 +301,20 @@ const EmergencyContacts = () => {
                           </span>
                         )}
                         {contact.verified ? (
-                          <span className="text-green-600" title="Verified">✅</span>
+                          <i className="fas fa-check-circle text-green-600" title="Verified"></i>
                         ) : (
-                          <span className="text-yellow-600" title="Not Verified">⚠️</span>
+                          <i className="fas fa-exclamation-triangle text-yellow-600" title="Not Verified"></i>
                         )}
                       </div>
                       <p className="text-sm text-gray-600 mb-1">
-                        👤 {contact.relationship || 'Not specified'}
+                        <i className="fas fa-user mr-1"></i> {contact.relationship || 'Not specified'}
                       </p>
                       <p className="text-sm text-gray-600 mb-1">
-                        📱 {contact.phone}
+                        <i className="fas fa-phone mr-1"></i> {contact.phone}
                       </p>
                       {contact.email && (
                         <p className="text-sm text-gray-600">
-                          📧 {contact.email}
+                          <i className="fas fa-envelope mr-1"></i> {contact.email}
                         </p>
                       )}
                     </div>
@@ -322,24 +322,24 @@ const EmergencyContacts = () => {
                       {!contact.verified && (
                         <button
                           onClick={() => startVerification(contact._id, contact.phone)}
-                          className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded transition"
+                          className="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white text-xs rounded transition flex items-center gap-1"
                         >
-                          🛡️ Verify
+                          <i className="fas fa-shield-alt"></i> Verify
                         </button>
                       )}
                       {!contact.isPrimary && (
                         <button
                           onClick={() => setPrimary(contact._id)}
-                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition"
+                          className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded transition flex items-center gap-1"
                         >
-                          ⭐ Set Primary
+                          <i className="fas fa-star"></i> Set Primary
                         </button>
                       )}
                       <button
                         onClick={() => deleteContact(contact._id)}
-                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition"
+                        className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded transition flex items-center gap-1"
                       >
-                        🗑️ Delete
+                        <i className="fas fa-trash-alt"></i> Delete
                       </button>
                     </div>
                   </div>
@@ -352,7 +352,7 @@ const EmergencyContacts = () => {
         {/* Safety Tips */}
         <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg shadow-sm p-6 mt-6">
           <h3 className="font-bold text-purple-800 mb-3 flex items-center">
-            <span className="text-xl mr-2">💡</span> Safety Tips
+            <i className="fas fa-lightbulb text-xl mr-2"></i> Safety Tips
           </h3>
           <ul className="text-sm text-purple-700 space-y-2 ml-6 list-disc">
             <li>Choose contacts who are available 24/7 and can respond quickly</li>

@@ -152,10 +152,12 @@ exports.getUserChats = asyncHandler(async (req, res) => {
     })
     .sort({ lastMessageAt: -1 });
 
-    // Calculate unread count and add to each chat
+    // Calculate unread status (boolean) and add to each chat
     const chatsWithUnread = chats.map(chat => {
         const chatObj = chat.toObject({ virtuals: true });
-        chatObj.unreadCount = chat.getUnreadCount(req.user._id);
+        // Use hasUnread boolean instead of count for cleaner UI
+        chatObj.hasUnread = chat.hasUnreadMessages(req.user._id);
+        chatObj.unreadCount = chatObj.hasUnread ? 1 : 0; // Keep for backward compatibility
         return chatObj;
     });
 
@@ -342,7 +344,7 @@ exports.sendMessage = asyncHandler(async (req, res) => {
 exports.markChatAsRead = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
 
-    const chat = await Chat.findById(chatId);
+    const chat = await Chat.findById(chatId).populate('participants', '_id');
 
     if (!chat) {
         throw new AppError('Chat not found', 404);
@@ -350,7 +352,7 @@ exports.markChatAsRead = asyncHandler(async (req, res) => {
 
     // Check if user is participant
     const isParticipant = chat.participants.some(
-        p => p.toString() === req.user._id.toString()
+        p => p._id.toString() === req.user._id.toString()
     );
 
     if (!isParticipant) {
@@ -358,6 +360,29 @@ exports.markChatAsRead = asyncHandler(async (req, res) => {
     }
 
     await chat.markAsRead(req.user._id);
+
+    // ✅ Emit read receipt to other participants so they see double-tick
+    const io = req.app.get('io');
+    if (io) {
+        const otherParticipants = chat.participants.filter(
+            p => p._id.toString() !== req.user._id.toString()
+        );
+        
+        otherParticipants.forEach(participant => {
+            io.to(`user-${participant._id}`).emit('messages-read', {
+                chatId: chatId,
+                readBy: req.user._id,
+                readAt: new Date()
+            });
+        });
+        
+        // Also emit to chat room
+        io.to(`chat-${chatId}`).emit('messages-read', {
+            chatId: chatId,
+            readBy: req.user._id,
+            readAt: new Date()
+        });
+    }
 
     res.status(200).json({
         success: true,
@@ -580,9 +605,9 @@ exports.deleteMessage = asyncHandler(async (req, res) => {
     });
 });
 
-// Get total unread message count across all chats
+// Check if user has any unread messages across all chats (returns boolean)
 exports.getTotalUnreadCount = asyncHandler(async (req, res) => {
-    console.log('🔵 [Unread Count] Getting total unread for user:', req.user._id);
+    console.log('🔵 [Unread Check] Checking for unread messages for user:', req.user._id);
 
     // Get all chats for user
     const chats = await Chat.find({
@@ -590,20 +615,23 @@ exports.getTotalUnreadCount = asyncHandler(async (req, res) => {
         isActive: true
     });
 
-    console.log('🔵 [Unread Count] Found', chats.length, 'active chats');
+    console.log('🔵 [Unread Check] Found', chats.length, 'active chats');
 
-    // Calculate total unread count
-    let totalUnread = 0;
-    chats.forEach(chat => {
-        const unread = chat.getUnreadCount(req.user._id);
-        console.log(`🔵 [Chat ${chat._id}] Unread:`, unread);
-        totalUnread += unread;
-    });
+    // Check if any chat has unread messages
+    let hasUnread = false;
+    for (const chat of chats) {
+        if (chat.hasUnreadMessages(req.user._id)) {
+            hasUnread = true;
+            console.log(`🔵 [Chat ${chat._id}] Has unread messages`);
+            break; // No need to check further
+        }
+    }
 
-    console.log('✅ [Unread Count] Total unread messages:', totalUnread);
+    console.log('✅ [Unread Check] Has unread:', hasUnread);
 
     res.status(200).json({
         success: true,
-        unreadCount: totalUnread
+        hasUnread: hasUnread,
+        unreadCount: hasUnread ? 1 : 0 // Keep for backward compatibility
     });
 });
