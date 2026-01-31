@@ -22,52 +22,54 @@ function Footer({ adminTheme = false }) {
   }
 
   return (
-    <footer className="bg-gray-800 text-white mt-16">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+    <footer className="bg-gradient-to-br from-[#0f1a1a] via-[#142826] to-[#0f1a1a] text-white mt-0">
+      <div className="container mx-auto px-6 lg:px-12 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
           {/* About */}
           <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <i className="fas fa-car-side text-emerald-500 text-2xl"></i>
-              <span className="text-2xl font-bold">LOOPLANE</span>
+            <div className="flex items-center gap-2 mb-6">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8ee4af] to-[#0ead69] flex items-center justify-center shadow-lg shadow-[#8ee4af]/30">
+                <i className="fas fa-route text-[#0f1a1a] text-sm"></i>
+              </div>
+              <span className="text-xl font-semibold">LOOPLANE</span>
             </div>
-            <p className="text-gray-400 text-sm">
+            <p className="text-[#9cb5a4] text-sm leading-relaxed">
               Eco-friendly carpooling platform connecting riders and passengers for safer, greener journeys.
             </p>
-            <div className="flex space-x-4 mt-4">
-              <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
-                <i className="fab fa-facebook-f"></i>
+            <div className="flex gap-4 mt-6">
+              <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
+                <i className="fab fa-facebook-f text-sm"></i>
               </a>
-              <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
-                <i className="fab fa-twitter"></i>
+              <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
+                <i className="fab fa-twitter text-sm"></i>
               </a>
-              <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
-                <i className="fab fa-instagram"></i>
+              <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
+                <i className="fab fa-instagram text-sm"></i>
               </a>
             </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Quick Links</h3>
-            <ul className="space-y-2 text-sm">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-[#8ee4af] mb-6">Quick Links</h3>
+            <ul className="space-y-4 text-sm">
               <li>
-                <Link to="/" className="text-gray-400 hover:text-emerald-500 transition">
+                <Link to="/" className="text-[#9cb5a4] hover:text-white transition">
                   Home
                 </Link>
               </li>
               <li>
-                <Link to="/find-ride" className="text-gray-400 hover:text-emerald-500 transition">
+                <Link to="/find-ride" className="text-[#9cb5a4] hover:text-white transition">
                   Search Rides
                 </Link>
               </li>
               <li>
-                <Link to="/register" className="text-gray-400 hover:text-emerald-500 transition">
+                <Link to="/register" className="text-[#9cb5a4] hover:text-white transition">
                   Sign Up
                 </Link>
               </li>
               <li>
-                <Link to="/login" className="text-gray-400 hover:text-emerald-500 transition">
+                <Link to="/login" className="text-[#9cb5a4] hover:text-white transition">
                   Login
                 </Link>
               </li>
@@ -76,25 +78,25 @@ function Footer({ adminTheme = false }) {
 
           {/* Support */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Support</h3>
-            <ul className="space-y-2 text-sm">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-[#8ee4af] mb-6">Support</h3>
+            <ul className="space-y-4 text-sm">
               <li>
-                <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
+                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
                   Help Center
                 </a>
               </li>
               <li>
-                <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
+                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
                   Safety Guidelines
                 </a>
               </li>
               <li>
-                <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
+                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
                   Terms of Service
                 </a>
               </li>
               <li>
-                <a href="#" className="text-gray-400 hover:text-emerald-500 transition">
+                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
                   Privacy Policy
                 </a>
               </li>
@@ -103,18 +105,27 @@ function Footer({ adminTheme = false }) {
 
           {/* Contact */}
           <div>
-            <h3 className="text-lg font-semibold mb-4">Contact Us</h3>
-            <ul className="space-y-2 text-sm text-gray-400">
-              <li><i className="fas fa-envelope mr-2"></i>support@looplane.com</li>
-              <li><i className="fas fa-phone mr-2"></i>+91 99999 99999</li>
-              <li><i className="fas fa-map-marker-alt mr-2"></i>Mumbai, Maharashtra, India</li>
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-[#8ee4af] mb-6">Contact Us</h3>
+            <ul className="space-y-4 text-sm text-[#9cb5a4]">
+              <li className="flex items-center gap-3">
+                <i className="fas fa-envelope text-[#0ead69]"></i>
+                <span>support@looplane.com</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <i className="fas fa-phone text-[#0ead69]"></i>
+                <span>+91 99999 99999</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <i className="fas fa-map-marker-alt text-[#0ead69]"></i>
+                <span>Mumbai, Maharashtra, India</span>
+              </li>
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-gray-700 mt-8 pt-8 text-center text-sm text-gray-400">
+        <div className="border-t border-[#264d3d] mt-12 pt-8 text-center text-sm text-[#9cb5a4]">
           <p>&copy; {currentYear} LOOPLANE Carpool Platform. All rights reserved.</p>
-          <p className="mt-2">Built with <i className="fas fa-heart text-red-500"></i> for a greener future <i className="fas fa-seedling text-green-500"></i></p>
+          <p className="mt-2">Built with <span className="text-[#0ead69]">❤</span> for a greener future <span className="text-[#8ee4af]">🌱</span></p>
         </div>
       </div>
     </footer>

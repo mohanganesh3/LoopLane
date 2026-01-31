@@ -14,3 +14,6 @@ export { default as ConfirmModal } from './ConfirmModal';
 export { default as Skeleton, SkeletonCard, SkeletonListItem, SkeletonTable, SkeletonProfile, SkeletonStats } from './Skeleton';
 export { ToastProvider, useToast } from './Toast';
 export { default as ErrorBoundary } from './ErrorBoundary';
+export { default as CustomCursor } from './CustomCursor';
+export { default as AnimatedSection, AnimatedElement } from './AnimatedSection';
+export { default as MagneticButton } from './MagneticButton';
