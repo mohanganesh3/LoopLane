@@ -19,7 +19,7 @@ const RideDetails = () => {
   const [error, setError] = useState('');
   const [bookingModal, setBookingModal] = useState(false);
   const [notification, setNotification] = useState(null);
-  
+
   // Action states
   const [actionLoading, setActionLoading] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
@@ -27,7 +27,7 @@ const RideDetails = () => {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [otpInput, setOtpInput] = useState('');
   const [otpVerifying, setOtpVerifying] = useState(false);
-  
+
   // Get searched locations from navigation state (passed from SearchRides)
   const searchedPickup = location.state?.searchedPickup || null;
   const searchedDropoff = location.state?.searchedDropoff || null;
@@ -59,7 +59,7 @@ const RideDetails = () => {
       setLoading(false);
     }
   }, [id, fetchRideDetails]);
-  
+
   // Listen for real-time booking updates (for ride owners)
   useEffect(() => {
     if (socket && isConnected && id && user) {
@@ -69,52 +69,52 @@ const RideDetails = () => {
           fetchRideDetails();
         }
       };
-      
+
       const handleBookingCancelled = (data) => {
         if (data.rideId === id) {
           showNotification('A passenger cancelled their booking.', 'warning');
           fetchRideDetails();
         }
       };
-      
+
       const handleBookingConfirmed = (data) => {
         if (data.rideId === id) {
           showNotification('Booking confirmed!', 'success');
           fetchRideDetails();
         }
       };
-      
+
       const handlePickupConfirmed = (data) => {
         if (data.rideId === id || ride?.bookings?.some(b => b._id === data.bookingId)) {
           showNotification('✅ Pickup verified! Passenger on board.', 'success');
           fetchRideDetails();
         }
       };
-      
+
       const handleDropoffConfirmed = (data) => {
         if (data.rideId === id || ride?.bookings?.some(b => b._id === data.bookingId)) {
           showNotification('🎉 Dropoff complete!', 'success');
           fetchRideDetails();
         }
       };
-      
+
       const handleRideStatusUpdated = (data) => {
         if (data.rideId === id) {
           showNotification(`Ride status: ${data.status}`, 'info');
           fetchRideDetails();
         }
       };
-      
+
       socket.on('new-booking-request', handleNewBooking);
       socket.on('booking-cancelled', handleBookingCancelled);
       socket.on('booking-confirmed', handleBookingConfirmed);
       socket.on('pickup-confirmed', handlePickupConfirmed);
       socket.on('dropoff-confirmed', handleDropoffConfirmed);
       socket.on('ride-status-updated', handleRideStatusUpdated);
-      
+
       // Join ride room for updates
       socket.emit('join-ride', { rideId: id });
-      
+
       return () => {
         socket.off('new-booking-request', handleNewBooking);
         socket.off('booking-cancelled', handleBookingCancelled);
@@ -142,18 +142,18 @@ const RideDetails = () => {
     if (ride.status !== 'ACTIVE') return false;
     return true;
   };
-  
+
   // Check if current user is the ride owner
   const isOwner = ride?.rider?._id === user?._id;
-  
+
   // ============ DRIVER ACTIONS ============
-  
+
   // Start ride handler
   const handleStartRide = async () => {
     if (!window.confirm('Are you sure you want to start this ride? All confirmed passengers will be notified with their pickup OTP.')) {
       return;
     }
-    
+
     setActionLoading(true);
     try {
       await rideService.startRide(id);
@@ -165,13 +165,13 @@ const RideDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Complete ride handler
   const handleCompleteRide = async () => {
     if (!window.confirm('Are you sure you want to complete this ride? Make sure all passengers have been dropped off.')) {
       return;
     }
-    
+
     setActionLoading(true);
     try {
       await rideService.completeRide(id);
@@ -183,7 +183,7 @@ const RideDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // Open OTP verification modal
   const openOtpVerification = (booking, type) => {
     setSelectedBooking(booking);
@@ -191,7 +191,7 @@ const RideDetails = () => {
     setOtpInput('');
     setShowOtpModal(true);
   };
-  
+
   // Handle OTP verification
   const handleVerifyOTP = async () => {
     if (otpInput.length !== 4) {
@@ -229,7 +229,7 @@ const RideDetails = () => {
         <div className="container mx-auto px-4 max-w-4xl">
           <Alert type="error" message={error} />
           <div className="mt-4 flex gap-4">
-            <button 
+            <button
               onClick={fetchRideDetails}
               className="text-emerald-500 hover:underline inline-flex items-center"
             >
@@ -262,32 +262,29 @@ const RideDetails = () => {
       <div className="container mx-auto px-4 max-w-5xl">
         {/* Real-time notification */}
         {notification && (
-          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${
-            notification.type === 'success' ? 'bg-green-500 text-white' :
-            notification.type === 'error' ? 'bg-red-500 text-white' :
-            notification.type === 'warning' ? 'bg-yellow-500 text-white' :
-            'bg-blue-500 text-white'
-          }`}>
-            <i className={`fas ${
-              notification.type === 'success' ? 'fa-check-circle' :
-              notification.type === 'error' ? 'fa-times-circle' :
-              notification.type === 'warning' ? 'fa-exclamation-circle' :
-              'fa-info-circle'
-            }`}></i>
+          <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${notification.type === 'success' ? 'bg-green-500 text-white' :
+              notification.type === 'error' ? 'bg-red-500 text-white' :
+                notification.type === 'warning' ? 'bg-yellow-500 text-white' :
+                  'bg-blue-500 text-white'
+            }`}>
+            <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' :
+                notification.type === 'error' ? 'fa-times-circle' :
+                  notification.type === 'warning' ? 'fa-exclamation-circle' :
+                    'fa-info-circle'
+              }`}></i>
             <span className="font-medium">{notification.message}</span>
             <button onClick={() => setNotification(null)} className="ml-2 opacity-70 hover:opacity-100">
               <i className="fas fa-times"></i>
             </button>
           </div>
         )}
-        
+
         {/* OTP Verification Modal */}
         {showOtpModal && selectedBooking && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
-              }`}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
+                }`}>
                 <i className={`fas ${otpType === 'pickup' ? 'fa-key text-blue-600' : 'fa-flag-checkered text-purple-600'} text-2xl`}></i>
               </div>
               <h3 className="text-xl font-bold text-center text-gray-800 mb-2">
@@ -318,9 +315,8 @@ const RideDetails = () => {
                 <button
                   onClick={handleVerifyOTP}
                   disabled={otpVerifying || otpInput.length !== 4}
-                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${
-                    otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
-                  } disabled:opacity-50`}
+                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
+                    } disabled:opacity-50`}
                 >
                   {otpVerifying ? <><i className="fas fa-spinner fa-spin mr-2"></i>Verifying...</> : 'Verify OTP'}
                 </button>
@@ -328,7 +324,7 @@ const RideDetails = () => {
             </div>
           </div>
         )}
-        
+
         {/* Back Button */}
         <Link to={isOwner ? "/my-rides" : "/find-ride"} className="inline-flex items-center text-emerald-500 hover:text-emerald-700 mb-6">
           <i className="fas fa-arrow-left mr-2"></i>
@@ -340,10 +336,10 @@ const RideDetails = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* Route Card */}
             <RouteCard ride={ride} />
-            
+
             {/* === DRIVER DASHBOARD SECTION === */}
             {isOwner && (
-              <DriverDashboard 
+              <DriverDashboard
                 ride={ride}
                 actionLoading={actionLoading}
                 onStartRide={handleStartRide}
@@ -353,13 +349,13 @@ const RideDetails = () => {
                 onRefresh={fetchRideDetails}
               />
             )}
-            
+
             {/* Driver Info Card - only for non-owners */}
             {!isOwner && <DriverCard driver={ride.rider} />}
-            
+
             {/* Ride Details Card */}
             <RideInfoCard ride={ride} />
-            
+
             {/* Preferences Card */}
             {ride.preferences && <PreferencesCard preferences={ride.preferences} />}
           </div>
@@ -367,15 +363,15 @@ const RideDetails = () => {
           {/* Sidebar - Booking Card */}
           <div className="lg:col-span-1">
             {isOwner ? (
-              <RideManagementSidebar 
-                ride={ride} 
+              <RideManagementSidebar
+                ride={ride}
                 onStartRide={handleStartRide}
                 onCompleteRide={handleCompleteRide}
                 actionLoading={actionLoading}
               />
             ) : (
-              <BookingCard 
-                ride={ride} 
+              <BookingCard
+                ride={ride}
                 canBook={canBook()}
                 onBook={() => setBookingModal(true)}
                 isOwner={isOwner}
@@ -386,8 +382,8 @@ const RideDetails = () => {
 
         {/* Booking Modal */}
         {bookingModal && (
-          <BookingModal 
-            ride={ride} 
+          <BookingModal
+            ride={ride}
             searchedPickup={searchedPickup}
             searchedDropoff={searchedDropoff}
             searchedSeats={searchedSeats}
@@ -503,12 +499,12 @@ const RideStatusBadge = ({ status }) => {
 // Driver Card Component
 const DriverCard = ({ driver }) => {
   const [imgError, setImgError] = useState(false);
-  
+
   if (!driver) return null;
 
   const displayName = getUserDisplayName(driver);
   const photoUrl = getUserPhoto(driver);
-  
+
   // Get first vehicle from vehicles array or use vehicle object
   const vehicle = driver.vehicles?.[0] || driver.vehicle;
 
@@ -520,8 +516,8 @@ const DriverCard = ({ driver }) => {
 
       <div className="flex items-start space-x-4">
         {photoUrl && !imgError ? (
-          <img 
-            src={photoUrl} 
+          <img
+            src={photoUrl}
             alt={displayName}
             className="w-20 h-20 rounded-full object-cover border-4 border-emerald-100"
             onError={() => setImgError(true)}
@@ -546,7 +542,7 @@ const DriverCard = ({ driver }) => {
           {/* Rating */}
           <div className="flex items-center mt-1">
             <div className="flex text-yellow-400">
-              {[1,2,3,4,5].map(i => (
+              {[1, 2, 3, 4, 5].map(i => (
                 <i key={i} className={`fas fa-star ${i <= Math.round(getRating(driver.rating)) ? '' : 'text-gray-300'}`}></i>
               ))}
             </div>
@@ -674,11 +670,10 @@ const PreferencesCard = ({ preferences }) => {
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {preferencesList.map(pref => (
-          <div 
+          <div
             key={pref.key}
-            className={`flex items-center p-3 rounded-lg ${
-              pref.value ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'
-            }`}
+            className={`flex items-center p-3 rounded-lg ${pref.value ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-400'
+              }`}
           >
             <i className={`fas ${pref.icon} mr-2`}></i>
             <span className="text-sm font-medium">{pref.label}</span>
@@ -692,14 +687,14 @@ const PreferencesCard = ({ preferences }) => {
 // Passengers Card - Shows all passengers with their pickup/dropoff for the rider
 const PassengersCard = ({ ride }) => {
   const bookings = ride.bookings || [];
-  
+
   // Filter by different statuses
   const pendingBookings = bookings.filter(b => b.status === 'PENDING');
-  const confirmedBookings = bookings.filter(b => 
+  const confirmedBookings = bookings.filter(b =>
     ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF'].includes(b.status)
   );
   const completedBookings = bookings.filter(b => b.status === 'COMPLETED');
-  
+
   const getStatusBadge = (status) => {
     const config = {
       'PENDING': { color: 'bg-yellow-100 text-yellow-800', text: 'Pending' },
@@ -808,18 +803,18 @@ const PassengersCard = ({ ride }) => {
 const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
   const passenger = booking.passenger;
   const [imgError, setImgError] = useState(false);
-  
+
   const displayName = getUserDisplayName(passenger);
   const photoUrl = getUserPhoto(passenger);
-  
+
   return (
     <div className={`border rounded-lg p-4 ${isPending ? 'border-yellow-200 bg-yellow-50/30' : 'border-gray-200'}`}>
       {/* Passenger Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center">
           {photoUrl && !imgError ? (
-            <img 
-              src={photoUrl} 
+            <img
+              src={photoUrl}
               alt={displayName}
               className="w-12 h-12 rounded-full object-cover mr-3"
               onError={() => setImgError(true)}
@@ -854,9 +849,9 @@ const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
             </p>
           </div>
         </div>
-        
+
         <div className="ml-3 border-l-2 border-dashed border-gray-300 h-3"></div>
-        
+
         <div className="flex items-start">
           <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
             <i className="fas fa-map-marker-alt text-white text-xs"></i>
@@ -883,25 +878,25 @@ const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
       {/* Contact & Actions */}
       <div className="mt-3 flex flex-wrap gap-2">
         {/* Chat Button */}
-        <Link 
+        <Link
           to={`/chat?bookingId=${booking._id}`}
           className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 px-3 rounded-lg text-center transition"
         >
           <i className="fas fa-comments mr-1"></i>Chat
         </Link>
-        
+
         {/* Phone Button - only if phone available */}
         {passenger?.phone && (
-          <a 
+          <a
             href={`tel:${passenger.phone}`}
             className="bg-green-500 hover:bg-green-600 text-white text-sm py-2 px-3 rounded-lg transition"
           >
             <i className="fas fa-phone"></i>
           </a>
         )}
-        
+
         {/* View Booking Details */}
-        <Link 
+        <Link
           to={`/bookings/${booking._id}`}
           className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm py-2 px-3 rounded-lg transition"
         >
@@ -912,7 +907,7 @@ const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
       {/* Accept/Reject buttons for pending */}
       {isPending && (
         <div className="mt-3 pt-3 border-t flex gap-2">
-          <Link 
+          <Link
             to={`/bookings/${booking._id}`}
             className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm py-2 px-4 rounded-lg text-center transition font-medium"
           >
@@ -1024,7 +1019,7 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
   // This shows the passenger what THEY searched for, not the entire ride route
   const pickupPoint = searchedPickup?.address || searchedPickup?.name || ride.route?.start?.address || 'Start point';
   const dropoffPoint = searchedDropoff?.address || searchedDropoff?.name || ride.route?.destination?.address || 'End point';
-  
+
   // For sending to backend - include coordinates
   const pickupData = searchedPickup || {
     address: ride.route?.start?.address,
@@ -1045,16 +1040,16 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
 
   // ✅ EDGE CASE FIX: Prevent double-submission race condition
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // ✅ Double-click protection - prevent multiple submissions
     if (isSubmitting || loading) {
       console.log('⚠️ Booking already in progress, ignoring duplicate submission');
       return;
     }
-    
+
     setError('');
     setLoading(true);
     setIsSubmitting(true); // Lock form immediately
@@ -1063,7 +1058,7 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
       // Get coordinates - searchedPickup has coordinates as [lon, lat] array
       const pickupCoords = pickupData.coordinates || (pickupData.lat && pickupData.lon ? [parseFloat(pickupData.lon), parseFloat(pickupData.lat)] : null);
       const dropoffCoords = dropoffData.coordinates || (dropoffData.lat && dropoffData.lon ? [parseFloat(dropoffData.lon), parseFloat(dropoffData.lat)] : null);
-      
+
       const bookingData = {
         seatsBooked: seats,
         // Send the full location data with coordinates
@@ -1084,7 +1079,7 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
       };
 
       console.log('📝 Booking data:', bookingData);
-      
+
       const response = await bookingService.createBooking(ride._id, bookingData);
       onSuccess(response.booking._id);
     } catch (err) {
@@ -1187,22 +1182,20 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('CASH')}
-                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${
-                    paymentMethod === 'CASH'
+                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${paymentMethod === 'CASH'
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                       : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <i className="fas fa-money-bill-wave mr-2"></i>Cash
                 </button>
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('UPI')}
-                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${
-                    paymentMethod === 'UPI'
+                  className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${paymentMethod === 'UPI'
                       ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
                       : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
+                    }`}
                 >
                   <i className="fas fa-mobile-alt mr-2"></i>UPI
                 </button>
@@ -1252,7 +1245,7 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
 // This component shows for the ride owner/driver with full control panel
 const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onVerifyPickup, onVerifyDropoff, onRefresh }) => {
   const bookings = ride.bookings || [];
-  
+
   // Filter bookings by status
   const pendingBookings = bookings.filter(b => b.status === 'PENDING');
   const confirmedBookings = bookings.filter(b => b.status === 'CONFIRMED');
@@ -1261,28 +1254,28 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
   const dropoffPendingBookings = bookings.filter(b => b.status === 'DROPOFF_PENDING');
   const completedBookings = bookings.filter(b => ['DROPPED_OFF', 'COMPLETED'].includes(b.status));
   const activeBookings = bookings.filter(b => !['PENDING', 'CANCELLED', 'COMPLETED', 'DROPPED_OFF'].includes(b.status));
-  
+
   // Can start ride check: must be ACTIVE with at least one confirmed booking
   const canStartRide = ride.status === 'ACTIVE' && confirmedBookings.length > 0;
-  
+
   // Can complete ride check: must be IN_PROGRESS and all active passengers dropped off
-  const canCompleteRide = ride.status === 'IN_PROGRESS' && 
-    pickupPendingBookings.length === 0 && 
-    pickedUpBookings.length === 0 && 
+  const canCompleteRide = ride.status === 'IN_PROGRESS' &&
+    pickupPendingBookings.length === 0 &&
+    pickedUpBookings.length === 0 &&
     dropoffPendingBookings.length === 0;
 
   // Progress calculation
   const getProgress = () => {
     const totalPassengers = bookings.filter(b => b.status !== 'PENDING' && b.status !== 'CANCELLED').length;
     if (totalPassengers === 0) return { step: 0, percent: 0 };
-    
+
     if (ride.status === 'COMPLETED') return { step: 4, percent: 100 };
     if (ride.status === 'ACTIVE') return { step: 1, percent: 25 };
-    
+
     // Count based on passenger statuses
     const pickedUp = bookings.filter(b => ['PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF', 'COMPLETED'].includes(b.status)).length;
     const droppedOff = bookings.filter(b => ['DROPPED_OFF', 'COMPLETED'].includes(b.status)).length;
-    
+
     if (droppedOff === totalPassengers) return { step: 4, percent: 100 };
     if (droppedOff > 0) return { step: 3, percent: 75 };
     if (pickedUp === totalPassengers) return { step: 3, percent: 65 };
@@ -1291,7 +1284,7 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
   };
 
   const { step: currentStep, percent } = getProgress();
-  
+
   const getStatusBadge = (status) => {
     const config = {
       'PENDING': { color: 'bg-yellow-100 text-yellow-800 border-yellow-300', text: 'Pending Approval' },
@@ -1321,7 +1314,7 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             <i className="fas fa-sync-alt mr-1"></i>Refresh
           </button>
         </div>
-        
+
         {/* Journey Progress Bar */}
         <div className="bg-white/10 rounded-lg p-4">
           <div className="flex justify-between text-sm mb-2">
@@ -1329,7 +1322,7 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             <span>{percent}%</span>
           </div>
           <div className="h-2 bg-white/20 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-white rounded-full transition-all duration-500"
               style={{ width: `${percent}%` }}
             />
@@ -1413,7 +1406,7 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
         )}
 
         {/* === PASSENGERS REQUIRING ACTION === */}
-        
+
         {/* Pending Approval Section */}
         {pendingBookings.length > 0 && (
           <div className="mb-6">
@@ -1425,9 +1418,9 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             </h3>
             <div className="space-y-3">
               {pendingBookings.map(booking => (
-                <PassengerActionCard 
-                  key={booking._id} 
-                  booking={booking} 
+                <PassengerActionCard
+                  key={booking._id}
+                  booking={booking}
                   getStatusBadge={getStatusBadge}
                   actionType="approve"
                 />
@@ -1447,9 +1440,9 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             </h3>
             <div className="space-y-3">
               {pickupPendingBookings.map(booking => (
-                <PassengerActionCard 
-                  key={booking._id} 
-                  booking={booking} 
+                <PassengerActionCard
+                  key={booking._id}
+                  booking={booking}
                   getStatusBadge={getStatusBadge}
                   actionType="pickup"
                   onVerifyPickup={onVerifyPickup}
@@ -1470,9 +1463,9 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             </h3>
             <div className="space-y-3">
               {pickedUpBookings.map(booking => (
-                <PassengerActionCard 
-                  key={booking._id} 
-                  booking={booking} 
+                <PassengerActionCard
+                  key={booking._id}
+                  booking={booking}
                   getStatusBadge={getStatusBadge}
                   actionType="transit"
                   onVerifyDropoff={onVerifyDropoff}
@@ -1493,9 +1486,9 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             </h3>
             <div className="space-y-3">
               {dropoffPendingBookings.map(booking => (
-                <PassengerActionCard 
-                  key={booking._id} 
-                  booking={booking} 
+                <PassengerActionCard
+                  key={booking._id}
+                  booking={booking}
                   getStatusBadge={getStatusBadge}
                   actionType="dropoff"
                   onVerifyDropoff={onVerifyDropoff}
@@ -1516,9 +1509,9 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
             </h3>
             <div className="space-y-3">
               {completedBookings.map(booking => (
-                <PassengerActionCard 
-                  key={booking._id} 
-                  booking={booking} 
+                <PassengerActionCard
+                  key={booking._id}
+                  booking={booking}
                   getStatusBadge={getStatusBadge}
                   actionType="complete"
                 />
@@ -1546,7 +1539,7 @@ const DriverDashboard = ({ ride, actionLoading, onStartRide, onCompleteRide, onV
 const PassengerActionCard = ({ booking, getStatusBadge, actionType, onVerifyPickup, onVerifyDropoff }) => {
   const passenger = booking.passenger;
   const [imgError, setImgError] = useState(false);
-  
+
   const displayName = getUserDisplayName(passenger);
   const photoUrl = getUserPhoto(passenger);
 
@@ -1568,8 +1561,8 @@ const PassengerActionCard = ({ booking, getStatusBadge, actionType, onVerifyPick
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center">
           {photoUrl && !imgError ? (
-            <img 
-              src={photoUrl} 
+            <img
+              src={photoUrl}
               alt={displayName}
               className="w-12 h-12 rounded-full object-cover mr-3 border-2 border-white shadow"
               onError={() => setImgError(true)}
@@ -1631,23 +1624,23 @@ const PassengerActionCard = ({ booking, getStatusBadge, actionType, onVerifyPick
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-2">
         {/* Always show chat and view details */}
-        <Link 
+        <Link
           to={`/chat?bookingId=${booking._id}`}
           className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2.5 px-3 rounded-lg text-center font-medium transition"
         >
           <i className="fas fa-comments mr-1"></i>Chat
         </Link>
-        
+
         {passenger?.phone && (
-          <a 
+          <a
             href={`tel:${passenger.phone}`}
             className="bg-green-500 hover:bg-green-600 text-white text-sm py-2.5 px-3 rounded-lg transition"
           >
             <i className="fas fa-phone"></i>
           </a>
         )}
-        
-        <Link 
+
+        <Link
           to={`/bookings/${booking._id}`}
           className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm py-2.5 px-3 rounded-lg transition"
         >
@@ -1656,7 +1649,7 @@ const PassengerActionCard = ({ booking, getStatusBadge, actionType, onVerifyPick
 
         {/* Approval action */}
         {actionType === 'approve' && (
-          <Link 
+          <Link
             to={`/bookings/${booking._id}`}
             className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm py-2.5 px-3 rounded-lg text-center font-medium transition"
           >
@@ -1703,21 +1696,21 @@ const RideManagementSidebar = ({ ride, onStartRide, onCompleteRide, actionLoadin
   const bookings = ride.bookings || [];
   const confirmedBookings = bookings.filter(b => b.status !== 'PENDING' && b.status !== 'CANCELLED');
   const completedBookings = bookings.filter(b => ['DROPPED_OFF', 'COMPLETED'].includes(b.status));
-  
+
   // Calculate earnings
   const totalEarnings = confirmedBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const collectedEarnings = completedBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const pendingEarnings = totalEarnings - collectedEarnings;
 
   const canStartRide = ride.status === 'ACTIVE' && bookings.filter(b => b.status === 'CONFIRMED').length > 0;
-  
+
   const pickupPendingCount = bookings.filter(b => b.status === 'PICKUP_PENDING').length;
   const onBoardCount = bookings.filter(b => ['PICKED_UP', 'IN_TRANSIT'].includes(b.status)).length;
   const dropoffPendingCount = bookings.filter(b => b.status === 'DROPOFF_PENDING').length;
-  
-  const canCompleteRide = ride.status === 'IN_PROGRESS' && 
-    pickupPendingCount === 0 && 
-    onBoardCount === 0 && 
+
+  const canCompleteRide = ride.status === 'IN_PROGRESS' &&
+    pickupPendingCount === 0 &&
+    onBoardCount === 0 &&
     dropoffPendingCount === 0;
 
   const getRideStatusInfo = () => {
@@ -1848,7 +1841,7 @@ const RideManagementSidebar = ({ ride, onStartRide, onCompleteRide, actionLoadin
 
         {/* Quick Links */}
         <div className="space-y-2">
-          <Link 
+          <Link
             to="/my-rides"
             className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 px-4 rounded-lg transition flex items-center justify-center"
           >

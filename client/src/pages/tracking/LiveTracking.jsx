@@ -85,18 +85,18 @@ const LiveTracking = () => {
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
   const pollRef = useRef(null);
-  
+
   // Core state
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
+
   // Location state
   const [driverLocation, setDriverLocation] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [routeCoords, setRouteCoords] = useState([]);
   const [routeInfo, setRouteInfo] = useState({ distance: null, duration: null });
-  
+
   // UI state
   const [notification, setNotification] = useState(null);
   const [otpInput, setOtpInput] = useState('');
@@ -115,16 +115,16 @@ const LiveTracking = () => {
       const response = await bookingService.getBookingById(bookingId);
       if (response.success) {
         setBooking(response.booking);
-        
+
         // Fetch route
-        const pickup = response.booking?.pickupPoint?.coordinates || 
-                      response.booking?.ride?.route?.start?.coordinates;
-        const dropoff = response.booking?.dropoffPoint?.coordinates || 
-                       response.booking?.ride?.route?.destination?.coordinates;
+        const pickup = response.booking?.pickupPoint?.coordinates ||
+          response.booking?.ride?.route?.start?.coordinates;
+        const dropoff = response.booking?.dropoffPoint?.coordinates ||
+          response.booking?.ride?.route?.destination?.coordinates;
         if (pickup && dropoff) {
           fetchRoute(pickup, dropoff);
         }
-        
+
         // Set initial driver location from ride start if not already set
         // This shows the car on the map even before real-time updates
         if (!driverLocation && response.booking?.ride?.route?.start?.coordinates) {
@@ -294,8 +294,8 @@ const LiveTracking = () => {
   };
 
   const handleSafety = () => {
-    navigate(`/tracking/${bookingId}/safety`, { 
-      state: { booking, driverLocation, userLocation } 
+    navigate(`/tracking/${bookingId}/safety`, {
+      state: { booking, driverLocation, userLocation }
     });
   };
 
@@ -370,9 +370,9 @@ const LiveTracking = () => {
   const pickupCoords = booking?.pickupPoint?.coordinates || booking?.ride?.route?.start?.coordinates;
   const dropoffCoords = booking?.dropoffPoint?.coordinates || booking?.ride?.route?.destination?.coordinates;
   const defaultCenter = [14.7502, 78.5480]; // Fallback center (AP, India)
-  
+
   const mapCenter = driverLocation ? [driverLocation.lat, driverLocation.lng] :
-                    pickupCoords ? [pickupCoords[1], pickupCoords[0]] : defaultCenter;
+    pickupCoords ? [pickupCoords[1], pickupCoords[0]] : defaultCenter;
   const pickupLatLng = pickupCoords ? [pickupCoords[1], pickupCoords[0]] : null;
   const dropoffLatLng = dropoffCoords ? [dropoffCoords[1], dropoffCoords[0]] : null;
 
@@ -382,11 +382,10 @@ const LiveTracking = () => {
     <div className="h-[calc(100vh-4rem)] flex flex-col lg:flex-row bg-gray-100">
       {/* Notification Toast */}
       {notification && (
-        <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-[2000] px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${
-          notification.type === 'success' ? 'bg-green-500 text-white' :
-          notification.type === 'error' ? 'bg-red-500 text-white' :
-          'bg-blue-500 text-white'
-        }`}>
+        <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-[2000] px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${notification.type === 'success' ? 'bg-green-500 text-white' :
+            notification.type === 'error' ? 'bg-red-500 text-white' :
+              'bg-blue-500 text-white'
+          }`}>
           <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' : notification.type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}`}></i>
           <span className="font-medium">{notification.message}</span>
           <button onClick={() => setNotification(null)} className="ml-2 opacity-70 hover:opacity-100">
@@ -399,9 +398,8 @@ const LiveTracking = () => {
       {showOtpModal && (
         <div className="fixed inset-0 bg-black/50 z-[3000] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-              otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
-            }`}>
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
+              }`}>
               <i className={`fas ${otpType === 'pickup' ? 'fa-key text-blue-600' : 'fa-flag-checkered text-purple-600'} text-2xl`}></i>
             </div>
             <h3 className="text-xl font-bold text-center text-gray-800 mb-2">
@@ -429,9 +427,8 @@ const LiveTracking = () => {
               <button
                 onClick={handleVerifyOTP}
                 disabled={verifying || otpInput.length !== 4}
-                className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${
-                  otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
-                } disabled:opacity-50`}
+                className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
+                  } disabled:opacity-50`}
               >
                 {verifying ? <><i className="fas fa-spinner fa-spin mr-2"></i>Verifying...</> : 'Verify OTP'}
               </button>
@@ -447,12 +444,12 @@ const LiveTracking = () => {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
-          {pickupLatLng && <Marker position={pickupLatLng} icon={pickupIcon}><Popup><b>Pickup:</b><br/>{booking?.pickupPoint?.address || 'Pickup Point'}</Popup></Marker>}
-          {dropoffLatLng && <Marker position={dropoffLatLng} icon={dropoffIcon}><Popup><b>Drop-off:</b><br/>{booking?.dropoffPoint?.address || 'Destination'}</Popup></Marker>}
-          {driverLocation && <Marker position={[driverLocation.lat, driverLocation.lng]} icon={driverIcon}><Popup><b>Driver</b><br/>Last update: {lastUpdate?.toLocaleTimeString() || 'Now'}</Popup></Marker>}
+
+          {pickupLatLng && <Marker position={pickupLatLng} icon={pickupIcon}><Popup><b>Pickup:</b><br />{booking?.pickupPoint?.address || 'Pickup Point'}</Popup></Marker>}
+          {dropoffLatLng && <Marker position={dropoffLatLng} icon={dropoffIcon}><Popup><b>Drop-off:</b><br />{booking?.dropoffPoint?.address || 'Destination'}</Popup></Marker>}
+          {driverLocation && <Marker position={[driverLocation.lat, driverLocation.lng]} icon={driverIcon}><Popup><b>Driver</b><br />Last update: {lastUpdate?.toLocaleTimeString() || 'Now'}</Popup></Marker>}
           {userLocation && <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}><Popup><b>Your Location</b></Popup></Marker>}
-          
+
           {routeCoords.length > 0 && <Polyline positions={routeCoords} color="#10b981" weight={5} opacity={0.8} />}
           {mapPoints.length >= 2 && <FitBounds points={mapPoints} />}
         </MapContainer>
@@ -463,9 +460,8 @@ const LiveTracking = () => {
         </button>
 
         {/* Connection Status */}
-        <div className={`absolute top-4 right-4 z-[1000] px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 ${
-          isConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-        }`}>
+        <div className={`absolute top-4 right-4 z-[1000] px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 ${isConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+          }`}>
           <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-pulse'}`}></span>
           {isConnected ? 'Live' : 'Connecting...'}
         </div>
@@ -478,7 +474,11 @@ const LiveTracking = () => {
       </div>
 
       {/* RIGHT: Info Panel */}
-      <div className="flex-1 lg:w-2/5 lg:max-w-md overflow-y-auto bg-white">
+      <div
+        className="flex-1 lg:w-2/5 lg:max-w-md overflow-y-auto overscroll-contain bg-white"
+        data-lenis-prevent
+        style={{ touchAction: 'pan-y' }}
+      >
         {/* Header with Status */}
         <div className="sticky top-0 bg-white border-b z-10">
           <div className="p-4">
@@ -488,7 +488,7 @@ const LiveTracking = () => {
                 <i className="fas fa-exclamation-triangle"></i>Safety
               </button>
             </div>
-            
+
             {/* Status Badge */}
             <StatusBadge status={booking.status} formatStatus={formatStatus} getStatusColor={getStatusColor} />
           </div>
@@ -565,13 +565,13 @@ const LiveTracking = () => {
           <Link to={`/bookings/${booking._id}`} className="block w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold text-center hover:bg-gray-200 transition">
             <i className="fas fa-info-circle mr-2"></i>View Full Details
           </Link>
-          
+
           {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && !booking.reviews?.passengerReviewed && (
             <Link to={`/bookings/${booking._id}/rate`} className="block w-full py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-xl font-semibold text-center hover:opacity-90 transition">
               <i className="fas fa-star mr-2"></i>Rate Your Experience
             </Link>
           )}
-          
+
           {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && booking.reviews?.passengerReviewed && (
             <div className="w-full py-3 bg-green-100 text-green-700 rounded-xl font-semibold text-center">
               <i className="fas fa-check-circle mr-2"></i>Review Submitted
@@ -606,7 +606,7 @@ const StatusBadge = ({ status, formatStatus, getStatusColor }) => {
     red: 'bg-red-500',
     gray: 'bg-gray-500'
   };
-  
+
   return (
     <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${colorClasses[color]}`}>
       <span className={`w-2 h-2 rounded-full ${dotClasses[color]} mr-2 ${['PICKUP_PENDING', 'IN_TRANSIT'].includes(status) ? 'animate-pulse' : ''}`}></span>
@@ -632,9 +632,8 @@ const ProgressSteps = ({ currentStep }) => {
           const isCurrent = idx === currentStep - 1;
           return (
             <div key={idx} className="flex flex-col items-center flex-1 relative z-10">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${
-                isActive ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-emerald-100 text-emerald-600 ring-2 ring-emerald-500' : 'bg-gray-200 text-gray-400'
-              }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all ${isActive ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-emerald-100 text-emerald-600 ring-2 ring-emerald-500' : 'bg-gray-200 text-gray-400'
+                }`}>
                 <i className={`fas ${step.icon}`}></i>
               </div>
               <span className={`text-[10px] mt-1 text-center ${isActive ? 'text-emerald-600 font-semibold' : 'text-gray-400'}`}>{step.label}</span>
@@ -784,7 +783,7 @@ const JourneyStatusMessage = ({ booking, isPassenger }) => {
     green: 'bg-green-50 border-green-200 text-green-800',
     red: 'bg-red-50 border-red-200 text-red-800'
   };
-  
+
   const iconClasses = {
     amber: 'text-amber-500',
     blue: 'text-blue-500',
@@ -832,9 +831,9 @@ const RouteDisplay = ({ booking }) => (
 // Driver Card
 const DriverCard = ({ rider, bookingId, navigate }) => {
   const [imgError, setImgError] = useState(false);
-  
+
   if (!rider) return <p className="text-gray-500 text-sm">Driver information not available</p>;
-  
+
   const displayName = getUserDisplayName(rider);
   const photo = getUserPhoto(rider);
   const vehicle = rider.vehicles?.[0] || rider.vehicle;
@@ -880,9 +879,9 @@ const DriverCard = ({ rider, bookingId, navigate }) => {
 // Passenger Card
 const PassengerCard = ({ passenger, bookingId, navigate }) => {
   const [imgError, setImgError] = useState(false);
-  
+
   if (!passenger) return <p className="text-gray-500 text-sm">Passenger information not available</p>;
-  
+
   const displayName = getUserDisplayName(passenger);
   const photo = getUserPhoto(passenger);
   const rating = getRating(passenger.rating) || 4.5;

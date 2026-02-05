@@ -13,12 +13,12 @@ const LocationInput = ({
   const [showSuggestions, setShowSuggestions] = useState(false);
   const wrapperRef = useRef(null);
   const onChangeRef = useRef(onChange);
-  
+
   // Keep onChange ref up to date without triggering effects
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
-  
+
   const {
     query,
     setQuery,
@@ -74,10 +74,14 @@ const LocationInput = ({
         required={required}
         autoComplete="off"
       />
-      
+
       {/* Suggestions Dropdown */}
       {showSuggestions && (query.length >= 3 || suggestions.length > 0) && (
-        <div className="absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-80 overflow-y-auto">
+        <div
+          className="absolute z-50 w-full bg-white border border-gray-300 rounded-lg shadow-lg mt-1 max-h-80 overflow-y-auto overscroll-contain"
+          data-lenis-prevent
+          style={{ touchAction: 'pan-y' }}
+        >
           {loading ? (
             <div className="p-3 text-gray-500 text-sm flex items-center">
               <i className="fas fa-spinner fa-spin mr-2"></i>
