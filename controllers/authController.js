@@ -4,9 +4,15 @@
  */
 
 const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const emailService = require('../utils/emailService');
 const helpers = require('../utils/helpers');
+const { 
+    generateAccessToken, 
+    generateRefreshToken,
+    getCookieOptions 
+} = require('../middleware/jwt');
 
 /**
  * Show registration page
@@ -284,6 +290,26 @@ exports.login = asyncHandler(async (req, res) => {
     req.session.userId = user._id.toString();
     req.session.userRole = user.role;
 
+    // Generate JWT tokens for API/mobile clients
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // Store refresh token in database with device info
+    const deviceInfo = req.headers['user-agent'] || 'Unknown Device';
+    const ipAddress = req.ip || req.connection.remoteAddress || 'Unknown';
+    
+    await RefreshToken.createToken(user._id, refreshToken, {
+        deviceInfo,
+        ipAddress
+    });
+
+    // Set tokens in HTTP-only cookies
+    const accessTokenMaxAge = 15 * 60 * 1000; // 15 minutes
+    const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+    
+    res.cookie('accessToken', accessToken, getCookieOptions(accessTokenMaxAge));
+    res.cookie('refreshToken', refreshToken, getCookieOptions(refreshTokenMaxAge));
+
     // Update last login
     user.lastLogin = new Date();
     await user.save();
@@ -308,6 +334,10 @@ exports.login = asyncHandler(async (req, res) => {
         success: true,
         message: 'Login successful',
         user: userData,
+        sessionId: req.session.id,
+        accessToken, // Return tokens for mobile/API clients
+        refreshToken,
+        expiresIn: 900, // 15 minutes in seconds
         redirectUrl
     });
 });
@@ -315,23 +345,45 @@ exports.login = asyncHandler(async (req, res) => {
 /**
  * Handle logout
  */
-exports.logout = (req, res) => {
+exports.logout = asyncHandler(async (req, res) => {
+    // Revoke refresh token if present
+    const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
+    
+    if (refreshToken) {
+        try {
+            const { verifyRefreshToken } = require('../middleware/jwt');
+            const decoded = verifyRefreshToken(refreshToken);
+            const tokenDoc = await RefreshToken.findValidToken(decoded.userId, refreshToken);
+            
+            if (tokenDoc) {
+                await RefreshToken.revokeToken(tokenDoc._id);
+                console.log('✅ Refresh token revoked on logout');
+            }
+        } catch (error) {
+            console.error('⚠️ Error revoking refresh token:', error.message);
+            // Continue with logout even if token revocation fails
+        }
+    }
+
+    // Destroy session
     req.session.destroy((err) => {
         if (err) {
             console.error('Session destruction error:', err);
-            return res.status(500).json({
-                success: false,
-                message: 'Logout failed'
-            });
+            // Still clear cookies even if session destruction fails
         }
+        
+        // Clear all auth cookies
         res.clearCookie('connect.sid');
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        
         return res.status(200).json({
             success: true,
             message: 'Logged out successfully',
             redirectUrl: '/login'
         });
     });
-};
+});
 
 /**
  * Show forgot password page

@@ -2,33 +2,62 @@
  * Authentication Middleware
  * Protects routes and checks user roles
  * Updated for React frontend - returns JSON responses
+ * SUPPORTS HYBRID AUTH: JWT tokens (preferred) + session fallback
  */
 
 const User = require('../models/User');
+const { verifyAccessToken, extractToken } = require('./jwt');
 
 /**
- * Check if user is authenticated and not suspended/deleted
+ * Check if user is authenticated (Hybrid: JWT or Session)
+ * Tries JWT first, falls back to session for backward compatibility
  */
 exports.isAuthenticated = async (req, res, next) => {
-    if (!req.session || !req.session.userId) {
+    let userId = null;
+    let authMethod = null;
+
+    // STRATEGY 1: Try JWT authentication first (from header or cookie)
+    const token = extractToken(req);
+    
+    if (token) {
+        try {
+            const decoded = verifyAccessToken(token);
+            userId = decoded.userId;
+            authMethod = 'jwt';
+        } catch (error) {
+            // JWT invalid or expired - will try session fallback
+            console.log('⚠️ JWT verification failed, trying session fallback:', error.message);
+        }
+    }
+
+    // STRATEGY 2: Fall back to session authentication
+    if (!userId && req.session && req.session.userId) {
+        userId = req.session.userId;
+        authMethod = 'session';
+    }
+
+    // No authentication found
+    if (!userId) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
             redirectUrl: '/login'
         });
     }
     
     try {
-        // Fetch user from database to check current status - include vehicles and documents for profile completion check
-        const user = await User.findById(req.session.userId)
+        // Fetch user from database to check current status
+        const user = await User.findById(userId)
             .select('accountStatus isActive isSuspended suspensionReason role email profile vehicles documents verificationStatus');
         
         if (!user) {
             // User was deleted from database
-            req.session.destroy();
+            if (req.session) req.session.destroy();
             return res.status(401).json({
                 success: false,
                 message: 'Account not found. Please login again.',
+                code: 'USER_NOT_FOUND',
                 redirectUrl: '/login',
                 forceLogout: true
             });
@@ -36,10 +65,11 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is suspended
         if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
-            req.session.destroy();
+            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: `Your account has been suspended. Reason: ${user.suspensionReason || 'Policy violation'}. Please check your email for details.`,
+                code: 'ACCOUNT_SUSPENDED',
                 accountSuspended: true,
                 redirectUrl: '/login',
                 forceLogout: true
@@ -48,10 +78,11 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is deleted
         if (user.accountStatus === 'DELETED') {
-            req.session.destroy();
+            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: 'This account has been deleted.',
+                code: 'ACCOUNT_DELETED',
                 accountDeleted: true,
                 redirectUrl: '/login',
                 forceLogout: true
@@ -60,24 +91,29 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is inactive
         if (user.isActive === false) {
-            req.session.destroy();
+            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: 'Your account is inactive. Please contact support.',
+                code: 'ACCOUNT_INACTIVE',
                 accountInactive: true,
                 redirectUrl: '/login',
                 forceLogout: true
             });
         }
         
-        // Attach user to request for downstream use
+        // Attach user and auth info to request for downstream use
         req.user = user;
+        req.userId = userId;
+        req.authMethod = authMethod; // 'jwt' or 'session'
+        
         return next();
     } catch (error) {
         console.error('Error in isAuthenticated middleware:', error);
         return res.status(500).json({
             success: false,
-            message: 'Server error during authentication'
+            message: 'Server error during authentication',
+            code: 'SERVER_ERROR'
         });
     }
 };

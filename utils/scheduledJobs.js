@@ -5,6 +5,7 @@
 
 const Ride = require('../models/Ride');
 const Booking = require('../models/Booking');
+const RefreshToken = require('../models/RefreshToken');
 
 /**
  * Mark rides as expired if departure time has passed
@@ -98,6 +99,25 @@ const cleanupOldChats = async (daysOld = 30) => {
 };
 
 /**
+ * Clean up expired JWT refresh tokens
+ * Removes tokens that have passed their expiration date
+ */
+const cleanupExpiredTokens = async () => {
+    try {
+        const deletedCount = await RefreshToken.cleanupExpired();
+        
+        if (deletedCount > 0) {
+            console.log(`✅ [Scheduled Job] Cleaned up ${deletedCount} expired refresh tokens`);
+        }
+        
+        return deletedCount;
+    } catch (error) {
+        console.error('❌ [Scheduled Job] Error cleaning up tokens:', error.message);
+        return 0;
+    }
+};
+
+/**
  * Run all scheduled jobs
  */
 const runAllJobs = async () => {
@@ -107,7 +127,8 @@ const runAllJobs = async () => {
     const results = {
         expiredRides: await expireOldRides(),
         expiredBookings: await expirePendingBookings(),
-        cleanedChats: await cleanupOldChats()
+        cleanedChats: await cleanupOldChats(),
+        expiredTokens: await cleanupExpiredTokens()
     };
     
     const duration = Date.now() - startTime;
@@ -120,5 +141,6 @@ module.exports = {
     expireOldRides,
     expirePendingBookings,
     cleanupOldChats,
+    cleanupExpiredTokens,
     runAllJobs
 };
