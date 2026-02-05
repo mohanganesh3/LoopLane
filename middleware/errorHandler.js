@@ -18,6 +18,7 @@ class AppError extends Error {
 
 /**
  * Not Found Error Handler (404)
+ * Handles requests to non-existent routes
  */
 const notFound = (req, res, next) => {
     // Silently handle favicon requests
@@ -25,6 +26,25 @@ const notFound = (req, res, next) => {
         return res.status(204).end();
     }
     
+    // Provide helpful error message for API routes
+    if (req.originalUrl.startsWith('/api')) {
+        return res.status(404).json({
+            success: false,
+            message: 'API endpoint not found',
+            code: 'ROUTE_NOT_FOUND',
+            path: req.originalUrl,
+            method: req.method,
+            availableEndpoints: {
+                auth: '/api/auth/login, /api/auth/register, /api/auth/logout',
+                users: '/api/user/profile, /api/user/update',
+                rides: '/api/rides, /api/rides/:id',
+                bookings: '/api/bookings, /api/bookings/:id',
+                token: '/api/token/refresh, /api/token/revoke'
+            }
+        });
+    }
+    
+    // For non-API routes, pass to error handler (will be caught by SPA fallback)
     const error = new AppError(`Route not found - ${req.originalUrl}`, 404);
     next(error);
 };
