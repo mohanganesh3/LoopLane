@@ -55,9 +55,27 @@ app.set('io', io);
 // Connect to MongoDB
 connectDB();
 
-// Security middleware
+// Security middleware with CSP tailored for SPA + external assets (maps/fonts)
 app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' // Enable in production
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
+        useDefaults: true,
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+            imgSrc: ["'self'", 'data:', 'https://cdnjs.cloudflare.com', 'https://raw.githubusercontent.com', 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+            connectSrc: [
+                "'self'",
+                'https://nominatim.openstreetmap.org',
+                'https://router.project-osrm.org',
+                'wss:',
+                'https:'
+            ],
+            frameAncestors: ["'self'"],
+            upgradeInsecureRequests: []
+        }
+    } : false
 }));
 
 // CORS configuration - allow credentials for session/JWT

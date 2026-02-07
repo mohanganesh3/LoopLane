@@ -55,7 +55,9 @@ export const SocketProvider = ({ children }) => {
         console.error('Failed to fetch unread status:', err);
       });
 
-      const newSocket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000', {
+      const socketBaseUrl = import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
+      const newSocket = io(socketBaseUrl, {
         withCredentials: true,
         transports: ['websocket', 'polling'],
         auth: {

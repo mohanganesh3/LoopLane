@@ -13,7 +13,9 @@ export const useTracking = (bookingId) => {
   const connect = useCallback(() => {
     if (socketRef.current?.connected) return;
 
-    socketRef.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000', {
+    const socketBaseUrl = import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
+    socketRef.current = io(socketBaseUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
@@ -83,7 +85,9 @@ export const useDriverTracking = (rideId) => {
       return;
     }
 
-    socketRef.current = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000', {
+    const socketBaseUrl = import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
+    socketRef.current = io(socketBaseUrl, {
       withCredentials: true
     });
 

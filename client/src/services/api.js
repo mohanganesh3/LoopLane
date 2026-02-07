@@ -1,8 +1,8 @@
 import axios from 'axios'
+import { API_URL as DEFAULT_API_URL } from '../utils/constants'
 
-// In development, use empty string to leverage Vite proxy
-// In production, use actual API URL
-const API_URL = import.meta.env.VITE_API_URL || ''
+// Resolve API base URL: prefer explicit env, else fall back to current origin
+const API_URL = import.meta.env.VITE_API_URL || DEFAULT_API_URL
 
 // Create axios instance
 const api = axios.create({
