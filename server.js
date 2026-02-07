@@ -45,6 +45,9 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// Trust proxy - required for Render, Heroku, etc. (reverse proxy)
+app.set('trust proxy', 1);
+
 // Expose Socket.IO instance to controllers via req.app.get('io')
 // This enables controllers to emit events (e.g., live tracking updates)
 app.set('io', io);
