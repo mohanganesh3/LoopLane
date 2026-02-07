@@ -81,17 +81,25 @@ app.use(helmet({
 // CORS configuration - allow credentials for session/JWT
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:5173', 'http://localhost:3000'];
+    : ['http://localhost:5173', 'http://localhost:3000', 'https://looplane.onrender.com'];
+
+// Add BASE_URL if defined
+if (process.env.BASE_URL && !allowedOrigins.includes(process.env.BASE_URL)) {
+    allowedOrigins.push(process.env.BASE_URL);
+}
 
 app.use(cors({
     origin: function(origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
         
+        // Check if origin is allowed
         if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-            callback(null, true);
+            return callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            // Log the blocked origin for debugging
+            console.error(`❌ CORS blocked origin: ${origin}`);
+            return callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true, // Allow cookies
