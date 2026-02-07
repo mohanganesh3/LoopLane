@@ -466,8 +466,11 @@ app.use(express.static(path.join(__dirname, 'client/dist')));
 // SPA fallback - serve index.html for all non-API routes
 // This allows React Router to handle client-side routing (including 404s)
 app.get('*', (req, res, next) => {
-    // All API routes are now under /api prefix
-    if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/') || req.path.startsWith('/socket.io/')) {
+    // Skip SPA fallback for API, uploads, socket.io, and static assets
+    if (req.path.startsWith('/api/') || 
+        req.path.startsWith('/uploads/') || 
+        req.path.startsWith('/socket.io/') ||
+        req.path.startsWith('/assets/')) {
         return next();
     }
 
