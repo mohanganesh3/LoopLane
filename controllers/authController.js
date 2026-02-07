@@ -71,12 +71,29 @@ exports.register = asyncHandler(async (req, res) => {
     });
 
     // Send OTP via email only
+    let emailSent = false;
     try {
         await emailService.sendOTP(email, otp, firstName);
+        emailSent = true;
     } catch (error) {
         console.error('❌ Error sending OTP email:', error.message);
-        // Continue registration even if email fails — user can resend OTP later
-        console.warn('⚠️ Registration continued without OTP email. User can resend OTP.');
+        console.warn('⚠️ Registration continued without OTP email.');
+    }
+
+    // If email failed (e.g., SMTP blocked on hosting), auto-verify for demo purposes
+    if (!emailSent) {
+        newUser.emailVerified = true;
+        newUser.phoneVerified = true;
+        newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
+        await newUser.save();
+
+        return res.status(200).json({
+            success: true,
+            message: 'Account created successfully! (Email service unavailable — auto-verified)',
+            userId: newUser._id,
+            autoVerified: true,
+            redirectUrl: '/login'
+        });
     }
 
     // Store user ID in session for OTP verification
