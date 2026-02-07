@@ -70,18 +70,8 @@ exports.register = asyncHandler(async (req, res) => {
         phoneVerified: false  // Phone not verified via OTP
     });
 
-    // Send OTP via email only
-    let emailSent = false;
-    try {
-        await emailService.sendOTP(email, otp, firstName);
-        emailSent = true;
-    } catch (error) {
-        console.error('❌ Error sending OTP email:', error.message);
-        console.warn('⚠️ Registration continued without OTP email.');
-    }
-
-    // If email failed (e.g., SMTP blocked on hosting), auto-verify for demo purposes
-    if (!emailSent) {
+    // In production (Render), skip OTP and auto-verify directly
+    if (process.env.NODE_ENV === 'production') {
         newUser.emailVerified = true;
         newUser.phoneVerified = true;
         newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
@@ -89,11 +79,18 @@ exports.register = asyncHandler(async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            message: 'Account created successfully! (Email service unavailable — auto-verified)',
+            message: 'Account created successfully!',
             userId: newUser._id,
             autoVerified: true,
             redirectUrl: '/login'
         });
+    }
+
+    // Development: Send OTP via email
+    try {
+        await emailService.sendOTP(email, otp, firstName);
+    } catch (error) {
+        console.error('❌ Error sending OTP email:', error.message);
     }
 
     // Store user ID in session for OTP verification
@@ -450,7 +447,12 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
         console.log('✅ [Forgot Password] OTP email sent successfully');
     } catch (emailError) {
         console.error('❌ [Forgot Password] Error sending email:', emailError);
-        throw new AppError('Failed to send reset code. Please try again.', 500);
+        if (process.env.NODE_ENV === 'production') {
+            // In production (Render), save OTP anyway and show it in logs for demo
+            console.log(`⚠️ [Forgot Password] DEMO MODE - OTP for ${email}: ${otp}`);
+        } else {
+            throw new AppError('Failed to send reset code. Please try again.', 500);
+        }
     }
 
     // Save OTP to user ONLY after successful email delivery
