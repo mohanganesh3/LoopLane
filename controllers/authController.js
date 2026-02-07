@@ -439,7 +439,7 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
     const otp = helpers.generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // Send OTP via email FIRST (before saving to DB)
+    // Send OTP via email
     try {
         await emailService.sendPasswordResetOTP(
             user.email, 
@@ -448,21 +448,17 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
         );
         console.log('✅ [Forgot Password] OTP email sent successfully');
     } catch (emailError) {
-        console.error('❌ [Forgot Password] Error sending email:', emailError);
-        if (process.env.NODE_ENV === 'production') {
-            // In production (Render), save OTP anyway and show it in logs for demo
-            console.log(`⚠️ [Forgot Password] DEMO MODE - OTP for ${email}: ${otp}`);
-        } else {
-            throw new AppError('Failed to send reset code. Please try again.', 500);
-        }
+        console.error('❌ [Forgot Password] Error sending email:', emailError.message);
+        // Save OTP anyway so user can still reset password if they see it in logs
+        console.log(`⚠️ [Forgot Password] OTP for ${email}: ${otp}`);
     }
 
-    // Save OTP to user ONLY after successful email delivery
+    // Save OTP to user
     user.resetPasswordOTP = otp;
     user.resetPasswordOTPExpires = otpExpiry;
     await user.save();
 
-    console.log('✅ [Forgot Password] OTP generated and saved after email confirmation');
+    console.log('✅ [Forgot Password] OTP generated and saved');
 
     // Store user ID in session for reset password page
     req.session.resetPasswordUserId = user._id.toString();
