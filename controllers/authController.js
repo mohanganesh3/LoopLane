@@ -70,8 +70,17 @@ exports.register = asyncHandler(async (req, res) => {
         phoneVerified: false  // Phone not verified via OTP
     });
 
-    // In production (Render), skip OTP and auto-verify directly
-    if (process.env.NODE_ENV === 'production') {
+    // Try sending OTP email, auto-verify if email fails
+    let emailSent = false;
+    try {
+        await emailService.sendOTP(email, otp, firstName);
+        emailSent = true;
+    } catch (error) {
+        console.error('❌ Error sending OTP email:', error.message);
+    }
+
+    if (!emailSent) {
+        // Email failed — auto-verify so user can still register
         newUser.emailVerified = true;
         newUser.phoneVerified = true;
         newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
@@ -84,13 +93,6 @@ exports.register = asyncHandler(async (req, res) => {
             autoVerified: true,
             redirectUrl: '/login'
         });
-    }
-
-    // Development: Send OTP via email
-    try {
-        await emailService.sendOTP(email, otp, firstName);
-    } catch (error) {
-        console.error('❌ Error sending OTP email:', error.message);
     }
 
     // Store user ID in session for OTP verification
