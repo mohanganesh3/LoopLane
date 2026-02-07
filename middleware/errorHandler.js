@@ -57,12 +57,19 @@ const errorHandler = (err, req, res, next) => {
     let statusCode = err.statusCode || 500;
     let message = err.message || 'Internal Server Error';
 
-    // Log error for debugging
-    if (process.env.NODE_ENV === 'development') {
-        console.error('Error:', err);
+    // Log all 500 errors to console to assist debugging in production
+    if (statusCode === 500 || process.env.NODE_ENV === 'development') {
+        console.error('❌ [ErrorHandler] Error:', err);
+    }
+    
+    // Check for CSRF token errors (which often manifest as 403 or 500 if unhandled)
+    if (err.code === 'EBADCSRFTOKEN') {
+        message = 'Invalid or missing CSRF token';
+        statusCode = 403;
     }
 
     // Mongoose bad ObjectId
+
     if (err.name === 'CastError') {
         message = 'Resource not found';
         statusCode = 404;

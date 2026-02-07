@@ -192,8 +192,9 @@ app.use(flash());
 // CSRF Protection - only for non-API routes (API uses JWT)
 const csrfProtection = csrf({ cookie: true });
 const csrfMiddleware = (req, res, next) => {
-    // Skip CSRF for API routes (they use JWT) and Socket.IO
-    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+    // Skip CSRF for API routes, Socket.IO, static assets, uploads, and common files
+    const skipList = ['/api', '/socket.io', '/assets', '/uploads', '/favicon.ico', '/manifest.json'];
+    if (skipList.some(path => req.path.startsWith(path))) {
         return next();
     }
     csrfProtection(req, res, next);
@@ -509,12 +510,22 @@ app.use('/api/token', require('./routes/token')); // JWT token management
 
 // Serve React SPA - for production mode or when accessing backend directly
 // Serve static files from React build
-app.use(express.static(path.join(__dirname, 'client/dist')));
+app.use(express.static(path.join(__dirname, 'client/dist'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) {
+            // Prevent caching for index.html so users always get the latest build references
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
+}));
 
 // SPA fallback - serve index.html for all non-API routes
 // This allows React Router to handle client-side routing (including 404s)
 app.get('*', (req, res, next) => {
     // Skip SPA fallback for API, uploads, socket.io, and static assets
+    // Also skip CSRF-exempt paths to allow them to 404 naturally if missing
     if (req.path.startsWith('/api/') || 
         req.path.startsWith('/uploads/') || 
         req.path.startsWith('/socket.io/') ||
@@ -525,6 +536,10 @@ app.get('*', (req, res, next) => {
     // Serve React app for all client-side routes (including /admin/*)
     const indexPath = path.join(__dirname, 'client/dist/index.html');
     if (require('fs').existsSync(indexPath)) {
+        // Disable caching for the SPA fallback as well
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.sendFile(indexPath);
     } else {
         // If no build exists, redirect to Vite dev server
