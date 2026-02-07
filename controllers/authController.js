@@ -81,7 +81,25 @@ exports.register = asyncHandler(async (req, res) => {
         phoneVerified: false  // Phone not verified via OTP
     });
 
-    // Try sending OTP email, auto-verify if email fails
+    // In production, skip OTP and auto-verify to avoid email issues
+    if (process.env.NODE_ENV === 'production') {
+        newUser.emailVerified = true;
+        newUser.phoneVerified = true;
+        newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
+        await newUser.save();
+
+        console.log(`✅ Auto-verified user in production: ${email}`);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Account created successfully!',
+            userId: newUser._id,
+            autoVerified: true,
+            redirectUrl: '/login'
+        });
+    }
+
+    // In development, try sending OTP email, auto-verify if email fails
     let emailSent = false;
     try {
         await emailService.sendOTP(email, otp, firstName);
