@@ -122,6 +122,36 @@ app.use(hpp({
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
+// Serve React build assets early (before any routes) - critical for production
+app.use('/assets', express.static(path.join(__dirname, 'client/dist/assets'), {
+    maxAge: '1y', // Cache assets for 1 year (they have content hashes)
+    immutable: true
+}));
+
+// Diagnostic endpoint for build verification (admin only in production)
+app.get('/api/debug/build-info', (req, res) => {
+    const fs = require('fs');
+    const distPath = path.join(__dirname, 'client/dist');
+    const assetsPath = path.join(__dirname, 'client/dist/assets');
+    
+    const info = {
+        distExists: fs.existsSync(distPath),
+        assetsExists: fs.existsSync(assetsPath),
+        assets: [],
+        indexHtmlExists: fs.existsSync(path.join(distPath, 'index.html'))
+    };
+    
+    if (info.assetsExists) {
+        try {
+            info.assets = fs.readdirSync(assetsPath);
+        } catch (e) {
+            info.assetsError = e.message;
+        }
+    }
+    
+    res.json(info);
+});
+
 // Session configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',

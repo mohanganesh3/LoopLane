@@ -53,9 +53,9 @@ const notFound = (req, res, next) => {
  * Global Error Handler
  */
 const errorHandler = (err, req, res, next) => {
-    let error = { ...err };
-    error.message = err.message;
-    error.statusCode = err.statusCode || 500;
+    // Start with the error's own status code
+    let statusCode = err.statusCode || 500;
+    let message = err.message || 'Internal Server Error';
 
     // Log error for debugging
     if (process.env.NODE_ENV === 'development') {
@@ -64,44 +64,44 @@ const errorHandler = (err, req, res, next) => {
 
     // Mongoose bad ObjectId
     if (err.name === 'CastError') {
-        const message = 'Resource not found';
-        error = new AppError(message, 404);
+        message = 'Resource not found';
+        statusCode = 404;
     }
 
     // Mongoose duplicate key
     if (err.code === 11000) {
         const field = Object.keys(err.keyValue)[0];
-        const message = `This ${field} is already registered`;
-        error = new AppError(message, 400);
+        message = `This ${field} is already registered`;
+        statusCode = 400;
     }
 
     // Mongoose validation error
     if (err.name === 'ValidationError') {
-        const message = Object.values(err.errors).map(val => val.message).join(', ');
-        error = new AppError(message, 400);
+        message = Object.values(err.errors).map(val => val.message).join(', ');
+        statusCode = 400;
     }
 
     // JSON parsing errors (SyntaxError)
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-        const message = '❌ Invalid data format. Please check your input and try again.';
-        error = new AppError(message, 400);
+        message = '❌ Invalid data format. Please check your input and try again.';
+        statusCode = 400;
     }
 
     // JWT errors
     if (err.name === 'JsonWebTokenError') {
-        const message = '🔐 Invalid authentication token. Please log in again.';
-        error = new AppError(message, 401);
+        message = '🔐 Invalid authentication token. Please log in again.';
+        statusCode = 401;
     }
 
     if (err.name === 'TokenExpiredError') {
-        const message = '🕒 Your session has expired. Please log in again.';
-        error = new AppError(message, 401);
+        message = '🕒 Your session has expired. Please log in again.';
+        statusCode = 401;
     }
 
     // Always return JSON response (React frontend handles all rendering)
-    return res.status(error.statusCode).json({
+    return res.status(statusCode).json({
         success: false,
-        message: error.message,
+        message: message,
         error: process.env.NODE_ENV === 'development' ? err : {}
     });
 };
