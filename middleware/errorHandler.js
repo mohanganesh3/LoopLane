@@ -58,8 +58,10 @@ const errorHandler = (err, req, res, next) => {
     let message = err.message || 'Internal Server Error';
 
     // Log all 500 errors to console to assist debugging in production
-    if (statusCode === 500 || process.env.NODE_ENV === 'development') {
-        console.error('❌ [ErrorHandler] Error:', err);
+    // Also log 400 errors temporarily to debug signup issues
+    if (statusCode === 500 || statusCode === 400 || process.env.NODE_ENV === 'development') {
+        console.error(`❌ [ErrorHandler] ${statusCode} Error:`, err.message);
+        if (statusCode === 500) console.error(err.stack);
     }
     
     // Check for CSRF token errors (which often manifest as 403 or 500 if unhandled)

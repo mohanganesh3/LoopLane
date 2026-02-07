@@ -30,18 +30,29 @@ exports.showRegisterPage = (req, res) => {
 exports.register = asyncHandler(async (req, res) => {
     const { name, email, phone, password, role } = req.body;
 
-    // Check if email already exists (phone can be shared across accounts)
-    const existingUser = await User.findOne({ email });
+    // Check for existing users with same email OR phone
+    const conflicts = await User.find({
+        $or: [
+            { email: email.toLowerCase().trim() },
+            { phone: phone.trim() }
+        ]
+    });
 
-    if (existingUser) {
-        // If user exists but is not verified, delete the old account and allow re-registration
-        if (!existingUser.emailVerified) {
-            await User.findByIdAndDelete(existingUser._id);
-            console.log(`🔄 Deleted unverified user: ${email}`);
-        } else {
-            // User is verified with this email
-            throw new AppError('Email already registered. Please login or use a different email.', 400);
+    for (const user of conflicts) {
+        if (user.emailVerified) {
+            if (user.email === email.toLowerCase().trim()) {
+                throw new AppError('Email already registered. Please login.', 400);
+            }
+            if (user.phone === phone.trim()) {
+                throw new AppError('Phone number already registered.', 400);
+            }
         }
+    }
+
+    // Delete any unverified conflicting accounts to allow fresh registration
+    for (const user of conflicts) {
+        await User.findByIdAndDelete(user._id);
+        console.log(`🔄 Deleted unverified user conflict: ${user.email}`);
     }
 
     // Generate OTP
