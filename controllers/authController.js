@@ -75,9 +75,8 @@ exports.register = asyncHandler(async (req, res) => {
         await emailService.sendOTP(email, otp, firstName);
     } catch (error) {
         console.error('❌ Error sending OTP email:', error.message);
-        // Clean up the user record since OTP couldn't be delivered
-        await User.findByIdAndDelete(newUser._id);
-        throw new AppError('Failed to send OTP. Please try again.', 500);
+        // Continue registration even if email fails — user can resend OTP later
+        console.warn('⚠️ Registration continued without OTP email. User can resend OTP.');
     }
 
     // Store user ID in session for OTP verification
