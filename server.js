@@ -29,7 +29,7 @@ const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
-const csrf = require('csurf');
+// Note: csurf removed - deprecated and unnecessary for JWT-authenticated SPA APIs
 
 // Logger configuration
 const { accessLogStream, errorLogStream, shouldSkipLogging } = require('./utils/logger');
@@ -43,7 +43,25 @@ const connectDB = require('./config/database');
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+
+// CORS origins for Socket.IO and Express
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : ['http://localhost:5173', 'http://localhost:3000', 'https://looplane.onrender.com'];
+
+// Add BASE_URL if defined
+if (process.env.BASE_URL && !allowedOrigins.includes(process.env.BASE_URL)) {
+    allowedOrigins.push(process.env.BASE_URL);
+}
+
+const io = socketIO(server, {
+    cors: {
+        origin: allowedOrigins,
+        methods: ['GET', 'POST'],
+        credentials: true
+    },
+    transports: ['websocket', 'polling']
+});
 
 // Trust proxy - required for Render, Heroku, etc. (reverse proxy)
 app.set('trust proxy', 1);
@@ -58,36 +76,33 @@ connectDB();
 // Security middleware with CSP tailored for SPA + external assets (maps/fonts)
 app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
-        useDefaults: true,
+        useDefaults: false,
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
-            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net'],
-            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-            imgSrc: ["'self'", 'data:', 'https://cdnjs.cloudflare.com', 'https://raw.githubusercontent.com', 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net', 'https://unpkg.com'],
+            styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com', 'https://cdn.jsdelivr.net', 'https://unpkg.com'],
+            fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com', 'data:'],
+            imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org', 'https://cdnjs.cloudflare.com', 'https://raw.githubusercontent.com', 'https://maps.googleapis.com', 'https://maps.gstatic.com', 'https://res.cloudinary.com', 'https://unpkg.com', 'https://*.cloudinary.com'],
             connectSrc: [
                 "'self'",
                 'https://nominatim.openstreetmap.org',
                 'https://router.project-osrm.org',
+                'https://api.razorpay.com',
                 'wss:',
+                'ws:',
                 'https:'
             ],
+            mediaSrc: ["'self'"],
+            objectSrc: ["'none'"],
             frameAncestors: ["'self'"],
-            upgradeInsecureRequests: []
+            formAction: ["'self'"],
+            baseUri: ["'self'"]
         }
-    } : false
+    } : false,
+    crossOriginEmbedderPolicy: false
 }));
 
 // CORS configuration - allow credentials for session/JWT
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : ['http://localhost:5173', 'http://localhost:3000', 'https://looplane.onrender.com'];
-
-// Add BASE_URL if defined
-if (process.env.BASE_URL && !allowedOrigins.includes(process.env.BASE_URL)) {
-    allowedOrigins.push(process.env.BASE_URL);
-}
-
 app.use(cors({
     origin: function(origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
@@ -104,7 +119,8 @@ app.use(cors({
     },
     credentials: true, // Allow cookies
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['set-cookie']
 }));
 
 // Compression middleware
@@ -179,40 +195,31 @@ app.get('/api/debug/build-info', (req, res) => {
 });
 
 // Session configuration
+const isProduction = process.env.NODE_ENV === 'production';
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
     resave: false,
     saveUninitialized: false,
     store: MongoStore.create({
         mongoUrl: process.env.MONGODB_URI,
-        touchAfter: 24 * 3600 // Lazy session update (24 hours)
+        touchAfter: 24 * 3600, // Lazy session update (24 hours)
+        ttl: 24 * 60 * 60 // Session TTL (1 day)
     }),
     cookie: {
         maxAge: 1000 * 60 * 60 * 24, // 24 hours
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production'
-    }
+        secure: isProduction,
+        sameSite: 'lax',
+        path: '/'
+    },
+    proxy: isProduction // Trust the reverse proxy (Render)
 }));
 
 // Flash messages middleware
 app.use(flash());
 
-// CSRF Protection - only for non-API routes (API uses JWT)
-const csrfProtection = csrf({ cookie: true });
-const csrfMiddleware = (req, res, next) => {
-    // Skip CSRF for API routes, Socket.IO, static assets, uploads, and common files
-    const skipList = ['/api', '/socket.io', '/assets', '/uploads', '/favicon.ico', '/manifest.json'];
-    if (skipList.some(path => req.path.startsWith(path))) {
-        return next();
-    }
-    csrfProtection(req, res, next);
-};
-app.use(csrfMiddleware);
-
-// CSRF token endpoint for non-API routes
-app.get('/csrf-token', (req, res) => {
-    res.json({ csrfToken: req.csrfToken ? req.csrfToken() : null });
-});
+// CSRF protection removed - not needed for JWT-authenticated SPA API routes
+// The SPA uses JWT tokens in HTTP-only cookies which provides CSRF protection via SameSite cookies
 
 // Make session data available in req
 app.use((req, res, next) => {

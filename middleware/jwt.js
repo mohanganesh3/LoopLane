@@ -195,11 +195,13 @@ exports.extractToken = (req) => {
  * @returns {object} Cookie options
  */
 exports.getCookieOptions = (maxAge) => {
+    const isProduction = process.env.NODE_ENV === 'production';
     return {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-        maxAge: maxAge
+        secure: isProduction,
+        sameSite: 'lax',
+        maxAge: maxAge,
+        path: '/'
     };
 };
 
