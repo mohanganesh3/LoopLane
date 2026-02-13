@@ -8,7 +8,7 @@ const requestLogger = (req, res, next) => {
     const method = req.method;
     const url = req.originalUrl;
     const ip = req.ip || req.connection.remoteAddress;
-    const userId = req.session?.userId || 'Guest';
+    const userId = req.userId || req.user?._id || 'Guest';
 
     console.log(`[${timestamp}] ${method} ${url} - IP: ${ip} - User: ${userId}`);
 

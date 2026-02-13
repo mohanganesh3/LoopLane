@@ -34,6 +34,9 @@ const VerifyOtp = () => {
       if (result.success) {
         setSuccess('Verification successful! Logging you in...');
         
+        // Clear the pending user ID from localStorage
+        localStorage.removeItem('pendingUserId');
+        
         // ✅ Refresh user data from server to update auth context
         await refreshUser();
         

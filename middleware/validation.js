@@ -97,9 +97,11 @@ exports.handleValidationErrors = (req, res, next) => {
             });
         }
         
-        // Use flash messages for form submissions
-        const errorMessages = errorArray.map(err => err.msg);
-        errorMessages.forEach(msg => req.flash('error', msg));
+        // Fallback for non-JSON form submissions
+        if (req.flash) {
+            const errorMessages = errorArray.map(err => err.msg);
+            errorMessages.forEach(msg => req.flash('error', msg));
+        }
         
         // Redirect back to the form
         return res.redirect('back');

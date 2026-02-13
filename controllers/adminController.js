@@ -572,7 +572,7 @@ exports.showVerificationDetails = asyncHandler(async (req, res) => {
 
     // Only show verification details for RIDERS
     if (userToVerify.role !== 'RIDER') {
-        req.flash('error', 'Verification is only applicable to riders');
+        if (req.flash) req.flash('error', 'Verification is only applicable to riders');
         return res.redirect('/admin/verifications');
     }
 

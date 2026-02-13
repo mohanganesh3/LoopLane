@@ -13,9 +13,6 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 const express = require('express');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const flash = require('connect-flash');
 const path = require('path');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -73,7 +70,7 @@ app.set('io', io);
 // Connect to MongoDB
 connectDB();
 
-// Security middleware with CSP tailored for SPA + external assets (maps/fonts)
+
 app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
         useDefaults: false,
@@ -194,45 +191,7 @@ app.get('/api/debug/build-info', (req, res) => {
     res.json(info);
 });
 
-// Session configuration
-const isProduction = process.env.NODE_ENV === 'production';
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-this',
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: process.env.MONGODB_URI,
-        touchAfter: 24 * 3600, // Lazy session update (24 hours)
-        ttl: 24 * 60 * 60 // Session TTL (1 day)
-    }),
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24, // 24 hours
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: 'lax',
-        path: '/'
-    },
-    proxy: isProduction // Trust the reverse proxy (Render)
-}));
-
-// Flash messages middleware
-app.use(flash());
-
-// CSRF protection removed - not needed for JWT-authenticated SPA API routes
-// The SPA uses JWT tokens in HTTP-only cookies which provides CSRF protection via SameSite cookies
-
-// Make session data available in req
-app.use((req, res, next) => {
-    res.locals.user = req.session.user || null;
-    res.locals.isAuthenticated = !!req.session.user;
-    res.locals.baseUrl = process.env.BASE_URL;
-    res.locals.appName = process.env.APP_NAME;
-    res.locals.success = req.flash('success');
-    res.locals.error = req.flash('error');
-    res.locals.info = req.flash('info');
-    res.locals.warning = req.flash('warning');
-    next();
-});
+// JWT-only authentication — no server-side sessions
 
 // Socket.IO JWT Authentication Middleware
 const { verifyAccessToken } = require('./middleware/jwt');

@@ -18,7 +18,7 @@ exports.showEmergencyPage = async (req, res) => {
         });
     } catch (error) {
         console.error('[SOS] Error showing emergency page:', error);
-        req.flash('error', 'Unable to load emergency page');
+        if (req.flash) req.flash('error', 'Unable to load emergency page');
         res.redirect('/');
     }
 };

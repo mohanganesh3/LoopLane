@@ -259,7 +259,7 @@ socket.on('notification', (data) => {
 // Update Chat Unread Count Badge
 function updateChatUnreadCount() {
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', '/chat/api/unread-count', true);
+    xhr.open('GET', '/api/chat/unread-count', true);
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
     xhr.onload = function () {

@@ -124,9 +124,6 @@ exports.register = asyncHandler(async (req, res) => {
         });
     }
 
-    // Store user ID in session for OTP verification
-    req.session.registrationUserId = newUser._id.toString();
-
     res.status(200).json({
         success: true,
         message: 'OTP sent to your email',
@@ -139,13 +136,8 @@ exports.register = asyncHandler(async (req, res) => {
  * Show OTP verification page
  */
 exports.showVerifyOTPPage = (req, res) => {
-    if (!req.session.registrationUserId) {
-        return res.redirect('/auth/register');
-    }
-
     res.render('auth/verify-otp', {
         title: 'Verify OTP - LANE Carpool',
-        userId: req.session.registrationUserId,
         error: null
     });
 };
@@ -154,17 +146,30 @@ exports.showVerifyOTPPage = (req, res) => {
  * Verify OTP - Step 2
  */
 exports.verifyOTP = asyncHandler(async (req, res) => {
-    const { otp } = req.body;
-    const userId = req.session.registrationUserId;
+    const { otp, userId } = req.body;
 
-    if (!userId) {
-        throw new AppError('Session expired. Please register again.', 400);
+    if (!otp) {
+        throw new AppError('OTP is required.', 400);
     }
 
-    const user = await User.findById(userId);
+    let user;
+
+    if (userId) {
+        // Primary: Find by userId (sent from frontend localStorage)
+        user = await User.findById(userId);
+    }
+    
+    if (!user) {
+        // Fallback: Find unverified user with this OTP code
+        user = await User.findOne({
+            otpCode: otp,
+            emailVerified: false,
+            otpExpires: { $gt: new Date() }
+        });
+    }
 
     if (!user) {
-        throw new AppError('User not found', 404);
+        throw new AppError('Invalid or expired OTP. Please register again.', 400);
     }
 
     // Check if OTP is expired first (prevent timing attacks)
@@ -191,10 +196,21 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
     
     await user.save();
 
-    // Log in the user
-    req.session.userId = user._id.toString();
-    req.session.userRole = user.role;
-    delete req.session.registrationUserId;
+    // Generate JWT tokens
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // Store refresh token in database
+    await RefreshToken.createToken(user._id, refreshToken, {
+        deviceInfo: req.headers['user-agent'] || 'Unknown Device',
+        ipAddress: req.ip || 'Unknown'
+    });
+
+    // Set tokens in HTTP-only cookies
+    const accessTokenMaxAge = 15 * 60 * 1000; // 15 minutes
+    const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+    res.cookie('accessToken', accessToken, getCookieOptions(accessTokenMaxAge));
+    res.cookie('refreshToken', refreshToken, getCookieOptions(refreshTokenMaxAge));
 
     // ✅ Redirect RIDERS to complete profile page with vehicle details
     // PASSENGERS go directly to dashboard
@@ -203,6 +219,9 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
     res.status(200).json({
         success: true,
         message: 'Registration successful',
+        accessToken,
+        refreshToken,
+        expiresIn: 900,
         redirectUrl: redirectUrl
     });
 });
@@ -211,16 +230,30 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
  * Resend OTP
  */
 exports.resendOTP = asyncHandler(async (req, res) => {
-    const userId = req.session.registrationUserId || req.user?._id;
+    const { userId: bodyUserId, email: bodyEmail } = req.body;
+    const userId = bodyUserId || req.user?._id;
 
-    if (!userId) {
-        throw new AppError('No user session found', 400);
+    let user;
+
+    if (userId) {
+        user = await User.findById(userId);
     }
 
-    const user = await User.findById(userId);
+    if (!user && bodyEmail) {
+        // Fallback: Find unverified user by email
+        user = await User.findOne({ email: bodyEmail.toLowerCase().trim(), emailVerified: false });
+    }
 
     if (!user) {
-        throw new AppError('User not found', 404);
+        // Last resort: Find most recent unverified user (within last 15 minutes)
+        user = await User.findOne({
+            emailVerified: false,
+            createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
+        }).sort({ createdAt: -1 });
+    }
+
+    if (!user) {
+        throw new AppError('No pending registration found. Please register again.', 400);
     }
 
     // Generate new OTP
@@ -249,10 +282,6 @@ exports.resendOTP = asyncHandler(async (req, res) => {
  * Show login page
  */
 exports.showLoginPage = (req, res) => {
-    if (req.session.userId) {
-        return res.redirect('/user/dashboard');
-    }
-
     res.render('auth/login', {
         title: 'Login - LANE Carpool',
         error: null
@@ -330,11 +359,7 @@ exports.login = asyncHandler(async (req, res) => {
         user.otpExpires = undefined;
     }
 
-    // Log in the user (no OTP required for login)
-    req.session.userId = user._id.toString();
-    req.session.userRole = user.role;
-
-    // Generate JWT tokens for API/mobile clients
+    // Generate JWT tokens
     const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
@@ -378,8 +403,7 @@ exports.login = asyncHandler(async (req, res) => {
         success: true,
         message: 'Login successful',
         user: userData,
-        sessionId: req.session.id,
-        accessToken, // Return tokens for mobile/API clients
+        accessToken,
         refreshToken,
         expiresIn: 900, // 15 minutes in seconds
         redirectUrl
@@ -409,23 +433,14 @@ exports.logout = asyncHandler(async (req, res) => {
         }
     }
 
-    // Destroy session
-    req.session.destroy((err) => {
-        if (err) {
-            console.error('Session destruction error:', err);
-            // Still clear cookies even if session destruction fails
-        }
-        
-        // Clear all auth cookies
-        res.clearCookie('connect.sid');
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
-        
-        return res.status(200).json({
-            success: true,
-            message: 'Logged out successfully',
-            redirectUrl: '/login'
-        });
+    // Clear all auth cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+    
+    return res.status(200).json({
+        success: true,
+        message: 'Logged out successfully',
+        redirectUrl: '/login'
     });
 });
 
@@ -489,36 +504,11 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
 
     console.log('✅ [Forgot Password] OTP generated and saved');
 
-    // Store user ID in session for reset password page
-    req.session.resetPasswordUserId = user._id.toString();
-    req.session.resetPasswordEmail = user.email;
-
-    // Save session and send response after session is saved
-    req.session.save((err) => {
-        if (err) {
-            console.error('❌ [Forgot Password] Session save error:', err);
-            // Fallback for HTML form
-            if (req.headers.accept && req.headers.accept.indexOf('json') === -1) {
-                req.flash('error', 'An error occurred. Please try again.');
-                return res.redirect('/auth/forgot-password');
-            }
-            return res.status(500).json({ success: false, message: 'An error occurred. Please try again.' });
-        }
-
-        console.log('✅ [Forgot Password] Session data saved successfully');
-
-        // If request expects HTML (non-AJAX), redirect with flash message
-        const wantsJSON = req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1) || req.headers['content-type'] === 'application/json';
-        if (!wantsJSON) {
-            req.flash('success', 'Password reset code sent to your email. Please check your inbox.');
-            return res.redirect('/auth/reset-password');
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: 'Password reset code sent to your email. Please check your inbox.',
-            redirectUrl: '/auth/reset-password'
-        });
+    return res.status(200).json({
+        success: true,
+        message: 'Password reset code sent to your email. Please check your inbox.',
+        email: user.email,
+        redirectUrl: '/auth/reset-password'
     });
 });
 
@@ -526,15 +516,11 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
  * Show reset password page
  */
 exports.showResetPasswordPage = (req, res) => {
-    if (!req.session.resetPasswordUserId) {
-        return res.redirect('/auth/forgot-password');
-    }
-
     res.render('auth/reset-password', {
         title: 'Reset Password - LANE Carpool',
         error: null,
         success: null,
-        email: req.session.resetPasswordEmail || ''
+        email: req.query.email || ''
     });
 };
 
@@ -542,15 +528,20 @@ exports.showResetPasswordPage = (req, res) => {
  * Handle reset password
  */
 exports.resetPassword = asyncHandler(async (req, res) => {
-    const { otp, newPassword, confirmPassword } = req.body;
-    const userId = req.session.resetPasswordUserId;
+    const { otp, newPassword, confirmPassword, email } = req.body;
 
     console.log('🔵 [Reset Password] Request received');
 
-    if (!userId) {
-        console.log('❌ [Reset Password] No userId in session');
-        throw new AppError('Session expired. Please start the password reset process again.', 400);
+    if (!email) {
+        throw new AppError('Email is required. Please start the password reset process again.', 400);
     }
+
+    // Find user by email
+    const userByEmail = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!userByEmail) {
+        throw new AppError('User not found', 404);
+    }
+    const userId = userByEmail._id;
 
     // Validate passwords match
     if (newPassword !== confirmPassword) {
@@ -596,9 +587,7 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 
     console.log('✅ [Reset Password] Password updated successfully');
 
-    // Clear session data
-    delete req.session.resetPasswordUserId;
-    delete req.session.resetPasswordEmail;
+    // Password updated — no session data to clear
 
     // Send confirmation email
     try {
@@ -610,13 +599,6 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     } catch (emailError) {
         console.error('⚠️ [Reset Password] Failed to send confirmation email:', emailError);
         // Don't fail the password reset if email fails
-    }
-
-    // Non-AJAX HTML fallback
-    const wantsJSON = req.xhr || (req.headers.accept && req.headers.accept.indexOf('json') > -1) || req.headers['content-type'] === 'application/json';
-    if (!wantsJSON) {
-        req.flash('success', 'Password reset successful! You can now login with your new password.');
-        return res.redirect('/auth/login');
     }
 
     return res.status(200).json({

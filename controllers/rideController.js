@@ -23,14 +23,14 @@ exports.showPostRidePage = asyncHandler(async (req, res) => {
 
     // Early exit if not a rider
     if (user.role === 'DRIVER' || user.role !== 'RIDER') {
-        req.flash('error', 'Only riders can post rides');
+        if (req.flash) req.flash('error', 'Only riders can post rides');
         return res.redirect('/user/dashboard');
     }
 
     // Validate profile completeness
     const hasVehicles = Array.isArray(user.vehicles) && user.vehicles.length > 0;
     if (!hasVehicles) {
-        req.flash('warning', 'Please complete your profile and add vehicle details first');
+        if (req.flash) req.flash('warning', 'Please complete your profile and add vehicle details first');
         return res.redirect('/user/complete-profile');
     }
 
@@ -38,7 +38,7 @@ exports.showPostRidePage = asyncHandler(async (req, res) => {
     const licenseUploaded = user.documents?.driverLicense?.frontImage;
     const idUploaded = user.documents?.governmentId?.frontImage;
     if (!(licenseUploaded && idUploaded)) {
-        req.flash('warning', 'Please upload your verification documents first');
+        if (req.flash) req.flash('warning', 'Please upload your verification documents first');
         return res.redirect('/user/upload-documents');
     }
 
@@ -714,17 +714,17 @@ exports.showEditRidePage = asyncHandler(async (req, res) => {
         .populate('rider', 'profile.firstName profile.lastName name vehicles');
 
     if (!ride) {
-        req.flash('error', 'Ride not found');
+        if (req.flash) req.flash('error', 'Ride not found');
         return res.redirect('/rides/my-rides');
     }
 
     if (ride.rider._id.toString() !== user._id.toString()) {
-        req.flash('error', 'Not authorized to edit this ride');
+        if (req.flash) req.flash('error', 'Not authorized to edit this ride');
         return res.redirect('/rides/my-rides');
     }
 
     if (ride.status !== 'ACTIVE') {
-        req.flash('error', 'Cannot edit ride in current status');
+        if (req.flash) req.flash('error', 'Cannot edit ride in current status');
         return res.redirect('/rides/my-rides');
     }
 
@@ -735,7 +735,7 @@ exports.showEditRidePage = asyncHandler(async (req, res) => {
     });
 
     if (activeBookings > 0) {
-        req.flash('error', 'Cannot edit ride with active bookings');
+        if (req.flash) req.flash('error', 'Cannot edit ride with active bookings');
         return res.redirect('/rides/my-rides');
     }
 

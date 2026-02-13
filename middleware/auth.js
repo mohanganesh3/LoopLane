@@ -1,43 +1,20 @@
 /**
  * Authentication Middleware
  * Protects routes and checks user roles
- * Updated for React frontend - returns JSON responses
- * SUPPORTS HYBRID AUTH: JWT tokens (preferred) + session fallback
+ * JWT-only authentication (no sessions)
  */
 
 const User = require('../models/User');
 const { verifyAccessToken, extractToken } = require('./jwt');
 
 /**
- * Check if user is authenticated (Hybrid: JWT or Session)
- * Tries JWT first, falls back to session for backward compatibility
+ * Check if user is authenticated via JWT
+ * Extracts token from Authorization header or httpOnly cookie
  */
 exports.isAuthenticated = async (req, res, next) => {
-    let userId = null;
-    let authMethod = null;
-
-    // STRATEGY 1: Try JWT authentication first (from header or cookie)
     const token = extractToken(req);
-    
-    if (token) {
-        try {
-            const decoded = verifyAccessToken(token);
-            userId = decoded.userId;
-            authMethod = 'jwt';
-        } catch (error) {
-            // JWT invalid or expired - will try session fallback
-            console.log('⚠️ JWT verification failed, trying session fallback:', error.message);
-        }
-    }
 
-    // STRATEGY 2: Fall back to session authentication
-    if (!userId && req.session && req.session.userId) {
-        userId = req.session.userId;
-        authMethod = 'session';
-    }
-
-    // No authentication found
-    if (!userId) {
+    if (!token) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
@@ -45,15 +22,26 @@ exports.isAuthenticated = async (req, res, next) => {
             redirectUrl: '/login'
         });
     }
-    
+
+    let decoded;
+    try {
+        decoded = verifyAccessToken(token);
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: error.message || 'Invalid or expired token',
+            code: 'TOKEN_INVALID',
+            redirectUrl: '/login',
+            forceLogout: true
+        });
+    }
+
     try {
         // Fetch user from database to check current status
-        const user = await User.findById(userId)
+        const user = await User.findById(decoded.userId)
             .select('accountStatus isActive isSuspended suspensionReason role email profile vehicles documents verificationStatus');
         
         if (!user) {
-            // User was deleted from database
-            if (req.session) req.session.destroy();
             return res.status(401).json({
                 success: false,
                 message: 'Account not found. Please login again.',
@@ -65,7 +53,6 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is suspended
         if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
-            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: `Your account has been suspended. Reason: ${user.suspensionReason || 'Policy violation'}. Please check your email for details.`,
@@ -78,7 +65,6 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is deleted
         if (user.accountStatus === 'DELETED') {
-            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: 'This account has been deleted.',
@@ -91,7 +77,6 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Check if account is inactive
         if (user.isActive === false) {
-            if (req.session) req.session.destroy();
             return res.status(403).json({
                 success: false,
                 message: 'Your account is inactive. Please contact support.',
@@ -104,8 +89,8 @@ exports.isAuthenticated = async (req, res, next) => {
         
         // Attach user and auth info to request for downstream use
         req.user = user;
-        req.userId = userId;
-        req.authMethod = authMethod; // 'jwt' or 'session'
+        req.userId = decoded.userId;
+        req.authMethod = 'jwt';
         
         return next();
     } catch (error) {
@@ -120,193 +105,122 @@ exports.isAuthenticated = async (req, res, next) => {
 
 /**
  * Check if user is a rider
+ * Must be used AFTER isAuthenticated middleware
  */
-exports.isRider = async (req, res, next) => {
-    if (!req.session.userId) {
+exports.isRider = (req, res, next) => {
+    if (!req.user) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
             redirectUrl: '/login'
         });
     }
-    
-    try {
-        const user = await User.findById(req.session.userId);
-        
-        if (!user) {
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                message: 'User not found',
-                redirectUrl: '/login'
-            });
-        }
-        
-        if (user.role !== 'RIDER') {
-            return res.status(403).json({
-                success: false,
-                message: 'This action is only available to riders'
-            });
-        }
-        
-        req.user = user;
-        next();
-    } catch (error) {
-        console.error('Error in isRider middleware:', error);
-        res.status(500).json({
+
+    if (req.user.role !== 'RIDER') {
+        return res.status(403).json({
             success: false,
-            message: 'Server error checking permissions'
+            message: 'This action is only available to riders'
         });
     }
+
+    next();
 };
 
 /**
  * Check if user is a passenger
+ * Must be used AFTER isAuthenticated middleware
  */
-exports.isPassenger = async (req, res, next) => {
-    if (!req.session.userId) {
+exports.isPassenger = (req, res, next) => {
+    if (!req.user) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
             redirectUrl: '/login'
         });
     }
-    
-    try {
-        const user = await User.findById(req.session.userId);
-        
-        if (!user) {
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                message: 'User not found',
-                redirectUrl: '/login'
-            });
-        }
-        
-        if (user.role !== 'PASSENGER') {
-            return res.status(403).json({
-                success: false,
-                message: 'This action is only available to passengers'
-            });
-        }
-        
-        req.user = user;
-        next();
-    } catch (error) {
-        console.error('Error in isPassenger middleware:', error);
-        res.status(500).json({
+
+    if (req.user.role !== 'PASSENGER') {
+        return res.status(403).json({
             success: false,
-            message: 'Server error checking permissions'
+            message: 'This action is only available to passengers'
         });
     }
+
+    next();
 };
 
 /**
  * Check if user is an admin
+ * Must be used AFTER isAuthenticated middleware
  */
-exports.isAdmin = async (req, res, next) => {
-    if (!req.session.userId) {
+exports.isAdmin = (req, res, next) => {
+    if (!req.user) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
             redirectUrl: '/login'
         });
     }
-    
-    try {
-        const user = await User.findById(req.session.userId);
-        
-        if (!user) {
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                message: 'User not found',
-                redirectUrl: '/login'
-            });
-        }
-        
-        if (user.role !== 'ADMIN') {
-            return res.status(403).json({
-                success: false,
-                message: 'Admin access required'
-            });
-        }
-        
-        req.user = user;
-        next();
-    } catch (error) {
-        console.error('Error in isAdmin middleware:', error);
-        res.status(500).json({
+
+    if (req.user.role !== 'ADMIN') {
+        return res.status(403).json({
             success: false,
-            message: 'Server error checking permissions'
+            message: 'Admin access required'
         });
     }
+
+    next();
 };
 
 /**
  * Check if rider is verified
+ * Must be used AFTER isAuthenticated middleware
  */
-exports.isVerifiedRider = async (req, res, next) => {
-    if (!req.session.userId) {
+exports.isVerifiedRider = (req, res, next) => {
+    if (!req.user) {
         return res.status(401).json({
             success: false,
             message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
             redirectUrl: '/login'
         });
     }
-    
-    try {
-        const user = await User.findById(req.session.userId);
-        
-        if (!user) {
-            req.session.destroy();
-            return res.status(401).json({
-                success: false,
-                message: 'User not found',
-                redirectUrl: '/login'
-            });
-        }
-        
-        if (user.role !== 'RIDER') {
-            return res.status(403).json({
-                success: false,
-                message: 'This action is only available to riders'
-            });
-        }
-        
-        if (user.verificationStatus !== 'VERIFIED') {
-            return res.status(403).json({
-                success: false,
-                message: 'Your account is pending verification',
-                verificationStatus: user.verificationStatus,
-                redirectUrl: '/user/documents'
-            });
-        }
-        
-        req.user = user;
-        next();
-    } catch (error) {
-        console.error('Error checking verification:', error);
-        res.status(500).json({
+
+    if (req.user.role !== 'RIDER') {
+        return res.status(403).json({
             success: false,
-            message: 'Server error checking verification'
+            message: 'This action is only available to riders'
         });
     }
+
+    if (req.user.verificationStatus !== 'VERIFIED') {
+        return res.status(403).json({
+            success: false,
+            message: 'Your account is pending verification',
+            verificationStatus: req.user.verificationStatus,
+            redirectUrl: '/user/documents'
+        });
+    }
+
+    next();
 };
 
 /**
  * Check if user can access resource
+ * Must be used AFTER isAuthenticated middleware
  */
 exports.canAccessResource = (resourceUserIdField) => {
     return (req, res, next) => {
         const resourceUserId = req.params[resourceUserIdField] || req.body[resourceUserIdField];
         
-        if (req.session.user && req.session.user.role === 'ADMIN') {
+        if (req.user && req.user.role === 'ADMIN') {
             return next();
         }
         
-        if (resourceUserId === req.session.userId) {
+        if (resourceUserId && req.userId && resourceUserId === req.userId.toString()) {
             return next();
         }
         
@@ -318,31 +232,25 @@ exports.canAccessResource = (resourceUserIdField) => {
 };
 
 /**
- * Attach user object to request and check account status
+ * Attach user object to request if JWT token is present (optional auth)
+ * Does not block the request if no token — just enriches req.user if possible
  */
 exports.attachUser = async (req, res, next) => {
-    if (req.session && req.session.userId) {
+    const token = extractToken(req);
+
+    if (token) {
         try {
-            const user = await User.findById(req.session.userId)
+            const decoded = verifyAccessToken(token);
+            const user = await User.findById(decoded.userId)
                 .select('-password')
                 .lean();
             
-            if (user) {
-                // Check if user is suspended or deleted
-                if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
-                    // Don't attach user - they should be logged out
-                    req.session.destroy();
-                    // For API requests, the isAuthenticated middleware will handle the response
-                    // For page loads, we just don't attach the user
-                } else if (user.accountStatus === 'DELETED') {
-                    req.session.destroy();
-                } else {
-                    req.user = user;
-                    res.locals.currentUser = user;
-                }
+            if (user && user.accountStatus !== 'SUSPENDED' && !user.isSuspended && user.accountStatus !== 'DELETED') {
+                req.user = user;
+                req.userId = decoded.userId;
             }
         } catch (error) {
-            console.error('Error attaching user:', error);
+            // Token invalid or expired — continue without user
         }
     }
     next();
@@ -352,12 +260,20 @@ exports.attachUser = async (req, res, next) => {
  * Check if user is not authenticated (for login/register pages)
  */
 exports.isGuest = (req, res, next) => {
-    if (req.session && req.session.userId) {
-        return res.status(200).json({
-            success: true,
-            message: 'Already authenticated',
-            redirectUrl: '/dashboard'
-        });
+    const token = extractToken(req);
+
+    if (token) {
+        try {
+            verifyAccessToken(token);
+            // Token is valid — user is already authenticated
+            return res.status(200).json({
+                success: true,
+                message: 'Already authenticated',
+                redirectUrl: '/dashboard'
+            });
+        } catch (error) {
+            // Token invalid — user is a guest, continue
+        }
     }
     next();
 };

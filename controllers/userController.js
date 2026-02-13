@@ -291,13 +291,13 @@ exports.completeProfile = asyncHandler(async (req, res) => {
         // Set verification status to PENDING (will be updated after document upload)
         user.verificationStatus = 'PENDING';
         await user.save();
-        req.flash('success', 'Profile completed successfully! Please upload your documents for verification.');
+        if (req.flash) req.flash('success', 'Profile completed successfully! Please upload your documents for verification.');
         res.redirect('/user/upload-documents');
     } else {
         // PASSENGERS don't need verification - auto-verify them
         user.verificationStatus = 'VERIFIED';
         await user.save();
-        req.flash('success', '✅ Profile completed successfully! You can now start booking rides.');
+        if (req.flash) req.flash('success', '✅ Profile completed successfully! You can now start booking rides.');
         res.redirect('/user/dashboard');
     }
 });
@@ -1279,8 +1279,9 @@ exports.deactivateAccount = asyncHandler(async (req, res) => {
         }
     }
 
-    // Destroy session
-    req.session.destroy();
+    // Clear auth cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
 
     res.status(200).json({
         success: true,
@@ -1757,8 +1758,9 @@ exports.deleteAccount = asyncHandler(async (req, res) => {
         }
     }
 
-    // Destroy session
-    req.session.destroy();
+    // Clear auth cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
 
     res.status(200).json({
         success: true,

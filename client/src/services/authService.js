@@ -16,13 +16,17 @@ export const authService = {
 
   // Verify OTP
   verifyOtp: async (otp) => {
-    const response = await api.post('/api/auth/verify-otp', { otp })
+    // Get userId from localStorage (stored during registration)
+    const userId = localStorage.getItem('pendingUserId')
+    const response = await api.post('/api/auth/verify-otp', { otp, userId })
     return response.data
   },
 
   // Resend OTP
   resendOtp: async () => {
-    const response = await api.post('/api/auth/resend-otp')
+    // Get userId from localStorage (stored during registration)
+    const userId = localStorage.getItem('pendingUserId')
+    const response = await api.post('/api/auth/resend-otp', { userId })
     return response.data
   },
 

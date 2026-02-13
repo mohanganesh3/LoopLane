@@ -527,7 +527,7 @@ exports.showChatPage = asyncHandler(async (req, res) => {
 
         if (!isParticipant) {
             console.error('❌ [Chat Page] User not authorized');
-            req.flash('error', 'You are not authorized to view this chat');
+            if (req.flash) req.flash('error', 'You are not authorized to view this chat');
             return res.redirect('/chat');
         }
 
