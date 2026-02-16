@@ -14,31 +14,77 @@ const api = axios.create({
   }
 })
 
-// Response interceptor for error handling - Handle suspended/deleted accounts
+// ===== Automatic Token Refresh =====
+let isRefreshing = false
+let failedQueue = []
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
+
+// Response interceptor - auto-refresh expired access tokens
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config
     const response = error.response
     
     // Handle suspended/deleted/inactive accounts - force logout
     if (response?.status === 403 && response?.data?.forceLogout) {
-      // Clear any local storage
       localStorage.clear()
-      
-      // Show alert with the message
       const message = response.data.message || 'Your account has been suspended. Please contact support.'
       alert(message)
-      
-      // Force redirect to login
       window.location.href = '/login'
       return Promise.reject(error)
     }
     
-    // Handle 401 when session is invalid
+    // Handle 401 with forceLogout flag
     if (response?.status === 401 && response?.data?.forceLogout) {
       localStorage.clear()
       window.location.href = '/login'
       return Promise.reject(error)
+    }
+
+    // Auto-refresh: if 401 and not already retried, try refreshing the token
+    if (response?.status === 401 && !originalRequest._retry) {
+      // Don't retry the refresh endpoint itself
+      if (originalRequest.url?.includes('/api/token/refresh')) {
+        return Promise.reject(error)
+      }
+
+      if (isRefreshing) {
+        // Another refresh is in progress — queue this request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then(() => {
+          return api(originalRequest)
+        }).catch(err => Promise.reject(err))
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        await axios.post(`${API_URL}/api/token/refresh`, {}, { withCredentials: true })
+        processQueue(null)
+        // Retry the original request with the new cookie
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError)
+        // Refresh failed — token fully expired, force logout
+        localStorage.clear()
+        window.location.href = '/login'
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
     
     return Promise.reject(error)

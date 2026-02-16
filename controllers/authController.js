@@ -207,7 +207,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
     });
 
     // Set tokens in HTTP-only cookies
-    const accessTokenMaxAge = 15 * 60 * 1000; // 15 minutes
+    const accessTokenMaxAge = 60 * 60 * 1000; // 1 hour
     const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
     res.cookie('accessToken', accessToken, getCookieOptions(accessTokenMaxAge));
     res.cookie('refreshToken', refreshToken, getCookieOptions(refreshTokenMaxAge));
@@ -373,7 +373,7 @@ exports.login = asyncHandler(async (req, res) => {
     });
 
     // Set tokens in HTTP-only cookies
-    const accessTokenMaxAge = 15 * 60 * 1000; // 15 minutes
+    const accessTokenMaxAge = 60 * 60 * 1000; // 1 hour
     const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
     
     res.cookie('accessToken', accessToken, getCookieOptions(accessTokenMaxAge));

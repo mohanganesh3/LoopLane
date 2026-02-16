@@ -8,7 +8,7 @@ const { AppError } = require('./errorHandler');
 const User = require('../models/User');
 
 // Token expiry constants
-const ACCESS_TOKEN_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '15m';
+const ACCESS_TOKEN_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '1h';
 const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 const JWT_SECRET = process.env.JWT_SECRET;
 
