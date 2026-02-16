@@ -63,7 +63,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
     await RefreshToken.revokeToken(tokenDoc._id);
 
     // Set new tokens in HTTP-only cookies
-    const accessTokenMaxAge = 60 * 60 * 1000; // 1 hour
+    const accessTokenMaxAge = 2 * 60 * 60 * 1000; // 2 hours
     const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
 
     res.cookie('accessToken', newAccessToken, getCookieOptions(accessTokenMaxAge));
@@ -74,7 +74,7 @@ router.post('/refresh', asyncHandler(async (req, res) => {
         message: 'Tokens refreshed successfully',
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-        expiresIn: 3600 // 1 hour in seconds
+        expiresIn: 7200 // 2 hours in seconds
     });
 }));
 
