@@ -51,7 +51,7 @@ const transactionSchema = new mongoose.Schema({
         // Platform commission
         platformCommission: {
             type: Number,
-            default: 50
+            default: 0 // 10% of rideFare, calculated at booking time
         },
         
         // Total amount

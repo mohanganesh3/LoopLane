@@ -10,6 +10,7 @@ const AdminDashboard = () => {
     completedRides: 0,
     pendingVerifications: 0,
     totalRevenue: 0,
+    totalTransactionVolume: 0,
     todayBookings: 0
   });
   const [recentActivities, setRecentActivities] = useState([]);
@@ -32,6 +33,7 @@ const AdminDashboard = () => {
               completedRides: 0,
               pendingVerifications: 0,
               totalRevenue: 0,
+              totalTransactionVolume: 0,
               todayBookings: 0
             });
             setRecentActivities(response.recentActivities || []);
@@ -73,6 +75,7 @@ const AdminDashboard = () => {
           completedRides: 0,
           pendingVerifications: 0,
           totalRevenue: 0,
+          totalTransactionVolume: 0,
           todayBookings: 0
         });
         setRecentActivities(response.recentActivities || []);
@@ -92,7 +95,8 @@ const AdminDashboard = () => {
     { label: 'Active Rides', value: stats.activeRides, icon: <i className="fas fa-car"></i>, color: 'emerald', link: '/admin/rides' },
     { label: 'Completed Rides', value: stats.completedRides, icon: <i className="fas fa-check-circle"></i>, color: 'green', link: '/admin/rides?status=completed' },
     { label: 'Pending Verifications', value: stats.pendingVerifications, icon: <i className="fas fa-clipboard-list"></i>, color: 'yellow', link: '/admin/verifications' },
-    { label: 'Total Revenue', value: `₹${stats.totalRevenue.toLocaleString()}`, icon: <i className="fas fa-money-bill-wave"></i>, color: 'purple', link: '/admin/bookings' },
+    { label: 'Platform Revenue', value: `₹${(stats.totalRevenue || 0).toLocaleString()}`, icon: <i className="fas fa-money-bill-wave"></i>, color: 'purple', link: '/admin/bookings' },
+    { label: 'Total Volume', value: `₹${(stats.totalTransactionVolume || 0).toLocaleString()}`, icon: <i className="fas fa-exchange-alt"></i>, color: 'indigo', link: '/admin/bookings' },
     { label: 'Today\'s Bookings', value: stats.todayBookings, icon: <i className="fas fa-calendar-day"></i>, color: 'orange', link: '/admin/bookings' }
   ];
 

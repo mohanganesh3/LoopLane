@@ -161,7 +161,7 @@ exports.createBooking = asyncHandler(async (req, res) => {
     // Calculate price with commission
     const pricePerSeat = ride.pricing.pricePerSeat;
     const rideFare = pricePerSeat * numSeats;
-    const platformCommission = 50; // Fixed ₹50 commission per booking
+    const platformCommission = Math.round(rideFare * 0.10); // 10% platform fee
     const totalAmount = rideFare + platformCommission;
 
     console.log('💰 [Create Booking] Price Calculation:');

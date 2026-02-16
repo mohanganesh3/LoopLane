@@ -48,23 +48,22 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(10);
 
-    // Get revenue statistics - Enhanced to count more booking statuses
+    // Get revenue statistics - Platform revenue = sum of 10% platform commissions
     const totalRevenue = await Booking.aggregate([
         { 
             $match: { 
-                // Include more statuses to capture completed/paid rides
                 status: { $in: ['COMPLETED', 'DROPPED_OFF'] },
-                // Make payment status optional since some bookings might not have it set properly
                 $or: [
                     { 'payment.status': { $in: ['PAID', 'PAYMENT_CONFIRMED'] } },
-                    { totalPrice: { $gt: 0 } } // Fallback: any booking with a price
+                    { totalPrice: { $gt: 0 } }
                 ]
             } 
         },
         { 
             $group: { 
                 _id: null, 
-                total: { $sum: '$totalPrice' }, // Use totalPrice for total revenue
+                total: { $sum: '$totalPrice' },
+                platformRevenue: { $sum: '$payment.platformCommission' },
                 count: { $sum: 1 }
             } 
         }
@@ -72,9 +71,9 @@ exports.showDashboard = asyncHandler(async (req, res) => {
 
     console.log('📊 [Admin Dashboard] Revenue calculation:', totalRevenue);
 
-    // Calculate platform commission (₹50 per completed booking)
+    // Platform revenue = sum of all 10% platform commissions
     const completedBookingsCount = totalRevenue[0]?.count || 0;
-    const platformRevenue = completedBookingsCount * 50; // ₹50 commission per booking
+    const platformRevenue = totalRevenue[0]?.platformRevenue || 0; // Actual platform earnings (10%)
 
     // Get unresolved route deviations count for geo-fencing badge
     const unresolvedDeviations = await RouteDeviation.countDocuments({ 
@@ -100,7 +99,8 @@ exports.showDashboard = asyncHandler(async (req, res) => {
                 pending: pendingBookings,
                 confirmed: confirmedBookings
             },
-            revenue: totalRevenue[0]?.total || 0,
+            revenue: platformRevenue, // Platform earnings (10% commission)
+            totalTransactionVolume: totalRevenue[0]?.total || 0, // Total money moved
             platformRevenue: platformRevenue,
             revenueBookings: completedBookingsCount
         },
@@ -1030,8 +1030,8 @@ exports.showStatistics = asyncHandler(async (req, res) => {
     const completionRate = totalRides > 0 ? Math.round((completedRides / totalRides) * 100) : 0;
     console.log(`🚗 Rides - Total: ${totalRides}, Completed: ${completedRides}, Completion Rate: ${completionRate}%`);
 
-    // ===== REVENUE STATISTICS (FIXED) =====
-    // Use totalPrice field with flexible status matching
+    // ===== REVENUE STATISTICS (FIXED - 10% Platform Fee) =====
+    // Platform revenue = sum of 10% commissions, transaction volume = total money moved
     const revenueData = await Booking.aggregate([
         { 
             $match: { 
@@ -1042,7 +1042,7 @@ exports.showStatistics = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: null,
-                totalRevenue: { $sum: '$totalPrice' },
+                totalTransactionVolume: { $sum: '$totalPrice' },
                 platformFees: { $sum: '$payment.platformCommission' },
                 count: { $sum: 1 }
             }
@@ -1060,16 +1060,17 @@ exports.showStatistics = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: null,
-                total: { $sum: '$totalPrice' },
+                platformFees: { $sum: '$payment.platformCommission' },
                 count: { $sum: 1 }
             }
         }
     ]);
 
-    const totalRevenue = revenueData[0]?.totalRevenue || 0;
-    const revenueThisMonthValue = revenueThisMonth[0]?.total || 0;
+    const totalRevenue = revenueData[0]?.platformFees || 0;
+    const totalTransactionVolume = revenueData[0]?.totalTransactionVolume || 0;
+    const revenueThisMonthValue = revenueThisMonth[0]?.platformFees || 0;
     const platformFees = revenueData[0]?.platformFees || 0;
-    console.log(`💰 Revenue - Total: ₹${totalRevenue}, This Month: ₹${revenueThisMonthValue}, Platform Fees: ₹${platformFees}`);
+    console.log(`💰 Revenue - Platform: ₹${totalRevenue}, Volume: ₹${totalTransactionVolume}, This Month: ₹${revenueThisMonthValue}`);
 
     // ===== ENVIRONMENTAL IMPACT (FIXED) =====
     // Use route.distance field (already in km)
@@ -1096,7 +1097,7 @@ exports.showStatistics = asyncHandler(async (req, res) => {
     ]);
     console.log(`📈 User Growth Data (${range}):`, userGrowthData);
 
-    // ===== REVENUE CHART DATA (FIXED) =====
+    // ===== REVENUE CHART DATA (FIXED - shows platform revenue) =====
     const revenueChartData = await Booking.aggregate([
         {
             $match: {
@@ -1108,7 +1109,7 @@ exports.showStatistics = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
-                revenue: { $sum: '$totalPrice' }
+                revenue: { $sum: '$payment.platformCommission' }
             }
         },
         { $sort: { _id: 1 } }
@@ -1208,7 +1209,8 @@ exports.showStatistics = asyncHandler(async (req, res) => {
                 completionRate
             },
             revenue: {
-                total: totalRevenue,
+                total: totalRevenue, // Platform earnings (10% commissions)
+                totalTransactionVolume: totalTransactionVolume, // Total money moved through platform
                 thisMonth: revenueThisMonthValue,
                 platformFees
             },
@@ -1696,7 +1698,8 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
         { 
             $group: { 
                 _id: null, 
-                total: { $sum: '$totalPrice' }
+                platformRevenue: { $sum: '$payment.platformCommission' },
+                totalTransactionVolume: { $sum: '$totalPrice' }
             } 
         }
     ]);
@@ -1713,7 +1716,8 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
             activeRides,
             completedRides,
             pendingVerifications,
-            totalRevenue: revenueData[0]?.total || 0,
+            totalRevenue: revenueData[0]?.platformRevenue || 0,
+            totalTransactionVolume: revenueData[0]?.totalTransactionVolume || 0,
             todayBookings
         },
         recentActivities: recentActivities.map(a => ({
@@ -1983,7 +1987,8 @@ exports.getRevenueReport = asyncHandler(async (req, res) => {
         {
             $group: {
                 _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-                revenue: { $sum: '$totalPrice' },
+                revenue: { $sum: '$payment.platformCommission' },
+                volume: { $sum: '$totalPrice' },
                 count: { $sum: 1 }
             }
         },
@@ -1991,11 +1996,13 @@ exports.getRevenueReport = asyncHandler(async (req, res) => {
     ]);
 
     const totalRevenue = revenueData.reduce((sum, d) => sum + d.revenue, 0);
+    const totalVolume = revenueData.reduce((sum, d) => sum + d.volume, 0);
 
     res.json({
         success: true,
         data: revenueData,
         totalRevenue,
+        totalVolume,
         startDate: start,
         endDate: end
     });

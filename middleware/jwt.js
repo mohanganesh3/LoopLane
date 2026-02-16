@@ -96,11 +96,7 @@ exports.verifyRefreshToken = (token) => {
     }
 };
 
-/**
- * JWT Authentication Middleware
- * Checks for JWT in Authorization header or cookies
- * Does NOT fall back to session - use isAuthenticated in auth.js for hybrid auth
- */
+
 exports.isAuthenticatedJWT = async (req, res, next) => {
     try {
         // Extract token from Authorization header (Bearer token) or cookies

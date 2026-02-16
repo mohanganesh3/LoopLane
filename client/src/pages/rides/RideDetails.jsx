@@ -1034,8 +1034,8 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
 
   const pricePerSeat = ride.pricing?.pricePerSeat || 0;
   const availableSeats = ride.pricing?.availableSeats || 1;
-  const platformCommission = 50; // Fixed ₹50 commission
   const rideFare = seats * pricePerSeat;
+  const platformCommission = Math.round(rideFare * 0.10); // 10% platform fee
   const totalPrice = rideFare + platformCommission;
 
   // ✅ EDGE CASE FIX: Prevent double-submission race condition
@@ -1576,7 +1576,7 @@ const PassengerActionCard = ({ booking, getStatusBadge, actionType, onVerifyPick
             <h4 className="font-semibold text-gray-800">{displayName}</h4>
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <span><i className="fas fa-chair text-gray-400 mr-1"></i>{booking.seatsBooked} seat{booking.seatsBooked > 1 ? 's' : ''}</span>
-              <span className="text-emerald-600 font-semibold">₹{booking.totalPrice || 0}</span>
+              <span className="text-emerald-600 font-semibold">₹{booking.payment?.rideFare || booking.totalPrice || 0}</span>
             </div>
           </div>
         </div>
@@ -1697,9 +1697,9 @@ const RideManagementSidebar = ({ ride, onStartRide, onCompleteRide, actionLoadin
   const confirmedBookings = bookings.filter(b => b.status !== 'PENDING' && b.status !== 'CANCELLED');
   const completedBookings = bookings.filter(b => ['DROPPED_OFF', 'COMPLETED'].includes(b.status));
 
-  // Calculate earnings
-  const totalEarnings = confirmedBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
-  const collectedEarnings = completedBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+  // Calculate earnings - rider gets rideFare only (excluding platform fee)
+  const totalEarnings = confirmedBookings.reduce((sum, b) => sum + (b.payment?.rideFare || b.totalPrice || 0), 0);
+  const collectedEarnings = completedBookings.reduce((sum, b) => sum + (b.payment?.rideFare || b.totalPrice || 0), 0);
   const pendingEarnings = totalEarnings - collectedEarnings;
 
   const canStartRide = ride.status === 'ACTIVE' && bookings.filter(b => b.status === 'CONFIRMED').length > 0;

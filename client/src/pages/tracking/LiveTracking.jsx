@@ -529,8 +529,8 @@ const LiveTracking = () => {
               <p className="text-lg font-bold text-gray-800">{routeInfo.distance || booking.ride?.route?.distance?.toFixed(1) || '--'} km</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Fare</p>
-              <p className="text-lg font-bold text-emerald-600">₹{booking.totalPrice || (booking.ride?.pricing?.pricePerSeat * (booking.seatsBooked || 1)) || '--'}</p>
+              <p className="text-xs text-gray-500 mb-1">{isRider ? 'Your Earnings' : 'Fare'}</p>
+              <p className="text-lg font-bold text-emerald-600">₹{isRider ? (booking.payment?.rideFare || booking.totalPrice || '--') : (booking.totalPrice || (booking.ride?.pricing?.pricePerSeat * (booking.seatsBooked || 1)) || '--')}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Seats</p>
