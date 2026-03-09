@@ -1,16 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LoopLane - Ride Together</title>
-    <!-- Google Fonts - Premium Typography -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LoopLane - Ride Together</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0ead69" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+</head>
+
+<body>
+  <div id="root"></div>
+  <script>
+    const remoteLogUrl = window.localStorage.getItem('looplane:log-endpoint');
+
+    function sendLog(type, ...args) {
+      if (!remoteLogUrl) return;
+      if (args[0] && typeof args[0] === 'string' && args[0].includes('Vite')) return;
+      var msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      fetch(remoteLogUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, msg })
+      }).catch(e => e);
+    }
+    window.addEventListener('error', e => sendLog('error', e.message, e.filename, e.lineno));
+    const ogErr = console.error;
+    console.error = (...args) => { sendLog('error', ...args); ogErr(...args); };
+    const ogLog = console.log;
+    console.log = (...args) => { sendLog('log', ...args); ogLog(...args); };
+  </script>
+  <script type="module" src="/src/main.jsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+        let refreshing = false;
+
+        const activateUpdate = (worker) => {
+          if (!worker) return;
+          worker.postMessage({ type: 'SKIP_WAITING' });
+        };
+
+        if (isLocalhost) {
+          Promise.all([
+            navigator.serviceWorker.getRegistrations().then((registrations) =>
+              Promise.all(registrations.map((registration) => registration.unregister()))
+            ),
+            'caches' in window
+              ? caches.keys().then((cacheNames) =>
+                  Promise.all(
+                    cacheNames
+                      .filter((cacheName) => cacheName.startsWith('looplane-cache'))
+                      .map((cacheName) => caches.delete(cacheName))
+                  )
+                )
+              : Promise.resolve(),
+          ]).catch((cleanupError) => {
+            console.log('SW cleanup failed: ', cleanupError);
+          });
+
+          return;
+        }
+
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+
+          const now = Date.now();
+          const lastReload = Number(sessionStorage.getItem('looplane:sw-controllerchange-reload-at') || 0);
+          if (lastReload && now - lastReload < 15000) {
+            console.log('Skipping duplicate SW controllerchange reload');
+            return;
+          }
+
+          sessionStorage.setItem('looplane:sw-controllerchange-reload-at', String(now));
+          refreshing = true;
+          window.location.reload();
+        });
+
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          .then((registration) => {
+            registration.update();
+
+            if (registration.waiting) {
+              activateUpdate(registration.waiting);
+            }
+
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (!newWorker) return;
+
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  activateUpdate(newWorker);
+                }
+              });
+            });
+
+            console.log('SW registered: ', registration);
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  </script>
+</body>
+
 </html>

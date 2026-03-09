@@ -7,6 +7,15 @@
 export const DEFAULT_AVATAR = null; // We'll use initials instead
 export const DEFAULT_CAR = null; // We'll use emoji placeholder
 
+/** Only allow http(s) photo URLs — block javascript: / data: URIs */
+const isSafeUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch { return false; }
+};
+
 /**
  * Get user's display photo with proper fallback
  * @param {Object} user - User object (can have profile.photo or profilePhoto)
@@ -24,6 +33,9 @@ export const getUserPhoto = (user) => {
       photo === 'undefined') {
     return null;
   }
+  
+  // Reject non-HTTP URLs (javascript:, data:, etc.)
+  if (!isSafeUrl(photo)) return null;
   
   return photo;
 };

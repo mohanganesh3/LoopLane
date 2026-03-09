@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-mint-50 flex items-center justify-center px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -97,7 +97,7 @@ export default function NotFound() {
           transition={{ delay: 0.8 }}
           className="mb-6"
         >
-          <h1 className="text-8xl font-bold text-emerald-600 mb-2">404</h1>
+          <h1 className="text-8xl font-bold text-emerald-600 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>404</h1>
           <div className="flex items-center justify-center gap-2 text-gray-400">
             <div className="h-px w-12 bg-gray-300"></div>
             <span className="text-sm uppercase tracking-wider">Page Not Found</span>
@@ -179,11 +179,11 @@ export default function NotFound() {
           className="mt-8 text-sm text-gray-500"
         >
           Need help? Contact our{' '}
-          <a href="mailto:support@looplane.com" className="text-emerald-600 hover:text-emerald-700 font-medium">
+          <a href="mailto:support@looplane.in" className="text-emerald-600 hover:text-emerald-700 font-medium">
             support team
           </a>
         </motion.p>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

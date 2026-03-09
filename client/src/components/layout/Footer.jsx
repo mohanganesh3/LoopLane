@@ -1,4 +1,14 @@
 import { Link } from 'react-router-dom'
+import { HeartIcon, LeafIcon } from '../icons/PremiumIcons'
+import { 
+  FacebookIcon, 
+  TwitterIcon, 
+  InstagramIcon, 
+  MailIcon, 
+  PhoneIcon, 
+  MapPinIcon, 
+  RouteIcon 
+} from '../icons/AppIcons'
 
 function Footer({ adminTheme = false }) {
   const currentYear = new Date().getFullYear()
@@ -29,7 +39,7 @@ function Footer({ adminTheme = false }) {
           <div>
             <div className="flex items-center gap-2 mb-6">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#8ee4af] to-[#0ead69] flex items-center justify-center shadow-lg shadow-[#8ee4af]/30">
-                <i className="fas fa-route text-[#0f1a1a] text-sm"></i>
+                <RouteIcon className="text-[#0f1a1a] w-5 h-5" />
               </div>
               <span className="text-xl font-semibold">LOOPLANE</span>
             </div>
@@ -38,13 +48,13 @@ function Footer({ adminTheme = false }) {
             </p>
             <div className="flex gap-4 mt-6">
               <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
-                <i className="fab fa-facebook-f text-sm"></i>
+                <FacebookIcon className="w-5 h-5" />
               </a>
               <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
-                <i className="fab fa-twitter text-sm"></i>
+                <TwitterIcon className="w-5 h-5" />
               </a>
               <a href="#" className="w-10 h-10 rounded-full bg-[#264d3d] hover:bg-[#0ead69] flex items-center justify-center transition-colors">
-                <i className="fab fa-instagram text-sm"></i>
+                <InstagramIcon className="w-5 h-5" />
               </a>
             </div>
           </div>
@@ -81,24 +91,24 @@ function Footer({ adminTheme = false }) {
             <h3 className="text-sm font-semibold uppercase tracking-wider text-[#8ee4af] mb-6">Support</h3>
             <ul className="space-y-4 text-sm">
               <li>
-                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
+                <Link to="/support" className="text-[#9cb5a4] hover:text-white transition">
                   Help Center
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
+                <Link to="/support" className="text-[#9cb5a4] hover:text-white transition">
                   Safety Guidelines
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
+                <Link to="/terms" className="text-[#9cb5a4] hover:text-white transition">
                   Terms of Service
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#" className="text-[#9cb5a4] hover:text-white transition">
+                <Link to="/privacy" className="text-[#9cb5a4] hover:text-white transition">
                   Privacy Policy
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -108,15 +118,17 @@ function Footer({ adminTheme = false }) {
             <h3 className="text-sm font-semibold uppercase tracking-wider text-[#8ee4af] mb-6">Contact Us</h3>
             <ul className="space-y-4 text-sm text-[#9cb5a4]">
               <li className="flex items-center gap-3">
-                <i className="fas fa-envelope text-[#0ead69]"></i>
-                <span>support@looplane.com</span>
+                <MailIcon className="text-[#0ead69] w-4 h-4" />
+                <a href="mailto:support@looplane.in" className="hover:text-white transition">
+                  support@looplane.in
+                </a>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-phone text-[#0ead69]"></i>
+                <PhoneIcon className="text-[#0ead69] w-4 h-4" />
                 <span>+91 99999 99999</span>
               </li>
               <li className="flex items-center gap-3">
-                <i className="fas fa-map-marker-alt text-[#0ead69]"></i>
+                <MapPinIcon className="text-[#0ead69] w-4 h-4" />
                 <span>Mumbai, Maharashtra, India</span>
               </li>
             </ul>
@@ -125,7 +137,7 @@ function Footer({ adminTheme = false }) {
 
         <div className="border-t border-[#264d3d] mt-12 pt-8 text-center text-sm text-[#9cb5a4]">
           <p>&copy; {currentYear} LOOPLANE Carpool Platform. All rights reserved.</p>
-          <p className="mt-2">Built with <span className="text-[#0ead69]">❤</span> for a greener future <span className="text-[#8ee4af]">🌱</span></p>
+          <p className="mt-2 flex items-center justify-center gap-1 text-xs">Built with <span className="text-[#0ead69]"><HeartIcon size={12} /></span> for a greener future <span className="text-[#8ee4af]"><LeafIcon size={12} /></span></p>
         </div>
       </div>
     </footer>

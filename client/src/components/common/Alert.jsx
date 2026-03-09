@@ -3,7 +3,8 @@ const Alert = ({
   message, 
   title,
   onClose,
-  className = '' 
+  className = '',
+  children
 }) => {
   const types = {
     success: {
@@ -38,7 +39,9 @@ const Alert = ({
 
   const style = types[type] || types.info;
 
-  if (!message) return null;
+  const content = message ?? children;
+
+  if (!content) return null;
 
   return (
     <div 
@@ -55,7 +58,7 @@ const Alert = ({
           {title && (
             <p className="font-semibold mb-1">{title}</p>
           )}
-          <p className="text-sm">{message}</p>
+          <p className="text-sm">{content}</p>
         </div>
         {onClose && (
           <button

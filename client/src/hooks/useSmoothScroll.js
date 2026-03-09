@@ -65,9 +65,10 @@ export function useSmoothScroll(options = {}) {
         lenis.on('scroll', ScrollTrigger.update);
 
         // Add Lenis to GSAP ticker
-        gsap.ticker.add((time) => {
+        const tickerCallback = (time) => {
             lenis.raf(time * 1000);
-        });
+        };
+        gsap.ticker.add(tickerCallback);
 
         // Disable GSAP lag smoothing for perfect sync
         gsap.ticker.lagSmoothing(0);
@@ -75,7 +76,8 @@ export function useSmoothScroll(options = {}) {
         // Cleanup
         return () => {
             lenis.destroy();
-            gsap.ticker.remove(lenis.raf);
+            lenisRef.current = null;
+            gsap.ticker.remove(tickerCallback);
             document.documentElement.classList.remove('lenis', 'lenis-smooth');
         };
     }, [location.pathname]);

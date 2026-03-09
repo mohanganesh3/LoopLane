@@ -21,22 +21,24 @@ export function useCustomCursor() {
     const lerp = useCallback((a, b, n) => (1 - n) * a + n * b, []);
 
     useEffect(() => {
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            return undefined;
+        }
+
         // Check if touch device
-        const checkTouch = () => {
-            setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-        };
-        checkTouch();
+        const touchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        setIsTouchDevice(touchDevice);
 
         // Check reduced motion preference
-        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        if (prefersReducedMotion || isTouchDevice) {
-            return;
+        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        if (mediaQuery.matches || touchDevice) {
+            return undefined;
         }
 
         // Mouse move handler
         const handleMouseMove = (e) => {
             mouse.current = { x: e.clientX, y: e.clientY };
-            if (!isVisible) setIsVisible(true);
+            setIsVisible(true);
         };
 
         // Mouse enter/leave viewport
@@ -103,7 +105,7 @@ export function useCustomCursor() {
             window.removeEventListener('mouseup', handleMouseUp);
             cancelAnimationFrame(animationId);
         };
-    }, [lerp, isVisible, isTouchDevice]);
+    }, [lerp]);
 
     return {
         cursorRef,

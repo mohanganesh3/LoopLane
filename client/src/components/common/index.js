@@ -17,3 +17,4 @@ export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as CustomCursor } from './CustomCursor';
 export { default as AnimatedSection, AnimatedElement } from './AnimatedSection';
 export { default as MagneticButton } from './MagneticButton';
+export { default as BookingProgressStepper } from './BookingProgressStepper';
