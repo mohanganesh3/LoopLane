@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button, Alert } from '../../components/common';
 import authService from '../../services/authService';
 
@@ -20,6 +21,7 @@ const ForgotPassword = () => {
       const result = await authService.forgotPassword(email);
       
       if (result.success) {
+        sessionStorage.setItem('passwordResetEmail', email.trim().toLowerCase());
         setSuccess(result.message || 'Reset code sent to your email!');
         setTimeout(() => {
           navigate(result.redirectUrl || '/reset-password');
@@ -35,7 +37,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="pt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-16 min-h-screen flex items-center justify-center py-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md w-full mx-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Back Button */}
@@ -56,7 +58,7 @@ const ForgotPassword = () => {
                 <i className="fas fa-lock text-white text-2xl"></i>
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Forgot Password?</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Forgot Password?</h2>
             <p className="text-gray-600 text-sm">
               No worries! Enter your email and we'll send you a reset code.
             </p>
@@ -132,7 +134,7 @@ const ForgotPassword = () => {
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

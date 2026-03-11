@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useSocket } from '../../context/SocketContext'
 import { getUserDisplayName, getUserPhoto, getInitials, getAvatarColor } from '../../utils/imageHelpers'
+import { hasAdminPanelAccess } from '../../utils/roles'
 
 function Navbar({ adminTheme = false }) {
   const { user, logout, isAuthenticated } = useAuth()
@@ -107,7 +108,7 @@ function Navbar({ adminTheme = false }) {
 
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-6">
-              {(isAdminRoute || adminTheme) && user?.role === 'ADMIN' ? (
+              {(isAdminRoute || adminTheme) && hasAdminPanelAccess(user?.role) ? (
                 <>
                   {adminNavLinks.map((link) => (
                     <Link
@@ -211,11 +212,25 @@ function Navbar({ adminTheme = false }) {
                           <i className="fas fa-bell w-5 text-gray-400" aria-hidden="true" />
                           <span className="ml-2">Notifications</span>
                         </Link>
+                        <Link to="/wallet" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100">
+                          <i className="fas fa-wallet w-5 text-gray-400" aria-hidden="true" />
+                          <span className="ml-2">Wallet</span>
+                        </Link>
+                        {user?.role === 'RIDER' && (
+                          <Link to="/earnings" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100">
+                            <i className="fas fa-chart-line w-5 text-gray-400" aria-hidden="true" />
+                            <span className="ml-2">Earnings</span>
+                          </Link>
+                        )}
                         <Link to="/reviews" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100">
                           <i className="fas fa-star w-5 text-gray-400" aria-hidden="true" />
                           <span className="ml-2">My Reviews</span>
                         </Link>
-                        {user.role === 'ADMIN' && (
+                        <Link to="/change-password" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100">
+                          <i className="fas fa-key w-5 text-gray-400" aria-hidden="true" />
+                          <span className="ml-2">Change Password</span>
+                        </Link>
+                        {hasAdminPanelAccess(user?.role) && (
                           <>
                             <hr className="my-2" />
                             <Link to="/admin/dashboard" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-100">
@@ -350,8 +365,19 @@ function Navbar({ adminTheme = false }) {
               <MobileNavLink to="/notifications" icon="fa-bell" adminTheme={isAdminRoute || adminTheme}>
                 Notifications
               </MobileNavLink>
+              <MobileNavLink to="/wallet" icon="fa-wallet" adminTheme={isAdminRoute || adminTheme}>
+                Wallet
+              </MobileNavLink>
+              {user?.role === 'RIDER' && (
+                <MobileNavLink to="/earnings" icon="fa-chart-line" adminTheme={isAdminRoute || adminTheme}>
+                  Earnings
+                </MobileNavLink>
+              )}
+              <MobileNavLink to="/change-password" icon="fa-key" adminTheme={isAdminRoute || adminTheme}>
+                Change Password
+              </MobileNavLink>
 
-              {user.role === 'ADMIN' && (
+              {hasAdminPanelAccess(user?.role) && (
                 <>
                   <hr className={`my-3 ${isAdminRoute || adminTheme ? 'border-indigo-700' : 'border-gray-200'}`} />
                   <MobileNavLink to="/admin/dashboard" icon="fa-shield-alt" adminTheme={isAdminRoute || adminTheme}>

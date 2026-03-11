@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import authService from '../../services/authService';
 import { Button, Alert } from '../../components/common';
 
@@ -110,7 +111,7 @@ const ChangePassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md mx-auto px-4">
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="mb-6">
@@ -119,7 +120,7 @@ const ChangePassword = () => {
             </Link>
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Change Password</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Change Password</h1>
 
           {error && <Alert type="error" message={error} onClose={() => setError('')} />}
           {success && <Alert type="success" message={success} />}
@@ -223,7 +224,7 @@ const ChangePassword = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

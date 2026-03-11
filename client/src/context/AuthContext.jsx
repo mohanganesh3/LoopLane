@@ -39,16 +39,14 @@ export function AuthProvider({ children }) {
         
         // Check if user account is suspended or deleted
         if (userData.accountStatus === 'SUSPENDED' || userData.isSuspended) {
-          console.log('Account is suspended, logging out...')
           syncUserWithRedux(null)
-          localStorage.clear()
+          sessionStorage.removeItem('pendingUserId')
           return
         }
         
         if (userData.accountStatus === 'DELETED') {
-          console.log('Account is deleted, logging out...')
           syncUserWithRedux(null)
-          localStorage.clear()
+          sessionStorage.removeItem('pendingUserId')
           return
         }
         
@@ -74,20 +72,31 @@ export function AuthProvider({ children }) {
   // Login function that calls API - ✅ Updated for Two-Factor Auth & Redux
   const login = async (email, password, otp = undefined) => {
     try {
-      const response = await api.post('/api/auth/login', { email, password, otp })
+      const response = await api.post(
+        '/api/auth/login',
+        { email, password, otp },
+        { skipAuthRefresh: true }
+      )
       if (response.data?.success) {
         // If user data is returned, set it
         if (response.data.user) {
-          setUser(response.data.user)
-          dispatch(setReduxUser(response.data.user))
+          syncUserWithRedux(response.data.user)
+          return { 
+            success: true, 
+            user: response.data.user,
+            redirectUrl: response.data.redirectUrl || '/dashboard'
+          }
         } else {
           // Fetch user data if not included in login response
           await checkAuth()
-        }
-        return { 
-          success: true, 
-          user: response.data.user,
-          redirectUrl: response.data.redirectUrl || '/dashboard'
+          // Return the user we just fetched (captured via closure isn't reliable with async setState)
+          const profileRes = await api.get('/api/user/profile')
+          const fetchedUser = profileRes.data?.user || null
+          return { 
+            success: true, 
+            user: fetchedUser,
+            redirectUrl: response.data.redirectUrl || '/dashboard'
+          }
         }
       }
       return { success: false, message: response.data?.message || 'Login failed' }
@@ -108,11 +117,11 @@ export function AuthProvider({ children }) {
   // Register function
   const register = async (userData) => {
     try {
-      const response = await api.post('/api/auth/register', userData)
+      const response = await api.post('/api/auth/register', userData, { skipAuthRefresh: true })
       if (response.data?.success) {
         // Store user ID for OTP verification if provided
         if (response.data.userId) {
-          localStorage.setItem('pendingUserId', response.data.userId)
+          sessionStorage.setItem('pendingUserId', response.data.userId)
         }
         return { 
           success: true, 
@@ -132,15 +141,15 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await api.post('/api/auth/logout')
+      await api.post('/api/auth/logout', {}, { skipAuthRefresh: true })
     } catch (error) {
       // Ignore errors during logout - we're logging out anyway
-      console.log('Logout completed')
     } finally {
       setUser(null)
       dispatch(clearReduxUser())
       // Clear any stored data
-      localStorage.removeItem('pendingUserId')
+      sessionStorage.removeItem('pendingUserId')
+      sessionStorage.removeItem('passwordResetEmail')
     }
   }
 
@@ -163,7 +172,8 @@ export function AuthProvider({ children }) {
   const updateUserData = (userData) => {
     setUser(prev => {
       const newUser = { ...prev, ...userData }
-      dispatch(setReduxUser(newUser))
+      // Schedule Redux dispatch outside the state updater to avoid side effects
+      queueMicrotask(() => dispatch(setReduxUser(newUser)))
       return newUser
     })
   }
@@ -180,8 +190,8 @@ export function AuthProvider({ children }) {
     logout,
     checkAuth,
     refreshUser,
-    updateUser: updateUserData,  // Export as updateUser for backward compatibility
-    setUser
+    updateUser: updateUserData  // Export as updateUser for backward compatibility
+    // setUser intentionally NOT exposed — use updateUser to keep Redux in sync
   }
 
   return (

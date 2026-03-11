@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button, Alert } from '../../components/common';
+import { motion } from 'framer-motion';
 import authService from '../../services/authService';
 
 const VerifyOtp = () => {
@@ -34,8 +35,8 @@ const VerifyOtp = () => {
       if (result.success) {
         setSuccess('Verification successful! Logging you in...');
         
-        // Clear the pending user ID from localStorage
-        localStorage.removeItem('pendingUserId');
+        // Clear the pending user ID from sessionStorage
+        sessionStorage.removeItem('pendingUserId');
         
         // ✅ Refresh user data from server to update auth context
         await refreshUser();
@@ -83,7 +84,7 @@ const VerifyOtp = () => {
   };
 
   return (
-    <div className="pt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-16 min-h-screen flex items-center justify-center py-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md w-full mx-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Header */}
@@ -91,7 +92,7 @@ const VerifyOtp = () => {
             <div className="w-20 h-20 bg-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <i className="fas fa-envelope text-white text-3xl"></i>
             </div>
-            <h2 className="text-2xl font-bold text-gray-800">Verify OTP</h2>
+            <h2 className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Verify OTP</h2>
             <p className="text-gray-600 mt-2">
               Enter the 6-digit code sent to your email
             </p>
@@ -147,7 +148,7 @@ const VerifyOtp = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

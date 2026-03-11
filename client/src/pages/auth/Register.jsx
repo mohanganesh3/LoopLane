@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
-import { Button, Alert, Modal } from '../../components/common';
+import { Alert, Modal } from '../../components/common';
+import { ClayCard, ClayButton, ClayInput } from '../../components/clay';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -16,7 +18,6 @@ const Register = () => {
     role: 'PASSENGER',
     agreeTerms: false
   });
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({
@@ -136,20 +137,19 @@ const Register = () => {
   };
 
   return (
-    <div className="pt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12">
-      <div className="max-w-lg w-full mx-4">
-        {/* Back to Home Link */}
+    <div className="pt-16 min-h-screen flex items-center justify-center py-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
+      <motion.div className="max-w-lg w-full mx-4" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <Link to="/" className="inline-flex items-center text-gray-600 hover:text-emerald-600 mb-6 transition">
           <i className="fas fa-arrow-left mr-2"></i>
           Back to Home
         </Link>
         
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <ClayCard variant="default" padding="lg" radius="xl">
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <Link to="/" className="inline-flex items-center justify-center space-x-2 mb-4 hover:opacity-80 transition">
               <i className="fas fa-car-side text-emerald-500 text-3xl"></i>
-              <span className="text-3xl font-bold text-gray-800">LOOPLANE</span>
+              <span className="text-3xl font-bold" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>LOOPLANE</span>
             </Link>
             <h2 className="text-2xl font-bold text-gray-800">Create Account</h2>
             <p className="text-gray-600">Join the green carpooling revolution</p>
@@ -159,76 +159,51 @@ const Register = () => {
 
           {/* Register Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name
-              </label>
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="John Doe"
-              />
-            </div>
+            <ClayInput
+              label="Full Name"
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              placeholder="John Doe"
+              icon={<i className="fas fa-user"></i>}
+            />
+
+            <ClayInput
+              label="Email"
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              placeholder="john@example.com"
+              icon={<i className="fas fa-envelope"></i>}
+            />
+
+            <ClayInput
+              label="Phone Number"
+              type="tel"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
+              required
+              placeholder="9876543210"
+              helperText="10-digit mobile number"
+              icon={<i className="fas fa-phone"></i>}
+            />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
+              <ClayInput
+                label="Password"
+                type="password"
+                name="password"
+                value={formData.password}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="john@example.com"
+                placeholder="Min. 8 characters"
+                icon={<i className="fas fa-lock"></i>}
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                required
-                pattern="[0-9]{10}"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                placeholder="9876543210"
-              />
-              <p className="text-xs text-gray-500 mt-1">10-digit mobile number</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="Min. 8 characters"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} aria-hidden="true" />
-                </button>
-              </div>
               {/* Password Strength Indicator */}
               {formData.password && (
                 <div className="mt-2">
@@ -268,32 +243,18 @@ const Register = () => {
               )}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent ${
-                  formData.confirmPassword && formData.password !== formData.confirmPassword 
-                    ? 'border-red-500' 
-                    : formData.confirmPassword && formData.password === formData.confirmPassword
-                      ? 'border-emerald-500'
-                      : 'border-gray-300'
-                }`}
-                placeholder="Re-enter password"
-              />
-              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
-              )}
-              {formData.confirmPassword && formData.password === formData.confirmPassword && (
-                <p className="text-xs text-emerald-500 mt-1">✓ Passwords match</p>
-              )}
-            </div>
+            <ClayInput
+              label="Confirm Password"
+              type="password"
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              placeholder="Re-enter password"
+              icon={<i className="fas fa-lock"></i>}
+              error={formData.confirmPassword && formData.password !== formData.confirmPassword ? 'Passwords do not match' : ''}
+              helperText={formData.confirmPassword && formData.password === formData.confirmPassword ? '✓ Passwords match' : ''}
+            />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -363,9 +324,9 @@ const Register = () => {
               </span>
             </label>
 
-            <Button type="submit" loading={loading} className="w-full">
+            <ClayButton type="submit" variant="primary" size="lg" fullWidth loading={loading}>
               Create Account
-            </Button>
+            </ClayButton>
           </form>
 
           {/* Login Link */}
@@ -377,8 +338,8 @@ const Register = () => {
               </Link>
             </p>
           </div>
-        </div>
-      </div>
+        </ClayCard>
+      </motion.div>
 
       {/* Terms of Service Modal */}
       <Modal
@@ -387,9 +348,9 @@ const Register = () => {
         title="Terms of Service"
         size="lg"
         footer={
-          <Button onClick={() => setShowTermsModal(false)}>
+          <ClayButton onClick={() => setShowTermsModal(false)} variant="primary">
             I Understand
-          </Button>
+          </ClayButton>
         }
       >
         <div className="prose prose-sm max-w-none">
@@ -436,9 +397,9 @@ const Register = () => {
         title="Privacy Policy"
         size="lg"
         footer={
-          <Button onClick={() => setShowPrivacyModal(false)}>
+          <ClayButton onClick={() => setShowPrivacyModal(false)} variant="primary">
             I Understand
-          </Button>
+          </ClayButton>
         }
       >
         <div className="prose prose-sm max-w-none">

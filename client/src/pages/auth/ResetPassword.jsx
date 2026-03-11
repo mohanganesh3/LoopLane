@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Button, Alert } from '../../components/common';
 import authService from '../../services/authService';
 
@@ -26,6 +27,12 @@ const ResetPassword = () => {
       return () => clearTimeout(timer);
     }
   }, [timeLeft]);
+
+  useEffect(() => {
+    if (!sessionStorage.getItem('passwordResetEmail')) {
+      setError('Reset session expired. Request a new reset code.');
+    }
+  }, []);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -88,6 +95,7 @@ const ResetPassword = () => {
 
       if (result.success) {
         setSuccess(result.message || 'Password reset successful!');
+        sessionStorage.removeItem('passwordResetEmail');
         setTimeout(() => {
           navigate(result.redirectUrl || '/login');
         }, 2000);
@@ -114,7 +122,7 @@ const ResetPassword = () => {
   };
 
   return (
-    <div className="pt-16 min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 py-12">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pt-16 min-h-screen flex items-center justify-center py-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md w-full mx-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Back Button */}
@@ -135,7 +143,7 @@ const ResetPassword = () => {
                 <i className="fas fa-key text-white text-2xl"></i>
               </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Reset Your Password</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Reset Your Password</h2>
             <p className="text-gray-600 text-sm">
               Enter the code sent to your email and create a new password
             </p>
@@ -320,7 +328,7 @@ const ResetPassword = () => {
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
