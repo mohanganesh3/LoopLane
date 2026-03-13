@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { LoadingSpinner, Alert, Button, ContributionCalculator } from '../../components/common';
 import userService from '../../services/userService';
 import rideService from '../../services/rideService';
+import { motion } from 'framer-motion';
 
 const EditRide = () => {
   const { id } = useParams();
@@ -49,8 +50,12 @@ const EditRide = () => {
       const ride = rideData.ride;
       setOriginalRide(ride);
 
-      // Check if ride can be edited (no bookings)
-      if (ride.bookings && ride.bookings.length > 0) {
+      const activeBookings = (ride.bookings || []).filter((booking) =>
+        !['CANCELLED', 'REJECTED', 'EXPIRED'].includes(booking.status)
+      );
+
+      // Check if ride can be edited (no active bookings)
+      if (activeBookings.length > 0) {
         setError('Cannot edit ride with existing bookings');
         return;
       }
@@ -164,7 +169,7 @@ const EditRide = () => {
 
   if (error && !originalRide) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <Alert type="error" message={error} />
           <Link to="/my-rides" className="text-emerald-500 hover:underline mt-4 inline-block">
@@ -176,11 +181,11 @@ const EditRide = () => {
   }
 
   return (
-    <div className="pb-12 bg-gray-50 min-h-screen">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl shadow-lg p-8 mb-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">
+          <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
             <i className="fas fa-edit mr-3"></i>Edit Ride
           </h1>
           <p className="opacity-90">Update your ride details before passengers book</p>
@@ -375,7 +380,7 @@ const EditRide = () => {
           </form>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

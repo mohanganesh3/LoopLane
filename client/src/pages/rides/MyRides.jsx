@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Alert, LoadingSpinner, Badge } from '../../components/common';
+import { motion } from 'framer-motion';
+import { Alert, LoadingSpinner } from '../../components/common';
+import { ClayCard, ClayButton, ClayBadge } from '../../components/clay';
 import rideService from '../../services/rideService';
 
 const MyRides = () => {
@@ -15,6 +17,7 @@ const MyRides = () => {
     { key: 'active', label: 'Active', color: 'bg-green-500', icon: 'fa-check-circle' },
     { key: 'in-progress', label: 'In Progress', color: 'bg-blue-500', icon: 'fa-route' },
     { key: 'completed', label: 'Completed', color: 'bg-purple-500', icon: 'fa-flag-checkered' },
+    { key: 'expired', label: 'Expired', color: 'bg-yellow-500', icon: 'fa-clock' },
     { key: 'cancelled', label: 'Cancelled', color: 'bg-red-500', icon: 'fa-times-circle' }
   ];
 
@@ -26,8 +29,8 @@ const MyRides = () => {
     setLoading(true);
     try {
       const params = { page: pagination.currentPage };
-      if (currentStatus !== 'all') params.status = currentStatus.toUpperCase().replace('-', '_');
-      
+      if (currentStatus !== 'all') params.status = currentStatus.toUpperCase().replace(/-/g, '_');
+
       const data = await rideService.getMyRides(params);
       setRides(data.rides || []);
       setPagination(data.pagination || { currentPage: 1, totalPages: 1 });
@@ -43,14 +46,15 @@ const MyRides = () => {
       'ACTIVE': { color: 'green', icon: 'fa-check-circle' },
       'IN_PROGRESS': { color: 'blue', icon: 'fa-route' },
       'COMPLETED': { color: 'purple', icon: 'fa-flag-checkered' },
+      'EXPIRED': { color: 'yellow', icon: 'fa-clock' },
       'CANCELLED': { color: 'red', icon: 'fa-times-circle' }
     };
     const { color, icon } = config[status] || { color: 'gray', icon: 'fa-question-circle' };
     return (
-      <Badge variant={color}>
+      <ClayBadge variant={color}>
         <i className={`fas ${icon} mr-1`}></i>
         {status.replace('_', ' ')}
-      </Badge>
+      </ClayBadge>
     );
   };
 
@@ -66,53 +70,71 @@ const MyRides = () => {
   }
 
   return (
-    <div className="pb-12 bg-gray-50 min-h-screen">
+    <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4">
         {/* Header */}
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-3xl font-bold text-gray-800">
-              <i className="fas fa-car text-emerald-500 mr-3"></i>My Rides
-            </h1>
-            <Link to="/post-ride" className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition">
-              <i className="fas fa-plus-circle mr-2"></i>Post New Ride
-            </Link>
-          </div>
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}>
+          <ClayCard variant="default" padding="lg" className="mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-3xl font-bold text-gray-800" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
+                <i className="fas fa-car text-emerald-500 mr-3"></i>My Rides
+              </h1>
+              <ClayButton variant="primary" size="md" as={Link} to="/post-ride">
+                <i className="fas fa-plus-circle mr-2"></i>Post New Ride
+              </ClayButton>
+            </div>
 
-          {/* Status Filters */}
-          <div className="flex flex-wrap gap-2">
-            {statusFilters.map(filter => (
-              <button
-                key={filter.key}
-                onClick={() => { setCurrentStatus(filter.key); setPagination(p => ({ ...p, currentPage: 1 })); }}
-                className={`px-6 py-2 rounded-lg font-semibold transition ${
-                  currentStatus === filter.key 
-                    ? `${filter.color} text-white` 
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {filter.icon && <i className={`fas ${filter.icon} mr-2`}></i>}
-                {filter.label}
-              </button>
-            ))}
-          </div>
-        </div>
+            {/* Status Filters */}
+            <div className="flex flex-wrap gap-2">
+              {statusFilters.map(filter => (
+                <ClayButton
+                  key={filter.key}
+                  variant={currentStatus === filter.key ? 'primary' : 'clay'}
+                  size="sm"
+                  onClick={() => { setCurrentStatus(filter.key); setPagination(p => ({ ...p, currentPage: 1 })); }}
+                >
+                  {filter.icon && <i className={`fas ${filter.icon} mr-2`}></i>}
+                  {filter.label}
+                </ClayButton>
+              ))}
+            </div>
+          </ClayCard>
+        </motion.div>
 
         {error && <Alert type="error" message={error} onClose={() => setError('')} />}
 
         {/* Rides List */}
         <div className="space-y-6">
           {rides.length === 0 ? (
-            <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-              <i className="fas fa-car-side text-gray-300 text-6xl mb-4"></i>
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">No rides found</h3>
-              <p className="text-gray-500 mb-6">
-                {currentStatus === 'all' ? "You haven't posted any rides yet" : `No ${currentStatus} rides`}
-              </p>
-              <Link to="/post-ride" className="inline-block bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition">
-                <i className="fas fa-plus-circle mr-2"></i>Post Your First Ride
-              </Link>
-            </div>
+            <motion.div variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }} initial="hidden" animate="visible">
+              <ClayCard variant="default" padding="xl">
+                <div className="flex flex-col items-center text-center max-w-lg mx-auto py-8">
+                  <div className="w-24 h-24 bg-emerald-50 rounded-full flex items-center justify-center mb-6">
+                    <i className="fas fa-steering-wheel text-emerald-500 text-4xl"></i>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-800 mb-3" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
+                    {currentStatus === 'all' ? "Your driving journey starts here" : `No ${currentStatus} rides right now`}
+                  </h3>
+                  <p className="text-gray-600 mb-10 text-lg">
+                    {currentStatus === 'all'
+                      ? "Share your empty seats, split the costs, and make your road trips more enjoyable while saving the planet."
+                      : "Looks like you don't have any rides in this category. Why not plan your next trip?"}
+                  </p>
+
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 mb-8 text-left w-full flex items-start gap-4">
+                    <div className="text-blue-500 mt-0.5"><i className="fas fa-lightbulb text-xl"></i></div>
+                    <div>
+                      <h4 className="font-semibold text-blue-900 mb-1">Did you know?</h4>
+                      <p className="text-sm text-blue-800">Drivers who post their rides at least 3 days in advance get 80% more booking requests.</p>
+                    </div>
+                  </div>
+
+                  <ClayButton variant="primary" size="lg" as={Link} to="/post-ride" className="w-full sm:w-auto px-10">
+                    <i className="fas fa-plus-circle mr-2"></i>Post Your First Ride
+                  </ClayButton>
+                </div>
+              </ClayCard>
+            </motion.div>
           ) : (
             rides.map(ride => (
               <RideCard key={ride._id} ride={ride} getStatusBadge={getStatusBadge} formatDate={formatDate} onRefresh={fetchRides} />
@@ -159,17 +181,19 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
   const [deleteError, setDeleteError] = useState('');
   const [cancelError, setCancelError] = useState('');
   const [cancelReason, setCancelReason] = useState('');
-  
-  const confirmedBookings = (ride.bookings || []).filter(b => ['CONFIRMED', 'COMPLETED'].includes(b.status));
-  const pendingBookings = (ride.bookings || []).filter(b => b.status === 'PENDING');
+
   const allBookings = ride.bookings || [];
-  
-  // Can delete only if no bookings and ride is ACTIVE
-  const canDelete = allBookings.length === 0 && ride.status === 'ACTIVE';
-  // Can edit only if no bookings and ride is ACTIVE  
-  const canEdit = allBookings.length === 0 && ride.status === 'ACTIVE';
-  // Can cancel only if ride is ACTIVE and HAS bookings (need to notify passengers)
-  const canCancel = ride.status === 'ACTIVE' && allBookings.length > 0;
+  const blockingStatuses = ['PENDING', 'CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF'];
+  const seatOccupiedStatuses = ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF', 'COMPLETED'];
+  const confirmedBookings = allBookings.filter(b => ['CONFIRMED'].includes(b.status));
+  const pendingBookings = allBookings.filter(b => b.status === 'PENDING');
+  const blockingBookings = allBookings.filter(b => blockingStatuses.includes(b.status));
+  const occupiedBookings = allBookings.filter(b => seatOccupiedStatuses.includes(b.status));
+  const occupiedSeats = occupiedBookings.reduce((sum, booking) => sum + (booking.seatsBooked || 1), 0);
+
+  const canDelete = blockingBookings.length === 0 && ride.status === 'ACTIVE';
+  const canEdit = blockingBookings.length === 0 && ride.status === 'ACTIVE';
+  const canCancel = ride.status === 'ACTIVE' && blockingBookings.length > 0;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -200,7 +224,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition p-6">
+    <ClayCard variant="default" padding="md" hover className="mb-2">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>
@@ -231,8 +255,24 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
         <div className="text-right">
           <div className="text-2xl font-bold text-emerald-500">₹{ride.pricing?.totalEarnings || 0}</div>
           <p className="text-gray-600 text-sm">
-            {confirmedBookings.length} / {ride.pricing?.totalSeats || 0} seats booked
+            {occupiedSeats} / {ride.pricing?.totalSeats || 0} seats booked
           </p>
+          {/* I8: Fill Rate */}
+          {ride.pricing?.totalSeats > 0 && (
+            <div className="mt-1">
+              <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden ml-auto">
+                <div
+                  className={`h-full rounded-full ${occupiedSeats / ride.pricing.totalSeats >= 0.75 ? 'bg-green-500' :
+                    occupiedSeats / ride.pricing.totalSeats >= 0.5 ? 'bg-yellow-500' : 'bg-red-400'
+                    }`}
+                  style={{ width: `${Math.min(100, Math.round((occupiedSeats / ride.pricing.totalSeats) * 100))}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {Math.round((occupiedSeats / ride.pricing.totalSeats) * 100)}% filled
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -304,7 +344,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
                 <p className="text-sm text-blue-700">{confirmedBookings.length} passenger{confirmedBookings.length > 1 ? 's' : ''} confirmed</p>
               </div>
             </div>
-            <Link 
+            <Link
               to={`/rides/${ride._id}`}
               className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-bold transition shadow-lg hover:shadow-xl transform hover:scale-105"
             >
@@ -327,13 +367,13 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
               </div>
             </div>
             <div className="flex gap-2">
-              <Link 
+              <Link
                 to={`/tracking/${ride._id}`}
                 className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-3 rounded-lg font-bold transition"
               >
                 <i className="fas fa-map-marked-alt mr-2"></i>Track
               </Link>
-              <Link 
+              <Link
                 to={`/rides/${ride._id}`}
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg font-bold transition"
               >
@@ -349,47 +389,47 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
         <Link to={`/rides/${ride._id}`} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition">
           <i className="fas fa-eye mr-2"></i>View Details
         </Link>
-        
+
         {/* Tracking Link - For IN_PROGRESS rides */}
         {ride.status === 'IN_PROGRESS' && (
-          <Link 
-            to={`/tracking/${ride._id}`} 
+          <Link
+            to={`/tracking/${ride._id}`}
             className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition"
           >
             <i className="fas fa-map-marked-alt mr-2"></i>Live Tracking
           </Link>
         )}
-        
+
         {/* Edit Button - Only if no bookings */}
         {canEdit && (
-          <Link 
-            to={`/edit-ride/${ride._id}`} 
+          <Link
+            to={`/edit-ride/${ride._id}`}
             className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-semibold transition"
           >
             <i className="fas fa-edit mr-2"></i>Edit
           </Link>
         )}
-        
+
         {/* Delete Button - Only if no bookings (just remove it, no need to keep) */}
         {canDelete && (
-          <button 
+          <button
             onClick={() => setShowDeleteModal(true)}
             className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition"
           >
             <i className="fas fa-trash mr-2"></i>Delete
           </button>
         )}
-        
+
         {/* Cancel Button - Only if HAS bookings (need to notify passengers & keep record) */}
         {canCancel && (
-          <button 
+          <button
             onClick={() => setShowCancelModal(true)}
             className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition"
           >
             <i className="fas fa-ban mr-2"></i>Cancel Ride
           </button>
         )}
-        
+
         {confirmedBookings.length > 0 && (
           <Link to={`/chat?rideId=${ride._id}`} className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition">
             <i className="fas fa-comments mr-2"></i>Chat ({confirmedBookings.length})
@@ -408,7 +448,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
             <p className="text-gray-600 mb-4">
               Are you sure you want to cancel this ride? {allBookings.length > 0 && 'All passengers will be notified and refunded.'}
             </p>
-            
+
             {/* Ride summary */}
             <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
               <div className="flex items-center text-gray-700 mb-1">
@@ -424,7 +464,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
                 {formatDate(ride.schedule?.departureDateTime)}
               </div>
             </div>
-            
+
             {/* Cancel Reason */}
             <div className="mb-4">
               <label className="block text-gray-700 font-medium mb-2">Reason (optional)</label>
@@ -436,14 +476,14 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
               />
             </div>
-            
+
             {cancelError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
                 <i className="fas fa-exclamation-circle mr-1"></i>
                 {cancelError}
               </div>
             )}
-            
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCancelModal(false)}
@@ -483,7 +523,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
             <p className="text-gray-600 mb-4">
               Are you sure you want to delete this ride? This action cannot be undone.
             </p>
-            
+
             {/* Ride summary */}
             <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
               <div className="flex items-center text-gray-700 mb-1">
@@ -499,14 +539,14 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
                 {formatDate(ride.schedule?.departureDateTime)}
               </div>
             </div>
-            
+
             {deleteError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
                 <i className="fas fa-exclamation-circle mr-1"></i>
                 {deleteError}
               </div>
             )}
-            
+
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDeleteModal(false)}
@@ -538,7 +578,7 @@ const RideCard = ({ ride, getStatusBadge, formatDate, onRefresh }) => {
       <p className="text-gray-400 text-xs mt-4">
         <i className="fas fa-clock mr-1"></i>Posted {new Date(ride.createdAt).toLocaleString()}
       </p>
-    </div>
+    </ClayCard>
   );
 };
 

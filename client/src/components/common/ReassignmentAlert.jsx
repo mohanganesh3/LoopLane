@@ -13,13 +13,18 @@ const ReassignmentAlert = () => {
 
   if (!reassignmentAlert) return null;
 
+  const getBookingId = (booking) => booking?.id || booking?._id || booking?.bookingId;
+
   const handleViewBooking = () => {
-    if (reassignmentAlert.newBooking?.id) {
-      navigate(`/bookings/${reassignmentAlert.newBooking.id}`);
-    } else if (reassignmentAlert.booking?.id) {
-      navigate(`/bookings/${reassignmentAlert.booking.id}`);
+    const newBookingId = getBookingId(reassignmentAlert.newBooking);
+    const currentBookingId = getBookingId(reassignmentAlert.booking);
+
+    if (newBookingId) {
+      navigate(`/bookings/${newBookingId}`);
+    } else if (currentBookingId) {
+      navigate(`/bookings/${currentBookingId}`);
     } else {
-      navigate('/my-bookings');
+      navigate('/bookings');
     }
     clearReassignmentAlert();
   };

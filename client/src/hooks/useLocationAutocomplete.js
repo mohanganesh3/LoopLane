@@ -11,7 +11,8 @@ let lastRequestTime = 0;
 const MIN_REQUEST_INTERVAL = 1100; // 1.1 seconds to be safe
 
 const useLocationAutocomplete = (initialValue = '') => {
-  const [query, setQuery] = useState(initialValue);
+  const normalizedInitialValue = typeof initialValue === 'string' ? initialValue : '';
+  const [query, setQueryState] = useState(normalizedInitialValue);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -141,6 +142,27 @@ const useLocationAutocomplete = (initialValue = '') => {
     return () => clearTimeout(debounceTimer);
   }, [query, fetchSuggestions, selectedLocation]);
 
+  useEffect(() => {
+    if (normalizedInitialValue === query) {
+      return;
+    }
+
+    setQueryState(normalizedInitialValue);
+
+    if (!normalizedInitialValue) {
+      setSelectedLocation(null);
+      setSuggestions([]);
+      setError(null);
+      return;
+    }
+
+    if (selectedLocation && normalizedInitialValue !== selectedLocation.address) {
+      setSelectedLocation(null);
+      setSuggestions([]);
+      setError(null);
+    }
+  }, [normalizedInitialValue]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -152,7 +174,7 @@ const useLocationAutocomplete = (initialValue = '') => {
 
   const selectLocation = (location) => {
     const shortName = getShortName(location);
-    setQuery(location.display_name);
+    setQueryState(location.display_name);
     setSelectedLocation({
       type: 'Point',
       coordinates: [parseFloat(location.lon), parseFloat(location.lat)],
@@ -164,7 +186,7 @@ const useLocationAutocomplete = (initialValue = '') => {
   };
 
   const clearSelection = () => {
-    setQuery('');
+    setQueryState('');
     setSelectedLocation(null);
     setSuggestions([]);
     setError(null);
@@ -172,7 +194,7 @@ const useLocationAutocomplete = (initialValue = '') => {
 
   // Reset selectedLocation when query changes (user is typing new text)
   const handleQueryChange = (newQuery) => {
-    setQuery(newQuery);
+    setQueryState(newQuery);
     // If user modifies the text, reset selection to allow new search
     if (selectedLocation && newQuery !== selectedLocation.address) {
       setSelectedLocation(null);

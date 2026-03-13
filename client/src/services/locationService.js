@@ -52,7 +52,6 @@ const locationService = {
       waypoints.push(`${destination.lng},${destination.lat}`);
       
       const coordsString = waypoints.join(';');
-      console.log('🗺️ Calculating route with waypoints:', coordsString);
       
       const response = await fetch(
         `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`

@@ -5,6 +5,7 @@ import { LoadingSpinner, Alert, Button, ContributionCalculator } from '../../com
 import LocationInput from '../../components/common/LocationInput';
 import userService from '../../services/userService';
 import rideService from '../../services/rideService';
+import { motion } from 'framer-motion';
 
 const PostRide = () => {
   const navigate = useNavigate();
@@ -26,7 +27,14 @@ const PostRide = () => {
     availableSeats: 4,
     customPricePerSeat: '',
     ladiesOnly: false,
-    notes: ''
+    notes: '',
+    isRecurring: false,
+    recurringDays: [],
+    endDate: '',
+    intermediateStops: [], // F2
+    hasReturnTrip: false, // F3
+    returnDate: '',
+    returnTime: ''
   });
 
   const [distance, setDistance] = useState(null);
@@ -38,27 +46,39 @@ const PostRide = () => {
     fetchVehicles();
   }, []);
 
-  // Recalculate distance when origin or destination change
+  // Recalculate distance when locations change
   useEffect(() => {
     if (formData.origin && formData.destination && formData.origin.coordinates && formData.destination.coordinates) {
-      calculateDistance(formData.origin, formData.destination);
+      calculateDistance(formData.origin, formData.destination, formData.intermediateStops);
     }
   }, [
-    formData.origin?.coordinates?.[0], 
-    formData.origin?.coordinates?.[1], 
-    formData.destination?.coordinates?.[0], 
-    formData.destination?.coordinates?.[1]
+    formData.origin?.coordinates?.[0],
+    formData.origin?.coordinates?.[1],
+    formData.destination?.coordinates?.[0],
+    formData.destination?.coordinates?.[1],
+    formData.intermediateStops.length,
+    JSON.stringify(formData.intermediateStops.map(s => s.coordinates?.coordinates?.[0]))
   ]);
 
-  // Calculate distance between origin and destination
-  const calculateDistance = async (origin, destination) => {
+  // Calculate distance between origin and destination with stops
+  const calculateDistance = async (origin, destination, stops = []) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
-      const coordsString = `${origin.coordinates[0]},${origin.coordinates[1]};${destination.coordinates[0]},${destination.coordinates[1]}`;
-      
+      const allCoords = [
+        origin.coordinates,
+        ...stops.map(s => s.coordinates?.coordinates || s.coordinates), // handle nested coordinates
+        destination.coordinates
+      ];
+
+      const coordsString = allCoords.map(c => `${c[0]},${c[1]}`).join(';');
+
       console.log('🗺️ Calculating route:', coordsString);
 
       const response = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`
+        `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=false`,
+        { signal: controller.signal }
       );
       const data = await response.json();
 
@@ -77,6 +97,8 @@ const PostRide = () => {
       } catch (e) {
         console.error('Fallback distance calculation failed:', e);
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
 
@@ -85,26 +107,36 @@ const PostRide = () => {
     const R = 6371; // Earth's radius in km
     const dLat = (coord2[1] - coord1[1]) * Math.PI / 180;
     const dLon = (coord2[0] - coord1[0]) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(coord1[1] * Math.PI / 180) * Math.cos(coord2[1] * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+
+  const handleDayToggle = (dayIndex) => {
+    setFormData(prev => {
+      const days = [...prev.recurringDays];
+      if (days.includes(dayIndex)) {
+        return { ...prev, recurringDays: days.filter(d => d !== dayIndex) };
+      }
+      return { ...prev, recurringDays: [...days, dayIndex] };
+    });
   };
 
   const fetchVehicles = async () => {
     try {
-      const data = await userService.getProfile();
-      const userVehicles = data.user?.vehicles || [];
+      const data = await userService.getVehicles();
+      const userVehicles = data.vehicles || [];
       setAllVehicles(userVehicles);
-      
+
       const approvedVehicles = userVehicles.filter(v => v.status === 'APPROVED');
       const pendingVehiclesList = userVehicles.filter(v => v.status === 'PENDING');
-      
+
       setVehicles(approvedVehicles);
       setPendingVehicles(pendingVehiclesList);
-      
+
       if (approvedVehicles.length > 0) {
         setFormData(prev => ({ ...prev, vehicleId: approvedVehicles[0]._id }));
       }
@@ -118,12 +150,12 @@ const PostRide = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     // Prevent double submission
     if (submitting) {
       return;
     }
-    
+
     setError('');
 
     if (!formData.origin || !formData.origin.coordinates) {
@@ -142,7 +174,16 @@ const PostRide = () => {
     }
 
     if (!formData.date || !formData.time) {
-      setError('Please select departure date and time');
+      setError('Please provide date and time');
+      return;
+    }
+
+    // F8: Time validation
+    const departureDateStr = `${formData.date}T${formData.time}`;
+    const departureDate = new Date(departureDateStr);
+
+    if (departureDate < new Date()) {
+      setError('Departure time cannot be in the past');
       return;
     }
 
@@ -159,6 +200,7 @@ const PostRide = () => {
       const rideData = {
         originCoordinates: formData.origin,
         destinationCoordinates: formData.destination,
+        intermediateStops: formData.intermediateStops, // F2
         fromLocation: formData.origin.address,
         toLocation: formData.destination.address,
         departureTime,
@@ -167,13 +209,34 @@ const PostRide = () => {
         pricePerSeat: pricePerSeat,
         distance: parseFloat(distance) || 0,
         ladiesOnly: formData.ladiesOnly,
-        notes: formData.notes
+        notes: formData.notes,
+        returnTripDate: formData.hasReturnTrip ? formData.returnDate : null,
+        returnTripTime: formData.hasReturnTrip ? formData.returnTime : null
       };
 
-      const result = await rideService.postRide(rideData);
+      let result;
+      if (formData.isRecurring) {
+        if (!formData.endDate) {
+          setError('Please select an end date for the recurring ride');
+          setSubmitting(false);
+          return;
+        }
+        if (formData.recurringDays.length === 0) {
+          setError('Please select at least one day of the week for the recurring ride');
+          setSubmitting(false);
+          return;
+        }
+        result = await rideService.postRecurringRide({
+          rideData,
+          recurringDays: formData.recurringDays,
+          endDate: formData.endDate
+        });
+      } else {
+        result = await rideService.postRide(rideData);
+      }
 
       if (result.success) {
-        setSuccess('Ride posted successfully!');
+        setSuccess(formData.isRecurring ? result.message : 'Ride posted successfully!');
         setTimeout(() => navigate('/my-rides'), 1500);
       } else {
         setError(result.message || 'Failed to post ride');
@@ -192,7 +255,7 @@ const PostRide = () => {
   // Case 1: No vehicles at all - prompt to add vehicle
   if (allVehicles.length === 0) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <i className="fas fa-car text-gray-300 text-6xl mb-4"></i>
@@ -215,7 +278,7 @@ const PostRide = () => {
   // Case 2: Has vehicles but none approved yet (all pending)
   if (vehicles.length === 0 && pendingVehicles.length > 0) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -225,7 +288,7 @@ const PostRide = () => {
             <p className="text-gray-600 mb-4">
               Your vehicle is currently under review by our admin team. You'll be able to post rides once your vehicle is approved.
             </p>
-            
+
             {/* Show pending vehicles */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
               <h3 className="font-semibold text-yellow-800 mb-3">
@@ -250,7 +313,7 @@ const PostRide = () => {
                 </div>
               ))}
             </div>
-            
+
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link
                 to="/profile"
@@ -265,7 +328,7 @@ const PostRide = () => {
                 <i className="fas fa-sync-alt mr-2"></i>Check Status
               </button>
             </div>
-            
+
             <p className="text-sm text-gray-500 mt-6">
               <i className="fas fa-info-circle mr-1"></i>
               Verification usually takes 24-48 hours. Contact support if it's taking longer.
@@ -280,7 +343,7 @@ const PostRide = () => {
   if (vehicles.length === 0) {
     const rejectedVehicles = allVehicles.filter(v => v.status === 'REJECTED');
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -288,12 +351,12 @@ const PostRide = () => {
             </div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">No Approved Vehicles</h2>
             <p className="text-gray-600 mb-4">
-              {rejectedVehicles.length > 0 
+              {rejectedVehicles.length > 0
                 ? "Your vehicle verification was not successful. Please add a new vehicle with correct details."
                 : "You need at least one approved vehicle to post rides."
               }
             </p>
-            
+
             {rejectedVehicles.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-left max-w-md mx-auto">
                 <h3 className="font-semibold text-red-800 mb-2">
@@ -313,7 +376,7 @@ const PostRide = () => {
                 ))}
               </div>
             )}
-            
+
             <Link
               to="/profile"
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition inline-block"
@@ -327,11 +390,11 @@ const PostRide = () => {
   }
 
   return (
-    <div className="pb-12 bg-gray-50 min-h-screen">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl shadow-lg p-8 mb-8 text-white">
-          <h1 className="text-3xl font-bold mb-2">
+          <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
             <i className="fas fa-plus-circle mr-3"></i>Post a New Ride
           </h1>
           <p className="opacity-90">Share your journey and earn while helping others travel</p>
@@ -359,6 +422,53 @@ const PostRide = () => {
                   onChange={(loc) => setFormData(prev => ({ ...prev, origin: loc }))}
                   required
                 />
+
+                {/* Intermediate Stops */}
+                <div className="space-y-3">
+                  {formData.intermediateStops.map((stop, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <LocationInput
+                          label={`Stop ${index + 1}`}
+                          placeholder="Enter intermediate stop"
+                          icon="fa-map-pin"
+                          iconColor="text-yellow-600"
+                          value={stop}
+                          onChange={(loc) => {
+                            const newStops = [...formData.intermediateStops];
+                            newStops[index] = loc;
+                            setFormData(prev => ({ ...prev, intermediateStops: newStops }));
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newStops = formData.intermediateStops.filter((_, i) => i !== index);
+                          setFormData(prev => ({ ...prev, intermediateStops: newStops }));
+                        }}
+                        className="mt-6 p-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  ))}
+
+                  {formData.intermediateStops.length < 3 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          intermediateStops: [...prev.intermediateStops, null]
+                        }));
+                      }}
+                      className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 flex items-center transition-colors"
+                    >
+                      <i className="fas fa-plus-circle mr-1"></i> Add Stop (Max 3)
+                    </button>
+                  )}
+                </div>
 
                 <LocationInput
                   label="Drop-off Location *"
@@ -403,6 +513,55 @@ const PostRide = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>
+              </div>
+
+              {/* F3: Return Trip Toggle */}
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">
+                      <i className="fas fa-exchange-alt text-emerald-500 mr-2"></i>Round Trip?
+                    </h3>
+                    <p className="text-sm text-gray-500">Automatically post a return ride from destination back to origin.</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.hasReturnTrip}
+                      onChange={(e) => setFormData(prev => ({ ...prev, hasReturnTrip: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+
+                {formData.hasReturnTrip && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Return Date *</label>
+                      <input
+                        type="date"
+                        name="returnDate"
+                        value={formData.returnDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, returnDate: e.target.value }))}
+                        min={formData.date || today}
+                        required={formData.hasReturnTrip}
+                        className="w-full px-4 py-3 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 font-medium mb-2">Return Time *</label>
+                      <input
+                        type="time"
+                        name="returnTime"
+                        value={formData.returnTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, returnTime: e.target.value }))}
+                        required={formData.hasReturnTrip}
+                        className="w-full px-4 py-3 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -458,8 +617,8 @@ const PostRide = () => {
               {distance ? (
                 <div className="space-y-4">
                   {/* BlaBlaCar-style Contribution Calculator with Interactive Slider */}
-                  <ContributionCalculator 
-                    distanceKm={parseFloat(distance)} 
+                  <ContributionCalculator
+                    distanceKm={parseFloat(distance)}
                     passengers={parseInt(formData.availableSeats)}
                     onPriceCalculated={(price) => {
                       setPricePerSeat(price);
@@ -497,6 +656,58 @@ const PostRide = () => {
                   <i className="fas fa-map-marked-alt text-4xl mb-3"></i>
                   <p className="font-medium">Select pickup and drop-off locations</p>
                   <p className="text-sm">Price will be calculated based on distance</p>
+                </div>
+              )}
+            </div>
+
+            {/* Recurring Rides */}
+            <div className="border-b pb-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center justify-between">
+                <span><i className="fas fa-redo text-emerald-500 mr-2"></i>Repeat This Ride</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isRecurring}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isRecurring: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </h2>
+
+              {formData.isRecurring && (
+                <div className="space-y-4 bg-emerald-50 rounded-xl p-5 border border-emerald-100">
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">Repeat On Days</label>
+                    <div className="flex flex-wrap gap-2">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => handleDayToggle(index)}
+                          className={`w-12 h-12 rounded-full font-bold flex items-center justify-center transition-all ${formData.recurringDays.includes(index)
+                            ? 'bg-emerald-500 text-white shadow-md'
+                            : 'bg-white text-gray-500 border border-gray-300 hover:bg-emerald-50 hover:border-emerald-300'
+                            }`}
+                        >
+                          {day.charAt(0)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 font-medium mb-2">Repeat Until</label>
+                    <input
+                      type="date"
+                      value={formData.endDate}
+                      onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                      min={formData.date || today}
+                      className="w-full md:w-1/2 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    />
+                    <p className="text-sm text-gray-500 mt-2">
+                      <i className="fas fa-info-circle mr-1"></i> Renders all rides matching the schedule up to this date.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
@@ -558,7 +769,7 @@ const PostRide = () => {
           </form>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

@@ -5,8 +5,10 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import rideService from '../../services/rideService';
 import bookingService from '../../services/bookingService';
+import ReportModal from '../../components/common/ReportModal';
 import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
 import { getRating, formatRating, getRatingCount } from '../../utils/helpers';
+import { motion } from 'framer-motion';
 
 const RideDetails = () => {
   const { id } = useParams();
@@ -15,10 +17,12 @@ const RideDetails = () => {
   const { user, isAuthenticated } = useAuth();
   const { socket, isConnected } = useSocket();
   const [ride, setRide] = useState(null);
+  const [userBooking, setUserBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [bookingModal, setBookingModal] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Action states
   const [actionLoading, setActionLoading] = useState(false);
@@ -40,6 +44,7 @@ const RideDetails = () => {
       const data = await rideService.getRideById(id);
       if (data && data.ride) {
         setRide(data.ride);
+        setUserBooking(data.userBooking || null);
       } else {
         setError('Ride not found');
       }
@@ -138,6 +143,7 @@ const RideDetails = () => {
     if (!isAuthenticated) return false;
     if (!ride) return false;
     if (ride.rider?._id === user?._id) return false;
+    if (userBooking?._id) return false;
     if ((ride.pricing?.availableSeats || 0) <= 0) return false;
     if (ride.status !== 'ACTIVE') return false;
     return true;
@@ -225,7 +231,7 @@ const RideDetails = () => {
 
   if (error) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <Alert type="error" message={error} />
           <div className="mt-4 flex gap-4">
@@ -246,7 +252,7 @@ const RideDetails = () => {
 
   if (!ride) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <Alert type="warning" message="Ride not found or has been removed" />
           <Link to="/find-ride" className="text-emerald-500 hover:underline mt-4 inline-block">
@@ -258,19 +264,19 @@ const RideDetails = () => {
   }
 
   return (
-    <div className="pb-12 bg-gray-50 min-h-screen">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4 max-w-5xl">
         {/* Real-time notification */}
         {notification && (
           <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${notification.type === 'success' ? 'bg-green-500 text-white' :
-              notification.type === 'error' ? 'bg-red-500 text-white' :
-                notification.type === 'warning' ? 'bg-yellow-500 text-white' :
-                  'bg-blue-500 text-white'
+            notification.type === 'error' ? 'bg-red-500 text-white' :
+              notification.type === 'warning' ? 'bg-yellow-500 text-white' :
+                'bg-blue-500 text-white'
             }`}>
             <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' :
-                notification.type === 'error' ? 'fa-times-circle' :
-                  notification.type === 'warning' ? 'fa-exclamation-circle' :
-                    'fa-info-circle'
+              notification.type === 'error' ? 'fa-times-circle' :
+                notification.type === 'warning' ? 'fa-exclamation-circle' :
+                  'fa-info-circle'
               }`}></i>
             <span className="font-medium">{notification.message}</span>
             <button onClick={() => setNotification(null)} className="ml-2 opacity-70 hover:opacity-100">
@@ -358,6 +364,31 @@ const RideDetails = () => {
 
             {/* Preferences Card */}
             {ride.preferences && <PreferencesCard preferences={ride.preferences} />}
+
+            {/* Report Section - for passengers only */}
+            {!isOwner && ride.status !== 'ACTIVE' && (
+              <div className="bg-white rounded-xl shadow-md p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-gray-700">
+                      <i className="fas fa-flag text-red-400 mr-2"></i>Having an issue?
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Report inappropriate behavior or safety concerns
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    className="px-5 py-2.5 border-2 border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition text-sm font-semibold"
+                  >
+                    <i className="fas fa-flag mr-2"></i>Report Driver
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* F7: Passengers Card (Co-passengers visibility) */}
+            <PassengersCard ride={ride} isOwner={isOwner} />
           </div>
 
           {/* Sidebar - Booking Card */}
@@ -372,6 +403,7 @@ const RideDetails = () => {
             ) : (
               <BookingCard
                 ride={ride}
+                userBooking={userBooking}
                 canBook={canBook()}
                 onBook={() => setBookingModal(true)}
                 isOwner={isOwner}
@@ -391,8 +423,16 @@ const RideDetails = () => {
             onSuccess={(bookingId) => navigate(`/bookings/${bookingId}`)}
           />
         )}
+
+        {/* Report Modal */}
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          reportedUser={ride.rider?._id}
+          rideId={ride._id}
+        />
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -412,7 +452,7 @@ const RouteCard = ({ ride }) => {
   return (
     <div className="bg-white rounded-xl shadow-md p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold text-gray-800">
+        <h1 className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
           <i className="fas fa-route text-emerald-500 mr-2"></i>Route Details
         </h1>
         <RideStatusBadge status={ride.status} />
@@ -584,11 +624,11 @@ const DriverCard = ({ driver }) => {
             </div>
             <div>
               <span className="text-gray-500">Number:</span>
-              <span className="ml-2 font-medium font-mono">{vehicle.registrationNumber || vehicle.licensePlate}</span>
+              <span className="ml-2 font-medium font-mono">{vehicle.licensePlate || vehicle.registrationNumber}</span>
             </div>
             <div>
               <span className="text-gray-500">Type:</span>
-              <span className="ml-2 font-medium capitalize">{vehicle.type}</span>
+              <span className="ml-2 font-medium capitalize">{vehicle.vehicleType || vehicle.type || 'N/A'}</span>
             </div>
           </div>
         </div>
@@ -685,11 +725,12 @@ const PreferencesCard = ({ preferences }) => {
 };
 
 // Passengers Card - Shows all passengers with their pickup/dropoff for the rider
-const PassengersCard = ({ ride }) => {
+const PassengersCard = ({ ride, isOwner }) => {
   const bookings = ride.bookings || [];
 
   // Filter by different statuses
-  const pendingBookings = bookings.filter(b => b.status === 'PENDING');
+  // Non-owners only see confirmed/completed passengers.
+  const pendingBookings = isOwner ? bookings.filter(b => b.status === 'PENDING') : [];
   const confirmedBookings = bookings.filter(b =>
     ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF'].includes(b.status)
   );
@@ -711,16 +752,16 @@ const PassengersCard = ({ ride }) => {
     return <span className={`${c.color} px-2 py-0.5 rounded-full text-xs font-medium`}>{c.text}</span>;
   };
 
-  if (bookings.length === 0) {
+  if (bookings.filter(b => isOwner || ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF', 'COMPLETED'].includes(b.status)).length === 0) {
     return (
       <div className="bg-white rounded-xl shadow-md p-6">
         <h2 className="text-xl font-bold text-gray-800 mb-4">
-          <i className="fas fa-users text-emerald-500 mr-2"></i>Passengers
+          <i className="fas fa-users text-emerald-500 mr-2"></i>Co-passengers
         </h2>
         <div className="text-center py-8 text-gray-500">
           <i className="fas fa-user-clock text-4xl mb-3 text-gray-300"></i>
-          <p>No bookings yet</p>
-          <p className="text-sm">Passengers will appear here when they book your ride</p>
+          <p>{isOwner ? 'No bookings yet' : 'No co-passengers yet'}</p>
+          <p className="text-sm">Passengers will appear here when they book {isOwner ? 'your' : 'this'} ride</p>
         </div>
       </div>
     );
@@ -730,26 +771,28 @@ const PassengersCard = ({ ride }) => {
     <div className="bg-white rounded-xl shadow-md p-6">
       <h2 className="text-xl font-bold text-gray-800 mb-4">
         <i className="fas fa-users text-emerald-500 mr-2"></i>
-        Passengers ({bookings.length})
+        {isOwner ? 'Passengers' : 'Co-passengers'}
       </h2>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {pendingBookings.length > 0 && (
-          <div className="bg-yellow-50 rounded-lg p-3 text-center">
-            <p className="text-2xl font-bold text-yellow-600">{pendingBookings.length}</p>
-            <p className="text-xs text-yellow-700">Pending</p>
+      {isOwner && (
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          {pendingBookings.length > 0 && (
+            <div className="bg-yellow-50 rounded-lg p-3 text-center">
+              <p className="text-2xl font-bold text-yellow-600">{pendingBookings.length}</p>
+              <p className="text-xs text-yellow-700">Pending</p>
+            </div>
+          )}
+          <div className="bg-green-50 rounded-lg p-3 text-center">
+            <p className="text-2xl font-bold text-green-600">{confirmedBookings.length}</p>
+            <p className="text-xs text-green-700">Confirmed</p>
           </div>
-        )}
-        <div className="bg-green-50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-green-600">{confirmedBookings.length}</p>
-          <p className="text-xs text-green-700">Confirmed</p>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <p className="text-2xl font-bold text-gray-600">{completedBookings.length}</p>
+            <p className="text-xs text-gray-700">Completed</p>
+          </div>
         </div>
-        <div className="bg-gray-50 rounded-lg p-3 text-center">
-          <p className="text-2xl font-bold text-gray-600">{completedBookings.length}</p>
-          <p className="text-xs text-gray-700">Completed</p>
-        </div>
-      </div>
+      )}
 
       {/* Pending Requests */}
       {pendingBookings.length > 0 && (
@@ -760,7 +803,7 @@ const PassengersCard = ({ ride }) => {
           </h3>
           <div className="space-y-3">
             {pendingBookings.map(booking => (
-              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} isPending />
+              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} isPending isOwner={isOwner} />
             ))}
           </div>
         </div>
@@ -775,7 +818,7 @@ const PassengersCard = ({ ride }) => {
           </h3>
           <div className="space-y-3">
             {confirmedBookings.map(booking => (
-              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} />
+              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} isOwner={isOwner} />
             ))}
           </div>
         </div>
@@ -790,7 +833,7 @@ const PassengersCard = ({ ride }) => {
           </h3>
           <div className="space-y-3">
             {completedBookings.map(booking => (
-              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} />
+              <PassengerBookingCard key={booking._id} booking={booking} getStatusBadge={getStatusBadge} isOwner={isOwner} />
             ))}
           </div>
         </div>
@@ -800,11 +843,17 @@ const PassengersCard = ({ ride }) => {
 };
 
 // Individual passenger booking card with pickup/dropoff details
-const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
+const PassengerBookingCard = ({ booking, getStatusBadge, isPending, isOwner }) => {
   const passenger = booking.passenger;
   const [imgError, setImgError] = useState(false);
 
-  const displayName = getUserDisplayName(passenger);
+  // Mask name for privacy if not owner
+  let displayName = getUserDisplayName(passenger);
+  if (!isOwner) {
+    const names = displayName.split(' ');
+    displayName = names.length > 1 ? `${names[0]} ${names[names.length - 1].charAt(0)}.` : names[0];
+  }
+
   const photoUrl = getUserPhoto(passenger);
 
   return (
@@ -876,33 +925,35 @@ const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
       )}
 
       {/* Contact & Actions */}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {/* Chat Button */}
-        <Link
-          to={`/chat?bookingId=${booking._id}`}
-          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 px-3 rounded-lg text-center transition"
-        >
-          <i className="fas fa-comments mr-1"></i>Chat
-        </Link>
-
-        {/* Phone Button - only if phone available */}
-        {passenger?.phone && (
-          <a
-            href={`tel:${passenger.phone}`}
-            className="bg-green-500 hover:bg-green-600 text-white text-sm py-2 px-3 rounded-lg transition"
+      {isOwner && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {/* Chat Button */}
+          <Link
+            to={`/chat?bookingId=${booking._id}`}
+            className="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-sm py-2 px-3 rounded-lg text-center transition"
           >
-            <i className="fas fa-phone"></i>
-          </a>
-        )}
+            <i className="fas fa-comments mr-1"></i>Chat
+          </Link>
 
-        {/* View Booking Details */}
-        <Link
-          to={`/bookings/${booking._id}`}
-          className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm py-2 px-3 rounded-lg transition"
-        >
-          <i className="fas fa-eye mr-1"></i>Details
-        </Link>
-      </div>
+          {/* Phone Button - only if phone available */}
+          {passenger?.phone && (
+            <a
+              href={`tel:${passenger.phone}`}
+              className="bg-green-500 hover:bg-green-600 text-white text-sm py-2 px-3 rounded-lg transition"
+            >
+              <i className="fas fa-phone"></i>
+            </a>
+          )}
+
+          {/* View Booking Details */}
+          <Link
+            to={`/bookings/${booking._id}`}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm py-2 px-3 rounded-lg transition"
+          >
+            <i className="fas fa-eye mr-1"></i>Details
+          </Link>
+        </div>
+      )}
 
       {/* Accept/Reject buttons for pending */}
       {isPending && (
@@ -920,7 +971,7 @@ const PassengerBookingCard = ({ booking, getStatusBadge, isPending }) => {
 };
 
 // Booking Card (Sidebar)
-const BookingCard = ({ ride, canBook, onBook, isOwner }) => {
+const BookingCard = ({ ride, userBooking, canBook, onBook, isOwner }) => {
   const pricePerSeat = ride.pricing?.pricePerSeat || 0;
   const availableSeats = ride.pricing?.availableSeats || 0;
 
@@ -965,6 +1016,13 @@ const BookingCard = ({ ride, canBook, onBook, isOwner }) => {
           <i className="fas fa-info-circle mr-2"></i>
           This is your ride
         </div>
+      ) : userBooking?._id ? (
+        <Link
+          to={`/bookings/${userBooking._id}`}
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center"
+        >
+          <i className="fas fa-receipt mr-2"></i>View Your Booking
+        </Link>
       ) : canBook ? (
         <button
           onClick={onBook}
@@ -1183,8 +1241,8 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
                   type="button"
                   onClick={() => setPaymentMethod('CASH')}
                   className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${paymentMethod === 'CASH'
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
                     }`}
                 >
                   <i className="fas fa-money-bill-wave mr-2"></i>Cash
@@ -1193,8 +1251,8 @@ const BookingModal = ({ ride, searchedPickup, searchedDropoff, searchedSeats, on
                   type="button"
                   onClick={() => setPaymentMethod('UPI')}
                   className={`flex-1 py-3 px-4 rounded-lg border-2 transition font-medium ${paymentMethod === 'UPI'
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
                     }`}
                 >
                   <i className="fas fa-mobile-alt mr-2"></i>UPI

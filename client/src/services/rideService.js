@@ -14,7 +14,11 @@ const rideService = {
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.sortBy) queryParams.append('sortBy', params.sortBy);
-    
+    if (params.smokingAllowed) queryParams.append('smokingAllowed', params.smokingAllowed);
+    if (params.petsAllowed) queryParams.append('petsAllowed', params.petsAllowed);
+    if (params.verifiedOnly) queryParams.append('verifiedOnly', params.verifiedOnly);
+    if (params.genderPreference) queryParams.append('genderPreference', params.genderPreference);
+
     const response = await api.get(`/api/rides/search/results?${queryParams.toString()}`);
     return response.data;
   },
@@ -31,7 +35,7 @@ const rideService = {
     if (params.status) queryParams.append('status', params.status);
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
-    
+
     const response = await api.get(`/api/rides/my-rides?${queryParams.toString()}`);
     return response.data;
   },
@@ -45,6 +49,12 @@ const rideService = {
   // Post a new ride
   postRide: async (data) => {
     const response = await api.post('/api/rides/post', data);
+    return response.data;
+  },
+
+  // Post a recurring ride
+  postRecurringRide: async (data) => {
+    const response = await api.post('/api/rides/recurring', data);
     return response.data;
   },
 
@@ -75,18 +85,6 @@ const rideService = {
   // Complete ride (journey finished)
   completeRide: async (id) => {
     const response = await api.post(`/api/rides/${id}/complete`);
-    return response.data;
-  },
-
-  // Accept booking request
-  acceptBooking: async (rideId, bookingId) => {
-    const response = await api.post(`/api/bookings/${bookingId}/accept`);
-    return response.data;
-  },
-
-  // Reject booking request
-  rejectBooking: async (rideId, bookingId, reason) => {
-    const response = await api.post(`/api/bookings/${bookingId}/reject`, { reason });
     return response.data;
   },
 
