@@ -1,5 +1,6 @@
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 
 const PaymentFailed = () => {
   const { bookingId } = useParams();
@@ -13,7 +14,7 @@ const PaymentFailed = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen flex items-center justify-center py-12 px-4" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md w-full">
         {/* Error Icon */}
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
@@ -23,7 +24,7 @@ const PaymentFailed = () => {
             </svg>
           </div>
           
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Payment Failed</h1>
           <p className="text-gray-600 mb-6">
             {errorInfo.message || 'Something went wrong with your payment. Please try again.'}
           </p>
@@ -67,7 +68,7 @@ const PaymentFailed = () => {
               View Booking
             </Link>
             <a 
-              href="mailto:support@looplane.com?subject=Payment%20Issue%20-%20Booking%20ID%20"
+              href={`/support?category=payment&bookingId=${encodeURIComponent(bookingId || '')}&subject=${encodeURIComponent(`Payment Issue - Booking ${bookingId || ''}`)}`}
               className="block w-full py-3 px-4 text-emerald-500 font-medium hover:text-emerald-600 transition text-center"
             >
               Contact Support
@@ -85,16 +86,16 @@ const PaymentFailed = () => {
               </svg>
               Call: 1800-123-4567
             </a>
-            <a href="mailto:support@looplane.com" className="flex items-center text-sm text-gray-600 hover:text-emerald-500">
+            <a href="mailto:support@looplane.in" className="flex items-center text-sm text-gray-600 hover:text-emerald-500">
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
-              Email: support@looplane.com
+              Email: support@looplane.in
             </a>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

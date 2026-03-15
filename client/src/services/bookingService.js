@@ -13,6 +13,8 @@ const bookingService = {
     }
     if (params.page) queryParams.append('page', params.page);
     if (params.limit) queryParams.append('limit', params.limit);
+    if (params.dateFrom) queryParams.append('dateFrom', params.dateFrom);
+    if (params.dateTo) queryParams.append('dateTo', params.dateTo);
     
     const response = await api.get(`/api/bookings/my-bookings?${queryParams.toString()}`);
     return response.data;
@@ -66,6 +68,24 @@ const bookingService = {
     return response.data;
   },
 
+  // Confirm payment received (rider-side confirmation)
+  confirmPayment: async (id) => {
+    const response = await api.post(`/api/bookings/${id}/confirm-payment`);
+    return response.data;
+  },
+
+  // Propose a counter-offer for a pending booking
+  proposeBid: async (id, data) => {
+    const response = await api.post(`/api/bookings/${id}/bid`, data);
+    return response.data;
+  },
+
+  // Accept or reject the active bid
+  resolveBid: async (id, action) => {
+    const response = await api.post(`/api/bookings/${id}/bid/resolve`, { action });
+    return response.data;
+  },
+
   // Get booking payment status
   getPaymentStatus: async (id) => {
     const response = await api.get(`/api/bookings/${id}`);
@@ -74,9 +94,7 @@ const bookingService = {
 
   // Rate booking / leave review
   rateBooking: async (id, reviewData) => {
-    console.log('📤 [BookingService] Sending review to:', `/api/reviews/booking/${id}`, reviewData);
     const response = await api.post(`/api/reviews/booking/${id}`, reviewData, { timeout: 30000 });
-    console.log('📥 [BookingService] Review response:', response.data);
     return response.data;
   }
 };

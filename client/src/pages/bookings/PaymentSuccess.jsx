@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import bookingService from '../../services/bookingService';
+import { motion } from 'framer-motion';
 
 const PaymentSuccess = () => {
   const { bookingId } = useParams();
@@ -31,14 +32,14 @@ const PaymentSuccess = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen flex items-center justify-center py-12 px-4" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-md w-full">
         {/* Success Animation */}
         <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
@@ -48,7 +49,7 @@ const PaymentSuccess = () => {
             </svg>
           </div>
           
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Payment Successful!</h1>
           <p className="text-gray-600 mb-6">Your booking has been confirmed</p>
 
           {/* Payment Details */}
@@ -60,7 +61,7 @@ const PaymentSuccess = () => {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Amount Paid</span>
-                <span className="font-semibold text-emerald-600">₹{paymentInfo.amount || booking?.totalAmount}</span>
+                <span className="font-semibold text-emerald-600">₹{paymentInfo.amount || booking?.payment?.totalAmount || booking?.totalPrice || 0}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">Booking ID</span>
@@ -80,12 +81,12 @@ const PaymentSuccess = () => {
                   <div className="w-2 h-2 rounded-full bg-red-500"></div>
                 </div>
                 <div className="flex-1 text-sm">
-                  <p className="text-gray-900 mb-4">{booking.ride?.source?.address || 'Pickup Location'}</p>
-                  <p className="text-gray-900">{booking.ride?.destination?.address || 'Drop Location'}</p>
+                  <p className="text-gray-900 mb-4">{booking.pickupPoint?.address || booking.ride?.route?.start?.address || 'Pickup Location'}</p>
+                  <p className="text-gray-900">{booking.dropoffPoint?.address || booking.ride?.route?.destination?.address || 'Drop Location'}</p>
                 </div>
               </div>
               <div className="flex justify-between text-sm text-gray-600 pt-3 border-t border-gray-200">
-                <span>{new Date(booking.ride?.date).toLocaleDateString()}</span>
+                <span>{new Date(booking.ride?.schedule?.departureDateTime || booking.ride?.schedule?.date || booking.createdAt).toLocaleDateString()}</span>
                 <span>{booking.seatsBooked} seat(s)</span>
               </div>
             </div>
@@ -135,7 +136,7 @@ const PaymentSuccess = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

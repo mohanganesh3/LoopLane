@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { LoadingSpinner, Alert, Badge } from '../../components/common';
+import { LoadingSpinner, Alert, Badge, BookingProgressStepper, SkeletonCard, SkeletonProfile } from '../../components/common';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import bookingService from '../../services/bookingService';
+import ReportModal from '../../components/common/ReportModal';
 import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
 import { getRating, formatRating } from '../../utils/helpers';
+import { motion } from 'framer-motion';
 
 const BookingDetails = () => {
   const { id } = useParams();
@@ -21,17 +23,28 @@ const BookingDetails = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [notification, setNotification] = useState(null);
-  
+
   // OTP Verification State
   const [otpInput, setOtpInput] = useState('');
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpType, setOtpType] = useState(null); // 'pickup' or 'dropoff'
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [bidAmount, setBidAmount] = useState('');
+  const [bidMessage, setBidMessage] = useState('');
+  const [bidLoading, setBidLoading] = useState(false);
 
   useEffect(() => {
     fetchBooking();
   }, [id]);
-  
+
+  useEffect(() => {
+    if (booking?.totalPrice) {
+      const nextAmount = booking.bidding?.proposedPrice || booking.totalPrice;
+      setBidAmount(String(Math.round(nextAmount)));
+    }
+  }, [booking?.totalPrice, booking?.bidding?.proposedPrice]);
+
   // Listen for real-time booking updates
   useEffect(() => {
     if (socket && isConnected && id) {
@@ -42,41 +55,41 @@ const BookingDetails = () => {
           fetchBooking();
         }
       };
-      
+
       const handleBookingRejected = (data) => {
         if (data.bookingId === id) {
           setNotification({ type: 'error', message: 'Booking has been rejected.' });
           fetchBooking();
         }
       };
-      
+
       const handleBookingCancelled = (data) => {
         if (data.bookingId === id) {
           setNotification({ type: 'warning', message: 'Booking has been cancelled.' });
           fetchBooking();
         }
       };
-      
+
       const handlePickupConfirmed = (data) => {
         if (data.bookingId === id) {
-          setNotification({ type: 'success', message: '✅ Pickup verified! Passenger is on board.' });
+          setNotification({ type: 'success', message: 'Pickup verified! Passenger is on board.' });
           fetchBooking();
         }
       };
-      
+
       const handleDropoffConfirmed = (data) => {
         if (data.bookingId === id) {
-          setNotification({ type: 'success', message: '🎉 Journey completed! Great job.' });
+          setNotification({ type: 'success', message: 'Journey completed! Great job.' });
           fetchBooking();
         }
       };
-      
+
       socket.on('booking-confirmed', handleBookingConfirmed);
       socket.on('booking-rejected', handleBookingRejected);
       socket.on('booking-cancelled', handleBookingCancelled);
       socket.on('pickup-confirmed', handlePickupConfirmed);
       socket.on('dropoff-confirmed', handleDropoffConfirmed);
-      
+
       return () => {
         socket.off('booking-confirmed', handleBookingConfirmed);
         socket.off('booking-rejected', handleBookingRejected);
@@ -92,7 +105,7 @@ const BookingDetails = () => {
       const data = await bookingService.getBookingById(id);
       setBooking(data.booking);
     } catch (err) {
-      setError('Failed to load booking details');
+      setError(err.response?.data?.message || err.message || 'Failed to load booking details');
     } finally {
       setLoading(false);
     }
@@ -148,7 +161,7 @@ const BookingDetails = () => {
       setActionLoading(false);
     }
   };
-  
+
   // OTP Verification Handler (for rider)
   const handleVerifyOTP = async () => {
     if (otpInput.length !== 4) {
@@ -160,10 +173,10 @@ const BookingDetails = () => {
     try {
       if (otpType === 'pickup') {
         await bookingService.confirmPickup(id, otpInput);
-        setNotification({ type: 'success', message: '✅ Pickup verified successfully!' });
+        setNotification({ type: 'success', message: 'Pickup verified successfully!' });
       } else {
         await bookingService.confirmDropoff(id, otpInput);
-        setNotification({ type: 'success', message: '🎉 Dropoff verified! Journey complete.' });
+        setNotification({ type: 'success', message: 'Dropoff verified! Journey complete.' });
       }
       setShowOtpModal(false);
       setOtpInput('');
@@ -175,13 +188,72 @@ const BookingDetails = () => {
     }
   };
 
+  const handleProposeBid = async () => {
+    const amount = Number(bidAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setNotification({ type: 'error', message: 'Enter a valid counter-offer amount.' });
+      return;
+    }
+
+    setBidLoading(true);
+    try {
+      await bookingService.proposeBid(id, {
+        amount,
+        message: bidMessage.trim() || undefined
+      });
+      setBidMessage('');
+      setNotification({ type: 'success', message: 'Counter-offer sent successfully.' });
+      await fetchBooking();
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Failed to send counter-offer.'
+      });
+    } finally {
+      setBidLoading(false);
+    }
+  };
+
+  const handleResolveBid = async (action) => {
+    setBidLoading(true);
+    try {
+      await bookingService.resolveBid(id, action);
+      setNotification({
+        type: action === 'ACCEPT' ? 'success' : 'warning',
+        message: action === 'ACCEPT' ? 'Offer accepted.' : 'Offer rejected.'
+      });
+      await fetchBooking();
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Failed to resolve offer.'
+      });
+    } finally {
+      setBidLoading(false);
+    }
+  };
+
   if (loading) {
-    return <LoadingSpinner fullScreen text="Loading booking..." />;
+    return (
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
+        <div className="container mx-auto px-4 max-w-4xl pt-8">
+          <div className="animate-pulse flex items-center mb-6">
+            <div className="h-4 w-24 bg-emerald-200 rounded"></div>
+          </div>
+          <SkeletonCard className="mb-6" />
+          <SkeletonCard className="mb-6 h-28" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <SkeletonProfile />
+            <SkeletonCard className="h-64" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error || !booking) {
     return (
-      <div className="pb-12 bg-gray-50 min-h-screen">
+      <div className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="container mx-auto px-4 max-w-4xl">
           <Alert type="error" message={error || 'Booking not found'} />
           <Link to="/bookings" className="text-emerald-500 hover:underline mt-4 inline-block">
@@ -194,31 +266,43 @@ const BookingDetails = () => {
 
   // Check if booking can be cancelled
   const canCancel = ['PENDING', 'CONFIRMED'].includes(booking.status);
-  
+
   // Check if current user is the rider (owner of the ride)
   const isRider = user?._id === booking.ride?.rider?._id;
   const isPassenger = user?._id === booking.passenger?._id;
-  
+  const hasCurrentUserReviewed = isPassenger
+    ? booking.reviews?.passengerReviewed
+    : isRider
+      ? booking.reviews?.riderReviewed
+      : false;
+
   // Rider can accept/reject PENDING bookings
   const canAcceptReject = isRider && booking.status === 'PENDING';
+  const canBid = booking.status === 'PENDING' && (isPassenger || isRider);
+  const biddingStatus = booking.bidding?.biddingStatus || 'NONE';
+  const waitingForCurrentUser = isPassenger
+    ? biddingStatus === 'AWAITING_PASSENGER'
+    : isRider
+      ? biddingStatus === 'AWAITING_RIDER'
+      : false;
+  const biddingHistory = booking.bidding?.biddingHistory || [];
+  const latestBid = biddingHistory[biddingHistory.length - 1];
 
   return (
-    <div className="pb-12 bg-gray-50 min-h-screen">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-12 min-h-screen" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Real-time notification */}
         {notification && (
-          <div className={`mb-4 p-4 rounded-lg ${
-            notification.type === 'success' ? 'bg-green-100 text-green-800' :
+          <div className={`mb-4 p-4 rounded-lg ${notification.type === 'success' ? 'bg-green-100 text-green-800' :
             notification.type === 'error' ? 'bg-red-100 text-red-800' :
-            'bg-yellow-100 text-yellow-800'
-          }`}>
+              'bg-yellow-100 text-yellow-800'
+            }`}>
             <div className="flex items-center justify-between">
               <span>
-                <i className={`fas ${
-                  notification.type === 'success' ? 'fa-check-circle' :
+                <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' :
                   notification.type === 'error' ? 'fa-times-circle' :
-                  'fa-exclamation-circle'
-                } mr-2`}></i>
+                    'fa-exclamation-circle'
+                  } mr-2`}></i>
                 {notification.message}
               </span>
               <button onClick={() => setNotification(null)} className="text-gray-500 hover:text-gray-700">
@@ -227,10 +311,10 @@ const BookingDetails = () => {
             </div>
           </div>
         )}
-        
+
         {/* Back Button */}
-        <Link 
-          to={isRider ? `/rides/${booking.ride?._id}` : "/bookings"} 
+        <Link
+          to={isRider ? `/rides/${booking.ride?._id}` : "/bookings"}
           className="inline-flex items-center text-emerald-500 hover:text-emerald-700 mb-6"
         >
           <i className="fas fa-arrow-left mr-2"></i>
@@ -242,6 +326,11 @@ const BookingDetails = () => {
           <BookingHeader booking={booking} />
         </div>
 
+        {/* Journey Progress Stepper */}
+        <div className="mb-6">
+          <BookingProgressStepper booking={booking} />
+        </div>
+
         {/* Rider Action Panel - Accept/Reject for PENDING bookings */}
         {canAcceptReject && (
           <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl p-6 mb-6">
@@ -249,10 +338,10 @@ const BookingDetails = () => {
               <i className="fas fa-user-check text-yellow-600 mr-2"></i>
               Booking Request
             </h3>
-            
+
             {/* Passenger Info Summary */}
             <PassengerSummary passenger={booking.passenger} booking={booking} />
-            
+
             <div className="flex flex-wrap gap-3 mt-6">
               <button
                 onClick={handleAcceptBooking}
@@ -282,14 +371,115 @@ const BookingDetails = () => {
           </div>
         )}
 
+        {canBid && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6 border border-emerald-100">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between mb-5">
+              <div>
+                <h3 className="font-semibold text-gray-800 text-lg">
+                  <i className="fas fa-comments-dollar text-emerald-500 mr-2"></i>Price Negotiation
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Counter-offer on pending bookings without leaving this conversation.
+                </p>
+              </div>
+              <div className="text-sm text-right">
+                <p className="text-gray-500">Current booking price</p>
+                <p className="text-2xl font-bold text-gray-800">₹{Math.round(booking.totalPrice || 0)}</p>
+              </div>
+            </div>
+
+            {biddingStatus !== 'NONE' && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5">
+                <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-semibold text-emerald-800">
+                      Active offer: ₹{Math.round(booking.bidding?.proposedPrice || 0)}
+                    </p>
+                    <p className="text-sm text-emerald-700">
+                      {waitingForCurrentUser ? 'Your response is needed.' : 'Waiting on the other party.'}
+                    </p>
+                  </div>
+                  <p className="text-xs text-emerald-700">
+                    Original: ₹{Math.round(booking.bidding?.originalPrice || booking.totalPrice || 0)}
+                  </p>
+                </div>
+                {latestBid && (
+                  <p className="text-sm text-gray-700 mt-3">
+                    <span className="font-medium">{latestBid.proposedBy}</span>
+                    {' '}said: {latestBid.message || 'No message added.'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-[180px,1fr] gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Counter-offer</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">₹</span>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={bidAmount}
+                    onChange={(e) => setBidAmount(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 pl-8 pr-3 py-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Message</label>
+                <textarea
+                  value={bidMessage}
+                  onChange={(e) => setBidMessage(e.target.value)}
+                  rows={3}
+                  placeholder="Explain the offer or add context for the other party."
+                  className="w-full rounded-lg border border-gray-300 px-3 py-3 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3 mt-5">
+              <button
+                type="button"
+                onClick={handleProposeBid}
+                disabled={bidLoading}
+                className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition font-semibold disabled:opacity-50"
+              >
+                {bidLoading ? <><i className="fas fa-spinner fa-spin mr-2"></i>Sending...</> : <><i className="fas fa-paper-plane mr-2"></i>Send Counter-offer</>}
+              </button>
+              {waitingForCurrentUser && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleResolveBid('ACCEPT')}
+                    disabled={bidLoading}
+                    className="px-5 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition font-semibold disabled:opacity-50"
+                  >
+                    <i className="fas fa-check mr-2"></i>Accept Offer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResolveBid('REJECT')}
+                    disabled={bidLoading}
+                    className="px-5 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition font-semibold disabled:opacity-50"
+                  >
+                    <i className="fas fa-times mr-2"></i>Reject Offer
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* OTP Section (for Passengers) */}
         {isPassenger && <OTPSection booking={booking} />}
-        
+
         {/* Rider OTP Verification Section (for Drivers) */}
         {isRider && (
-          <RiderOTPSection 
-            booking={booking} 
-            onVerify={(type) => { setOtpType(type); setShowOtpModal(true); }} 
+          <RiderOTPSection
+            booking={booking}
+            onVerify={(type) => { setOtpType(type); setShowOtpModal(true); }}
           />
         )}
 
@@ -314,7 +504,7 @@ const BookingDetails = () => {
         {booking.status === 'CANCELLED' && booking.cancellation && (
           <CancellationInfo cancellation={booking.cancellation} />
         )}
-        
+
         {/* Rejection Info */}
         {booking.status === 'REJECTED' && (
           <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
@@ -351,8 +541,13 @@ const BookingDetails = () => {
           </div>
         )}
 
+        {/* Ride Receipt (for Completed Journeys) */}
+        {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && (
+          <RideReceipt booking={booking} />
+        )}
+
         {/* Rate Experience Button (for completed bookings) */}
-        {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && !booking.reviews?.passengerReviewed && (
+        {(booking.status === 'COMPLETED' || booking.status === 'DROPPED_OFF') && !hasCurrentUserReviewed && (isPassenger || isRider) && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
             <div className="flex items-center justify-between">
               <div>
@@ -373,13 +568,43 @@ const BookingDetails = () => {
           </div>
         )}
 
+        {/* Report Button */}
+        {booking.status !== 'PENDING' && booking.status !== 'CANCELLED' && booking.status !== 'REJECTED' && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-gray-700">
+                  <i className="fas fa-flag text-red-400 mr-2"></i>Having an issue?
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Report inappropriate behavior or safety concerns
+                </p>
+              </div>
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="px-5 py-2.5 border-2 border-red-200 text-red-600 hover:bg-red-50 rounded-lg transition text-sm font-semibold"
+              >
+                <i className="fas fa-flag mr-2"></i>Report
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Report Modal */}
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          reportedUser={isRider ? booking.passenger?._id : booking.ride?.rider?._id}
+          rideId={booking.ride?._id}
+          bookingId={booking._id}
+        />
+
         {/* OTP Verification Modal (for Rider) */}
         {showOtpModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
-              }`}>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${otpType === 'pickup' ? 'bg-blue-100' : 'bg-purple-100'
+                }`}>
                 <i className={`fas ${otpType === 'pickup' ? 'fa-key text-blue-600' : 'fa-flag-checkered text-purple-600'} text-2xl`}></i>
               </div>
               <h3 className="text-xl font-bold text-center text-gray-800 mb-2">
@@ -407,9 +632,8 @@ const BookingDetails = () => {
                 <button
                   onClick={handleVerifyOTP}
                   disabled={otpVerifying || otpInput.length !== 4}
-                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${
-                    otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
-                  } disabled:opacity-50`}
+                  className={`flex-1 px-4 py-3 rounded-xl font-semibold text-white transition ${otpType === 'pickup' ? 'bg-blue-500 hover:bg-blue-600' : 'bg-purple-500 hover:bg-purple-600'
+                    } disabled:opacity-50`}
                 >
                   {otpVerifying ? <><i className="fas fa-spinner fa-spin mr-2"></i>Verifying...</> : 'Verify OTP'}
                 </button>
@@ -428,7 +652,7 @@ const BookingDetails = () => {
             setReason={setCancelReason}
           />
         )}
-        
+
         {/* Reject Modal */}
         {showRejectModal && (
           <RejectModal
@@ -441,7 +665,7 @@ const BookingDetails = () => {
           />
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -505,7 +729,7 @@ const CancelModal = ({ onClose, onConfirm, loading, reason, setReason }) => {
 // Reject Booking Modal (for riders)
 const RejectModal = ({ onClose, onConfirm, loading, reason, setReason, passenger }) => {
   const displayName = getUserDisplayName(passenger);
-  
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
@@ -567,13 +791,13 @@ const PassengerSummary = ({ passenger, booking }) => {
   const displayName = getUserDisplayName(passenger);
   const photoUrl = getUserPhoto(passenger);
   const passengerRating = getRating(passenger?.rating);
-  
+
   return (
     <div className="bg-white rounded-lg p-4">
       <div className="flex items-start space-x-4">
         {photoUrl && !imgError ? (
-          <img 
-            src={photoUrl} 
+          <img
+            src={photoUrl}
             alt={displayName}
             className="w-16 h-16 rounded-full object-cover border-2 border-emerald-200"
             onError={() => setImgError(true)}
@@ -585,11 +809,11 @@ const PassengerSummary = ({ passenger, booking }) => {
         )}
         <div className="flex-1">
           <h4 className="text-lg font-semibold text-gray-800">{displayName}</h4>
-          
+
           {/* Rating */}
           <div className="flex items-center mt-1">
             <div className="flex text-yellow-400 text-sm">
-              {[1,2,3,4,5].map(i => (
+              {[1, 2, 3, 4, 5].map(i => (
                 <i key={i} className={`fas fa-star ${i <= Math.round(passengerRating) ? '' : 'text-gray-300'}`}></i>
               ))}
             </div>
@@ -611,7 +835,7 @@ const PassengerSummary = ({ passenger, booking }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Pickup & Dropoff */}
       <div className="mt-4 space-y-2">
         <div className="flex items-start">
@@ -633,7 +857,7 @@ const PassengerSummary = ({ passenger, booking }) => {
           </div>
         </div>
       </div>
-      
+
       {/* Special Request */}
       {booking.specialRequests && (
         <div className="mt-3 bg-blue-50 rounded p-3">
@@ -675,7 +899,7 @@ const JourneyDetails = ({ booking }) => {
       <h2 className="text-xl font-bold text-gray-800 mb-4">
         <i className="fas fa-route text-emerald-500 mr-2"></i>Journey Details
       </h2>
-      
+
       <div className="space-y-4">
         <div className="flex items-center">
           <div className="flex-shrink-0 w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -737,6 +961,8 @@ const JourneyDetails = ({ booking }) => {
 
 // Payment Details Component
 const PaymentDetails = ({ booking }) => {
+  const isPaid = ['PAID', 'PAYMENT_CONFIRMED'].includes(booking.payment?.status);
+
   return (
     <div className="bg-emerald-50 rounded-lg p-6 mb-6">
       <h3 className="font-semibold text-gray-700 mb-3">
@@ -753,11 +979,10 @@ const PaymentDetails = ({ booking }) => {
         </div>
         <div className="flex justify-between">
           <span className="text-gray-600">Payment Status:</span>
-          <span className={`px-3 py-1 ${
-            booking.payment?.status === 'PAID' 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-yellow-100 text-yellow-800'
-          } rounded-full text-sm font-semibold`}>
+          <span className={`px-3 py-1 ${isPaid
+            ? 'bg-green-100 text-green-800'
+            : 'bg-yellow-100 text-yellow-800'
+            } rounded-full text-sm font-semibold`}>
             {booking.payment?.status || 'PENDING'}
           </span>
         </div>
@@ -789,8 +1014,8 @@ const PersonInfo = ({ booking, isRider }) => {
         </h3>
         <div className="flex items-start space-x-4">
           {photoUrl && !imgError ? (
-            <img 
-              src={photoUrl} 
+            <img
+              src={photoUrl}
               alt={displayName}
               className="w-16 h-16 rounded-full object-cover"
               onError={() => setImgError(true)}
@@ -803,13 +1028,13 @@ const PersonInfo = ({ booking, isRider }) => {
           <div className="flex-1">
             <h4 className="text-lg font-semibold">{displayName}</h4>
             <div className="flex items-center text-yellow-500 mb-2">
-              {[1,2,3,4,5].map(i => (
+              {[1, 2, 3, 4, 5].map(i => (
                 <i key={i} className={`fas fa-star ${i <= passengerRating ? '' : 'text-gray-300'}`}></i>
               ))}
               <span className="text-gray-600 ml-2">{Number(passengerRating).toFixed(1)}</span>
             </div>
             <div className="flex gap-4 text-sm text-gray-600">
-              <span><i className="fas fa-route mr-1"></i>{passenger?.statistics?.completedRides || 0} rides</span>
+              <span><i className="fas fa-route mr-1"></i>{passenger?.statistics?.completedRides || passenger?.statistics?.totalRidesTaken || 0} rides</span>
               {passenger?.phone && <span><i className="fas fa-phone mr-1"></i>{passenger.phone}</span>}
             </div>
             {['CONFIRMED', 'IN_PROGRESS', 'PICKUP_PENDING', 'PICKED_UP', 'PENDING'].includes(booking.status) && (
@@ -850,8 +1075,8 @@ const PersonInfo = ({ booking, isRider }) => {
         </h3>
         <div className="flex items-start space-x-4">
           {photoUrl && !imgError ? (
-            <img 
-              src={photoUrl} 
+            <img
+              src={photoUrl}
               alt={displayName}
               className="w-16 h-16 rounded-full object-cover"
               onError={() => setImgError(true)}
@@ -864,13 +1089,13 @@ const PersonInfo = ({ booking, isRider }) => {
           <div className="flex-1">
             <h4 className="text-lg font-semibold">{displayName}</h4>
             <div className="flex items-center text-yellow-500 mb-2">
-              {[1,2,3,4,5].map(i => (
+              {[1, 2, 3, 4, 5].map(i => (
                 <i key={i} className={`fas fa-star ${i <= riderRating ? '' : 'text-gray-300'}`}></i>
               ))}
               <span className="text-gray-600 ml-2">{Number(riderRating).toFixed(1)}</span>
             </div>
             <div className="flex gap-4 text-sm text-gray-600">
-              <span><i className="fas fa-car mr-1"></i>{rider.statistics?.totalRidesCompleted || 0} rides</span>
+              <span><i className="fas fa-car mr-1"></i>{rider.statistics?.completedRides || rider.statistics?.totalRidesCompleted || 0} rides</span>
               {rider.phone && <span><i className="fas fa-phone mr-1"></i>{rider.phone}</span>}
             </div>
             {vehicle && (
@@ -922,8 +1147,8 @@ const OTPSection = ({ booking }) => {
   };
 
   // Pickup OTP
-  if ((booking.status === 'CONFIRMED' || booking.status === 'PICKUP_PENDING') && 
-      booking.verification?.pickup?.code) {
+  if ((booking.status === 'CONFIRMED' || booking.status === 'PICKUP_PENDING') &&
+    booking.verification?.pickup?.code) {
     return (
       <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 mb-6 text-white shadow-lg">
         <div className="flex items-center justify-between mb-4">
@@ -961,7 +1186,7 @@ const OTPSection = ({ booking }) => {
             <ul className="list-disc list-inside ml-2 space-y-1">
               <li>Share this OTP with driver when they arrive</li>
               <li>Don't share with anyone else</li>
-              <li>OTP will expire in 30 minutes</li>
+              <li>Keep it ready until the driver verifies your pickup</li>
             </ul>
           </div>
         </div>
@@ -1008,7 +1233,7 @@ const OTPSection = ({ booking }) => {
             <ul className="list-disc list-inside ml-2 space-y-1">
               <li>Share this OTP when you reach your destination</li>
               <li>Driver will verify before marking dropoff complete</li>
-              <li>OTP will expire in 60 minutes</li>
+              <li>Keep it ready until the driver verifies your dropoff</li>
             </ul>
           </div>
         </div>
@@ -1034,7 +1259,7 @@ const RiderOTPSection = ({ booking, onVerify }) => {
             <p className="text-gray-600">Ask the passenger for their 4-digit pickup OTP</p>
           </div>
         </div>
-        
+
         <div className="bg-white/70 rounded-lg p-4 mb-4">
           <div className="flex items-center text-sm text-gray-600 mb-3">
             <i className="fas fa-info-circle text-blue-500 mr-2"></i>
@@ -1046,9 +1271,9 @@ const RiderOTPSection = ({ booking, onVerify }) => {
             <li>• Enter the OTP to mark pickup as complete</li>
           </ul>
         </div>
-        
-        <button 
-          onClick={() => onVerify('pickup')} 
+
+        <button
+          onClick={() => onVerify('pickup')}
           className="w-full py-4 bg-blue-500 text-white rounded-xl font-semibold text-lg hover:bg-blue-600 transition flex items-center justify-center gap-2 shadow-lg"
         >
           <i className="fas fa-key"></i>
@@ -1071,7 +1296,7 @@ const RiderOTPSection = ({ booking, onVerify }) => {
             <p className="text-gray-600">Ask passenger for dropoff OTP at destination</p>
           </div>
         </div>
-        
+
         <div className="bg-white/70 rounded-lg p-4 mb-4">
           <div className="flex items-center text-sm text-gray-600 mb-3">
             <i className="fas fa-info-circle text-purple-500 mr-2"></i>
@@ -1083,9 +1308,9 @@ const RiderOTPSection = ({ booking, onVerify }) => {
             <li>• Journey will be marked complete after verification</li>
           </ul>
         </div>
-        
-        <button 
-          onClick={() => onVerify('dropoff')} 
+
+        <button
+          onClick={() => onVerify('dropoff')}
           className="w-full py-4 bg-purple-500 text-white rounded-xl font-semibold text-lg hover:bg-purple-600 transition flex items-center justify-center gap-2 shadow-lg"
         >
           <i className="fas fa-check-circle"></i>
@@ -1148,15 +1373,15 @@ const JourneyStatus = ({ booking }) => {
 // Booking Header Component
 const BookingHeader = ({ booking }) => {
   const getStatusConfig = (status, payment) => {
-    const isPaid = payment?.status === 'PAID';
-    
+    const isPaid = ['PAID', 'PAYMENT_CONFIRMED'].includes(payment?.status);
+
     if ((status === 'DROPPED_OFF' || status === 'PICKED_UP') && isPaid) {
       return { class: 'bg-green-100 text-green-800', icon: 'fa-check-circle', text: 'Completed' };
     }
     if (status === 'DROPPED_OFF' && !isPaid) {
       return { class: 'bg-yellow-100 text-yellow-800', icon: 'fa-clock', text: 'Payment Pending' };
     }
-    
+
     const configs = {
       'PENDING': { class: 'bg-yellow-100 text-yellow-800', icon: 'fa-clock', text: 'Pending' },
       'CONFIRMED': { class: 'bg-blue-100 text-blue-800', icon: 'fa-check-circle', text: 'Confirmed' },
@@ -1172,10 +1397,26 @@ const BookingHeader = ({ booking }) => {
 
   const statusConfig = getStatusConfig(booking.status, booking.payment);
 
+  // Progress stepper configuration
+  const bookingSteps = [
+    { key: 'PENDING', label: 'Requested', icon: 'fa-clock' },
+    { key: 'CONFIRMED', label: 'Confirmed', icon: 'fa-check' },
+    { key: 'PICKUP_PENDING', label: 'Pickup', icon: 'fa-map-marker-alt' },
+    { key: 'PICKED_UP', label: 'Picked Up', icon: 'fa-car-side' },
+    { key: 'IN_TRANSIT', label: 'In Transit', icon: 'fa-road' },
+    { key: 'DROPPED_OFF', label: 'Dropped Off', icon: 'fa-map-pin' },
+    { key: 'COMPLETED', label: 'Completed', icon: 'fa-check-double' }
+  ];
+
+  const statusOrder = bookingSteps.map(s => s.key);
+  const currentStepIndex = statusOrder.indexOf(booking.status);
+  const isCancelled = booking.status === 'CANCELLED';
+  const isRejected = booking.status === 'REJECTED';
+
   return (
     <div className="flex justify-between items-start">
       <div>
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
           <i className="fas fa-ticket-alt text-emerald-500 mr-2"></i>Booking Details
         </h1>
         <p className="text-gray-600">
@@ -1185,6 +1426,182 @@ const BookingHeader = ({ booking }) => {
           <i className={`fas ${statusConfig.icon} mr-2`}></i>
           {statusConfig.text}
         </span>
+
+        {/* ═══════ BOOKING PROGRESS STEPPER ═══════ */}
+        {!isCancelled && !isRejected && (
+          <div className="mt-6 mb-2">
+            <div className="flex items-center justify-between w-full max-w-2xl">
+              {bookingSteps.map((step, index) => {
+                const isActive = index === currentStepIndex;
+                const isCompleted = index < currentStepIndex;
+                const isFuture = index > currentStepIndex;
+
+                return (
+                  <div key={step.key} className="flex flex-col items-center flex-1 relative">
+                    {/* Connector line */}
+                    {index > 0 && (
+                      <div
+                        className={`absolute top-4 right-1/2 w-full h-0.5 -z-10 ${isCompleted ? 'bg-emerald-400' : 'bg-gray-200'
+                          }`}
+                      ></div>
+                    )}
+                    {/* Step circle */}
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-all duration-300 ${isActive
+                        ? 'bg-emerald-500 text-white ring-4 ring-emerald-100 scale-110'
+                        : isCompleted
+                          ? 'bg-emerald-400 text-white'
+                          : 'bg-gray-200 text-gray-400'
+                        }`}
+                    >
+                      <i className={`fas ${isCompleted ? 'fa-check' : step.icon} text-xs`}></i>
+                    </div>
+                    {/* Step label */}
+                    <span
+                      className={`text-xs mt-1 text-center ${isActive ? 'font-semibold text-emerald-700' : isFuture ? 'text-gray-400' : 'text-gray-600'
+                        }`}
+                    >
+                      {step.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Cancelled/Rejected visual indicator */}
+        {(isCancelled || isRejected) && (
+          <div className="mt-4 p-3 bg-red-50 rounded-lg border border-red-200">
+            <div className="flex items-center text-red-700">
+              <i className={`fas ${isCancelled ? 'fa-ban' : 'fa-times-circle'} mr-2`}></i>
+              <span className="text-sm font-medium">
+                {isCancelled ? 'This booking was cancelled' : 'This booking was rejected'}
+              </span>
+            </div>
+            {booking.cancellation?.reason && (
+              <p className="text-xs text-red-600 mt-1">Reason: {booking.cancellation.reason}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════
+// RIDE RECEIPT COMPONENT (For Completed Rides)
+// ════════════════════════════════════════════════════
+const RideReceipt = ({ booking }) => {
+  const ride = booking.ride;
+  const originalPrice = ride?.pricing?.pricePerSeat || ride?.pricePerSeat || 0;
+  const finalPrice = booking.pricingBreakdown?.totalPrice || booking.totalPrice || originalPrice;
+  const platformFee = booking.pricingBreakdown?.platformFee || (finalPrice * 0.05);
+  const taxes = booking.pricingBreakdown?.taxes || (finalPrice * 0.05);
+  const baseFare = finalPrice - platformFee - taxes;
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden mb-6 relative">
+      {/* Ticket Header styling */}
+      <div className="bg-gray-800 text-white p-6 relative">
+        <div className="absolute top-1/2 -left-3 w-6 h-6 bg-[var(--ll-cream,#f5f0e8)] rounded-full -translate-y-1/2 shadow-inner"></div>
+        <div className="absolute top-1/2 -right-3 w-6 h-6 bg-[var(--ll-cream,#f5f0e8)] rounded-full -translate-y-1/2 shadow-inner"></div>
+
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-2xl font-bold font-display tracking-wide uppercase">Ride Receipt</h3>
+            <p className="text-gray-400 text-sm mt-1">{formatDate(booking.updatedAt || booking.createdAt)}</p>
+          </div>
+          <div className="text-right">
+            <span className="text-3xl font-bold text-emerald-400">₹{finalPrice.toFixed(2)}</span>
+            <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Total Paid</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Zigzag separator */}
+      <div className="w-full h-3 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIxMCI+PHBvbHlnb24gcG9pbnRzPSIwLDEwIDEwLDAgMjAsMTAiIGZpbGw9IiMzNzQxNTEiLz48L3N2Zz4=')] absolute top-[102px] left-0 right-0 z-10 rotate-180"></div>
+
+      <div className="p-6 pt-8 bg-gray-50">
+        <div className="flex justify-between items-center mb-6 pb-6 border-b border-dashed border-gray-300">
+          <div className="flex-1">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">From</p>
+            <p className="font-semibold text-gray-800 line-clamp-2">{ride?.route?.start?.address?.split(',')[0] || 'Origin'}</p>
+          </div>
+          <div className="px-4 text-emerald-500"><i className="fas fa-arrow-right"></i></div>
+          <div className="flex-1 text-right">
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">To</p>
+            <p className="font-semibold text-gray-800 line-clamp-2">{ride?.route?.destination?.address?.split(',')[0] || 'Destination'}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3 text-sm">
+          <div className="flex justify-between text-gray-600">
+            <span>Base Fare ({booking.seatsBooked || 1} seat{booking.seatsBooked > 1 ? 's' : ''})</span>
+            <span>₹{baseFare.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-600">
+            <span>Platform Fee (5%)</span>
+            <span>₹{platformFee.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-600">
+            <span>Taxes & GST (5%)</span>
+            <span>₹{taxes.toFixed(2)}</span>
+          </div>
+          <div className="pt-3 mt-3 border-t border-gray-200 flex justify-between font-bold text-gray-800 text-base">
+            <span>Total Amount</span>
+            <span>₹{finalPrice.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Environmental Impact highlight */}
+        {ride?.distance && (
+          <div className="mt-8 bg-emerald-50 rounded-lg p-4 flex items-center border border-emerald-100 mb-6">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mr-3 shrink-0">
+              <i className="fas fa-leaf"></i>
+            </div>
+            <div>
+              <p className="text-emerald-800 text-sm font-medium">Eco-friendly journey</p>
+              <p className="text-emerald-600 text-xs mt-0.5">
+                By carpooling this {(ride.distance / 1000).toFixed(1)} km trip, you helped save approx. {((ride.distance / 1000) * 0.12).toFixed(1)} kg of CO₂ emissions.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Actions: Book Again & Share */}
+        <div className="flex gap-3">
+          <Link
+            to={`/search-rides?origin=${encodeURIComponent(ride?.route?.start?.address || '')}&destination=${encodeURIComponent(ride?.route?.destination?.address || '')}`}
+            className="flex-1 flex items-center justify-center py-3 bg-gray-900 hover:bg-gray-800 text-white rounded-lg transition font-medium"
+          >
+            <i className="fas fa-redo-alt mr-2"></i> Book Again
+          </Link>
+
+          <button
+            onClick={() => {
+              if (navigator.share) {
+                navigator.share({
+                  title: 'My LoopLane Journey',
+                  text: `I just completed an eco-friendly carpool from ${ride?.route?.start?.name || 'my origin'} to ${ride?.route?.destination?.name || 'my destination'} on LoopLane! I saved ${((ride?.distance / 1000) * 0.12).toFixed(1)} kg of CO₂. Join the green movement! 🌿🚗`,
+                  url: window.location.origin
+                }).catch(console.error);
+              } else {
+                alert('Sharing is not supported on this browser.');
+              }
+            }}
+            className="flex-1 flex items-center justify-center py-3 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition font-medium"
+          >
+            <i className="fas fa-share-alt mr-2"></i> Share Trip
+          </button>
+        </div>
       </div>
     </div>
   );

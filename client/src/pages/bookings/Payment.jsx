@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import bookingService from '../../services/bookingService';
+import userService from '../../services/userService';
 import { Button, Alert } from '../../components/common';
+import { motion } from 'framer-motion';
 
 const Payment = () => {
   const { bookingId } = useParams();
@@ -31,28 +33,39 @@ const Payment = () => {
       const response = await bookingService.getBookingById(bookingId);
       if (response.success) {
         setBooking(response.booking);
+        const existingMethod = response.booking?.payment?.method?.toLowerCase();
+        if (existingMethod && ['upi', 'card', 'wallet', 'cash'].includes(existingMethod)) {
+          setPaymentMethod(existingMethod);
+        }
       } else {
         setError('Booking not found');
       }
     } catch (err) {
-      setError(err.message || 'Failed to load booking');
+      setError(err.response?.data?.message || err.message || 'Failed to load booking');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApplyCoupon = () => {
-    // Mock coupon validation
-    const totalAmount = booking.totalPrice || booking.totalAmount;
-    if (couponCode.toUpperCase() === 'FIRST50') {
-      setDiscount(50);
-      setSuccess('Coupon applied! ₹50 discount');
-    } else if (couponCode.toUpperCase() === 'SAVE10') {
-      const disc = Math.round(totalAmount * 0.1);
-      setDiscount(disc);
-      setSuccess(`Coupon applied! ₹${disc} discount (10% off)`);
-    } else {
-      setError('Invalid coupon code');
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      setError('Please enter a promo code');
+      return;
+    }
+    setError('');
+    setSuccess('');
+    try {
+      const totalAmount = booking.totalPrice || booking.totalAmount;
+      const result = await userService.validatePromoCode(couponCode, totalAmount);
+      if (result.success) {
+        setDiscount(result.discount);
+        setSuccess(result.message);
+      } else {
+        setError(result.message || 'Invalid promo code');
+        setDiscount(0);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired promo code');
       setDiscount(0);
     }
   };
@@ -79,9 +92,12 @@ const Payment = () => {
     }
 
     try {
+      // Simulate processing delay for realistic UX
+      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+
       const paymentData = {
         bookingId,
-        method: paymentMethod,
+        method: paymentMethod.toUpperCase(),
         amount: totalAmount - discount,
         ...(paymentMethod === 'upi' && { upiId }),
         ...(paymentMethod === 'card' && { cardDetails }),
@@ -93,15 +109,16 @@ const Payment = () => {
       if (response.success) {
         navigate(`/bookings/${bookingId}/success`, { 
           state: { 
-            paymentId: response.paymentId,
-            amount: totalAmount - discount
+            paymentId: response.paymentId || response.data?.paymentId,
+            amount: response.data?.amount || totalAmount - discount,
+            method: paymentMethod.toUpperCase()
           } 
         });
       } else {
         setError(response.message || 'Payment failed');
       }
     } catch (err) {
-      setError(err.message || 'Payment processing failed');
+      setError(err.response?.data?.message || err.message || 'Payment processing failed');
     } finally {
       setProcessing(false);
     }
@@ -109,7 +126,7 @@ const Payment = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
@@ -117,7 +134,7 @@ const Payment = () => {
 
   if (error || !booking) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="max-w-lg mx-auto px-4">
           <Alert type="error" message={error || 'Booking not found'} />
           <button
@@ -136,11 +153,38 @@ const Payment = () => {
   const dropoffAddress = booking.dropoffPoint?.address || booking.ride?.route?.destination?.address || 'Dropoff';
   const pricePerSeat = booking.ride?.pricing?.pricePerSeat || 0;
   const rideDate = booking.ride?.schedule?.departureDateTime || booking.ride?.schedule?.date || booking.createdAt;
+  const paymentLocked = booking.status !== 'DROPPED_OFF' || ['PAYMENT_CONFIRMED', 'REFUNDED'].includes(booking.payment?.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-2xl mx-auto px-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Complete Payment</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Complete Payment</h1>
+
+        {/* Simulation Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+            <i className="fas fa-flask text-blue-600"></i>
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-blue-800">Simulation Mode</p>
+            <p className="text-xs text-blue-600">This is a demo payment. No real money will be charged. Use any test details to proceed.</p>
+          </div>
+        </div>
+
+        {paymentLocked && (
+          <div className="mb-6">
+            <Alert
+              type="info"
+              message={
+                booking.payment?.status === 'PAYMENT_CONFIRMED'
+                  ? 'Payment has already been completed for this booking.'
+                  : booking.payment?.status === 'REFUNDED'
+                    ? 'This booking has already been refunded.'
+                    : `Payment can only be completed after dropoff. Current booking status: ${booking.status}.`
+              }
+            />
+          </div>
+        )}
 
         {/* Booking Summary */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -209,7 +253,7 @@ const Payment = () => {
               Apply
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">Try: FIRST50 or SAVE10</p>
+          <p className="text-xs text-gray-500 mt-2">Enter a promo code from LoopLane offers</p>
         </div>
 
         {/* Payment Methods */}
@@ -365,19 +409,31 @@ const Payment = () => {
         </div>
 
         {/* Pay Button */}
-        <Button
-          onClick={handlePayment}
-          loading={processing}
-          className="w-full"
-        >
-          Pay ₹{totalAmount - discount}
-        </Button>
+        {processing ? (
+          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 relative">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-200 border-t-emerald-500"></div>
+              <i className="fas fa-lock text-emerald-500 absolute inset-0 flex items-center justify-center text-lg"></i>
+            </div>
+            <p className="font-semibold text-gray-800">Processing Payment...</p>
+            <p className="text-sm text-gray-500 mt-1">Securely processing your payment via {paymentMethod.toUpperCase()}</p>
+          </div>
+        ) : (
+          <Button
+            onClick={handlePayment}
+            loading={processing}
+            disabled={paymentLocked}
+            className="w-full"
+          >
+            <i className="fas fa-lock mr-2"></i>Pay ₹{totalAmount - discount}
+          </Button>
+        )}
 
         <p className="text-xs text-gray-500 text-center mt-4">
           By completing payment, you agree to our refund and cancellation policy
         </p>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

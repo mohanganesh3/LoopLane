@@ -1,18 +1,24 @@
 import api from './api';
 
 const reviewService = {
-  getUserReviews: async (userId) => {
-    const response = await api.get(`/api/reviews/user/${userId}`);
+  getUserReviews: async (userId, page = 1, limit = 10) => {
+    const response = await api.get(`/api/reviews/user/${userId}`, {
+      params: { page, limit }
+    });
     return response.data;
   },
 
-  getMyGivenReviews: async () => {
-    const response = await api.get('/api/reviews/given');
+  getMyGivenReviews: async (page = 1, limit = 10) => {
+    const response = await api.get('/api/reviews/given', {
+      params: { page, limit }
+    });
     return response.data;
   },
 
-  getMyReceivedReviews: async () => {
-    const response = await api.get('/api/reviews/received');
+  getMyReceivedReviews: async (page = 1, limit = 10) => {
+    const response = await api.get('/api/reviews/received', {
+      params: { page, limit }
+    });
     return response.data;
   },
 
@@ -33,6 +39,21 @@ const reviewService = {
 
   getUserReviewStats: async (userId) => {
     const response = await api.get(`/api/reviews/stats/${userId}`);
+    return response.data;
+  },
+
+  respondToReview: async (reviewId, text) => {
+    const response = await api.post(`/api/reviews/${reviewId}/respond`, { text });
+    return response.data;
+  },
+
+  markAsHelpful: async (reviewId) => {
+    const response = await api.post(`/api/reviews/${reviewId}/helpful`);
+    return response.data;
+  },
+
+  reportReview: async (reviewId, reason) => {
+    const response = await api.post(`/api/reviews/${reviewId}/report`, { reason });
     return response.data;
   }
 };
