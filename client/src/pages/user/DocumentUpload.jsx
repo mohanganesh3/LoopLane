@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { Alert } from '../../components/common';
@@ -76,7 +77,7 @@ const DocumentUpload = () => {
   // Handle multiple vehicle photos
   const handleVehiclePhotos = () => {
     const newFiles = Array.from(vehiclePhotosRef.current?.files || []);
-    
+
     // Validate each file
     for (const file of newFiles) {
       if (!file.type.startsWith('image/')) {
@@ -142,7 +143,7 @@ const DocumentUpload = () => {
 
     try {
       const formData = new FormData();
-      
+
       // Add required documents
       formData.append('driverLicenseFront', files.driverLicenseFront);
       if (files.driverLicenseBack) {
@@ -165,7 +166,7 @@ const DocumentUpload = () => {
       }
 
       setSuccess('Documents uploaded successfully! Your profile is under review.');
-      
+
       // Navigate to dashboard after delay
       setTimeout(() => {
         navigate('/dashboard');
@@ -200,13 +201,12 @@ const DocumentUpload = () => {
       </h3>
       <p className="text-sm text-gray-600 mb-4">{description}</p>
 
-      <div 
+      <div
         onClick={() => refEl.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition ${
-          previews[field] 
-            ? 'border-emerald-500 bg-emerald-50' 
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition ${previews[field]
+            ? 'border-emerald-500 bg-emerald-50'
             : 'border-gray-300 hover:border-emerald-500 hover:bg-gray-50'
-        }`}
+          }`}
       >
         <input
           type="file"
@@ -224,9 +224,9 @@ const DocumentUpload = () => {
                 <span className="ml-2 text-gray-600">{files[field]?.name}</span>
               </div>
             ) : (
-              <img 
-                src={previews[field]} 
-                alt={title} 
+              <img
+                src={previews[field]}
+                alt={title}
                 className="max-h-48 mx-auto rounded-lg shadow-md"
               />
             )}
@@ -248,14 +248,14 @@ const DocumentUpload = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-12 px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-12 px-4" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500 rounded-full mb-4">
             <i className="fas fa-folder-open text-3xl text-white"></i>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Upload Verification Documents</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Upload Verification Documents</h1>
           <p className="text-lg text-gray-600">Upload your documents to get verified and start offering rides</p>
         </div>
 
@@ -367,8 +367,8 @@ const DocumentUpload = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                       {vehiclePhotoPreviews.map((preview, index) => (
                         <div key={index} className="relative group">
-                          <img 
-                            src={preview} 
+                          <img
+                            src={preview}
                             alt={`Vehicle ${index + 1}`}
                             className="w-full h-40 object-cover rounded-lg shadow-md border-2 border-gray-200"
                           />
@@ -401,7 +401,7 @@ const DocumentUpload = () => {
                     </div>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     onClick={() => vehiclePhotosRef.current?.click()}
                     className="text-center cursor-pointer"
                   >
@@ -418,7 +418,7 @@ const DocumentUpload = () => {
             {/* Important Notes */}
             <div className="mb-8 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
               <div className="flex">
-                <span className="text-yellow-500 text-xl mr-3">⚠️</span>
+                <span className="text-yellow-500 text-xl mr-3"><i className="fas fa-exclamation-triangle"></i></span>
                 <div>
                   <h4 className="text-sm font-medium text-yellow-800 mb-2">Important Guidelines:</h4>
                   <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
@@ -467,11 +467,11 @@ const DocumentUpload = () => {
         {/* Help Section */}
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600">
-            Having trouble uploading? <a href="mailto:support@looplane.com" className="text-emerald-500 hover:underline font-medium">Get Help</a>
+            Having trouble uploading? <a href="mailto:support@looplane.in" className="text-emerald-500 hover:underline font-medium">Get Help</a>
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 
@@ -9,7 +10,7 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
-  
+
   // Vehicle management state
   const [vehicles, setVehicles] = useState([]);
   const [showVehicleModal, setShowVehicleModal] = useState(false);
@@ -24,7 +25,7 @@ const Profile = () => {
     type: 'CAR',
     seatingCapacity: 4
   });
-  
+
   // Document uploads state for vehicle verification
   const [documentFiles, setDocumentFiles] = useState({
     rcBook: null,
@@ -34,14 +35,14 @@ const Profile = () => {
     rcBook: null,
     insurance: null
   });
-  
+
   // Delete account modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
-  
+
   // Change password modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -52,7 +53,12 @@ const Profile = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
-  
+
+  // 2FA Modal state
+  const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  const [twoFactorError, setTwoFactorError] = useState('');
+
   // Profile form state
   const [profileData, setProfileData] = useState({
     firstName: '',
@@ -79,7 +85,7 @@ const Profile = () => {
         gender: user.profile?.gender || '',
         dateOfBirth: user.profile?.dateOfBirth ? user.profile.dateOfBirth.split('T')[0] : ''
       });
-      
+
       // Profile photo is stored at user.profile.photo
       const photoUrl = user.profile?.photo;
       if (photoUrl && !photoUrl.includes('default-avatar')) {
@@ -87,7 +93,7 @@ const Profile = () => {
       } else {
         setAvatarPreview(null);
       }
-      
+
       // Load user's vehicles
       setVehicles(user.vehicles || []);
     }
@@ -149,37 +155,37 @@ const Profile = () => {
 
   const handleAddVehicle = async () => {
     setVehicleError('');
-    
+
     // Validation - vehicle details
     if (!vehicleData.make || !vehicleData.model || !vehicleData.registrationNumber || !vehicleData.year) {
       setVehicleError('Make, Model, Year, and Registration Number are required');
       return;
     }
-    
+
     // Validation - RC Book required for vehicle
     if (!documentFiles.rcBook) {
       setVehicleError('Vehicle RC Book is required');
       return;
     }
-    
+
     setVehicleLoading(true);
     try {
       // First add the vehicle
       await userService.addVehicle(vehicleData);
-      
+
       // Then upload the vehicle documents (RC and Insurance)
       const formData = new FormData();
       formData.append('rcBook', documentFiles.rcBook);
       if (documentFiles.insurance) {
         formData.append('insurance', documentFiles.insurance);
       }
-      
+
       await userService.uploadDocuments(formData);
-      
+
       await refreshUser();
       await fetchVehicles();
       setShowVehicleModal(false);
-      
+
       // Reset form
       setVehicleData({
         make: '',
@@ -198,7 +204,7 @@ const Profile = () => {
         rcBook: null,
         insurance: null
       });
-      
+
       setSuccess('Vehicle added successfully! It will be reviewed by admin.');
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
@@ -212,7 +218,7 @@ const Profile = () => {
     if (!window.confirm('Are you sure you want to delete this vehicle?')) {
       return;
     }
-    
+
     try {
       await userService.deleteVehicle(vehicleId);
       await refreshUser();
@@ -266,7 +272,7 @@ const Profile = () => {
         setError('Please select an image file');
         return;
       }
-      
+
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
         setError('Image size must be less than 5MB');
@@ -286,12 +292,12 @@ const Profile = () => {
       try {
         const formData = new FormData();
         formData.append('profilePhoto', file);
-        
+
         console.log('Uploading image...', file.name, file.type, file.size);
-        
+
         const response = await userService.updateProfilePicture(formData);
         console.log('Upload response:', response);
-        
+
         if (response.success && response.profilePhoto) {
           setAvatarPreview(response.profilePhoto);
           await refreshUser();
@@ -337,18 +343,18 @@ const Profile = () => {
       // Update profile
       const response = await userService.updateProfile(updateData);
       console.log('Profile update response:', response);
-      
+
       // Refresh user data from server to get the latest state
       const updatedUser = await refreshUser();
       console.log('Refreshed user:', updatedUser);
-      
+
       // Update avatar preview with the new photo URL if available
       if (updatedUser?.profile?.photo && !updatedUser.profile.photo.includes('default-avatar')) {
         setAvatarPreview(updatedUser.profile.photo);
       }
-      
+
       setSuccess('Profile updated successfully!');
-      
+
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
@@ -362,22 +368,22 @@ const Profile = () => {
   const handleChangePassword = async () => {
     setPasswordError('');
     setPasswordSuccess('');
-    
+
     if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
       setPasswordError('All fields are required');
       return;
     }
-    
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setPasswordError('New passwords do not match');
       return;
     }
-    
+
     if (passwordData.newPassword.length < 6) {
       setPasswordError('Password must be at least 6 characters long');
       return;
     }
-    
+
     setPasswordLoading(true);
     try {
       await userService.changePassword({
@@ -385,10 +391,10 @@ const Profile = () => {
         newPassword: passwordData.newPassword,
         confirmPassword: passwordData.confirmPassword
       });
-      
+
       setPasswordSuccess('Password changed successfully!');
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      
+
       // Close modal after 2 seconds
       setTimeout(() => {
         setShowPasswordModal(false);
@@ -406,7 +412,7 @@ const Profile = () => {
       setDeleteError('Please type DELETE to confirm');
       return;
     }
-    
+
     setDeleteLoading(true);
     setDeleteError('');
     try {
@@ -425,11 +431,33 @@ const Profile = () => {
     }
   };
 
+  const handleToggleTwoFactor = async () => {
+    setTwoFactorLoading(true);
+    setTwoFactorError('');
+    try {
+      await userService.updateSettings({
+        preferences: {
+          security: {
+            twoFactorEnabled: !user?.twoFactorEnabled
+          }
+        }
+      });
+      await refreshUser();
+      setShowTwoFactorModal(false);
+      setSuccess(`Two-Factor Authentication has been successfully ${user?.twoFactorEnabled ? 'disabled' : 'enabled'}.`);
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setTwoFactorError(err.response?.data?.message || err.message || 'Failed to update 2FA settings');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-2xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">My Profile</h1>
-        
+        <h1 className="text-3xl font-bold text-gray-900 mb-8" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>My Profile</h1>
+
         {/* Content Area */}
         <div className="bg-white rounded-lg shadow-sm p-6">
           <div className="space-y-6">
@@ -477,6 +505,93 @@ const Profile = () => {
                   <i className="fas fa-check-circle mr-1"></i>
                   {user?.role === 'RIDER' ? 'Rider' : 'Passenger'}
                 </p>
+              </div>
+            </div>
+
+            {/* Stats & Activity Summary */}
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i className="fas fa-chart-bar text-emerald-500 mr-2"></i>
+                Activity & Stats
+              </h3>
+
+              {/* Rating & Trust Score */}
+              <div className="flex items-center gap-6 mb-4">
+                <div className="flex items-center gap-1">
+                  <i className="fas fa-star text-yellow-400"></i>
+                  <span className="text-lg font-bold text-gray-900">{user?.rating?.overall?.toFixed(1) || '0.0'}</span>
+                  <span className="text-sm text-gray-500">({user?.rating?.totalRatings || 0} reviews)</span>
+                </div>
+                {user?.trustScore > 0 && (
+                  <div className="flex items-center gap-1">
+                    <i className="fas fa-shield-alt text-emerald-500"></i>
+                    <span className="text-sm font-medium text-gray-700">Trust: {user.trustScore}/100</span>
+                  </div>
+                )}
+                {user?.verificationStatus === 'VERIFIED' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <i className="fas fa-check-circle mr-1"></i>Verified
+                  </span>
+                )}
+                {user?.statistics?.memberSince && (
+                  <span className="text-xs text-gray-400">
+                    Member since {new Date(user.statistics.memberSince).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+
+              {/* Badges */}
+              {user?.badges && user.badges.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {user.badges.map((badge, i) => (
+                    <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      {badge.icon || ''} <i className="fas fa-medal mr-1"></i>{badge.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {user?.role === 'RIDER' ? (
+                  <>
+                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">{user?.statistics?.ridesAsDriver || user?.statistics?.completedRides || 0}</p>
+                      <p className="text-xs text-emerald-600">Rides Given</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-blue-700">₹{(user?.statistics?.totalEarnings || 0).toLocaleString()}</p>
+                      <p className="text-xs text-blue-600">Total Earnings</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-purple-700">{user?.statistics?.totalPassengersCarried || 0}</p>
+                      <p className="text-xs text-purple-600">Passengers</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700">{((user?.statistics?.carbonSaved || 0) / 1000).toFixed(1)}kg</p>
+                      <p className="text-xs text-green-600">CO₂ Saved</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="bg-emerald-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-emerald-700">{user?.statistics?.ridesAsPassenger || user?.statistics?.completedRides || 0}</p>
+                      <p className="text-xs text-emerald-600">Rides Taken</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-blue-700">₹{(user?.statistics?.totalSpent || 0).toLocaleString()}</p>
+                      <p className="text-xs text-blue-600">Total Spent</p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-purple-700">{((user?.statistics?.totalDistance || 0)).toFixed(0)}km</p>
+                      <p className="text-xs text-purple-600">Distance</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700">{((user?.statistics?.carbonSaved || 0) / 1000).toFixed(1)}kg</p>
+                      <p className="text-xs text-green-600">CO₂ Saved</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -607,7 +722,7 @@ const Profile = () => {
                     <i className="fas fa-plus mr-2"></i>Add Vehicle
                   </button>
                 </div>
-                
+
                 {vehicles.length === 0 ? (
                   <div className="bg-gray-50 rounded-xl p-8 text-center">
                     <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -627,32 +742,29 @@ const Profile = () => {
                 ) : (
                   <div className="space-y-3">
                     {vehicles.map((vehicle, index) => (
-                      <div 
-                        key={vehicle._id || index} 
-                        className={`p-4 rounded-xl border ${
-                          vehicle.status === 'APPROVED' 
-                            ? 'bg-green-50 border-green-200' 
-                            : vehicle.status === 'PENDING' 
-                            ? 'bg-yellow-50 border-yellow-200' 
+                      <div
+                        key={vehicle._id || index}
+                        className={`p-4 rounded-xl border ${vehicle.status === 'APPROVED'
+                          ? 'bg-green-50 border-green-200'
+                          : vehicle.status === 'PENDING'
+                            ? 'bg-yellow-50 border-yellow-200'
                             : 'bg-red-50 border-red-200'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                              vehicle.status === 'APPROVED' 
-                                ? 'bg-green-200' 
-                                : vehicle.status === 'PENDING' 
-                                ? 'bg-yellow-200' 
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${vehicle.status === 'APPROVED'
+                              ? 'bg-green-200'
+                              : vehicle.status === 'PENDING'
+                                ? 'bg-yellow-200'
                                 : 'bg-red-200'
-                            }`}>
-                              <i className={`fas fa-car text-xl ${
-                                vehicle.status === 'APPROVED' 
-                                  ? 'text-green-700' 
-                                  : vehicle.status === 'PENDING' 
-                                  ? 'text-yellow-700' 
+                              }`}>
+                              <i className={`fas fa-car text-xl ${vehicle.status === 'APPROVED'
+                                ? 'text-green-700'
+                                : vehicle.status === 'PENDING'
+                                  ? 'text-yellow-700'
                                   : 'text-red-700'
-                              }`}></i>
+                                }`}></i>
                             </div>
                             <div>
                               <h4 className="font-semibold text-gray-900">
@@ -689,7 +801,7 @@ const Profile = () => {
                     ))}
                   </div>
                 )}
-                
+
                 <p className="text-xs text-gray-500 mt-4">
                   <i className="fas fa-info-circle mr-1"></i>
                   Vehicles need to be approved by admin before you can post rides. Approval usually takes 24-48 hours.
@@ -703,7 +815,7 @@ const Profile = () => {
                 <i className="fas fa-shield-alt text-emerald-500 mr-2"></i>
                 Account Security
               </h3>
-              
+
               <div className="space-y-4">
                 {/* Change Password */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -716,6 +828,27 @@ const Profile = () => {
                     className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition font-medium"
                   >
                     <i className="fas fa-key mr-2"></i>Change
+                  </button>
+                </div>
+
+                {/* Two-Factor Authentication (I3) */}
+                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div>
+                    <h4 className="font-medium text-gray-900">Two-Factor Authentication</h4>
+                    <p className="text-sm text-gray-500">Add an extra layer of security with TOTP authenticator</p>
+                    <div className="flex items-center mt-2 gap-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${user?.twoFactorEnabled ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        <i className={`fas ${user?.twoFactorEnabled ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-1`}></i>
+                        {user?.twoFactorEnabled ? 'Enabled' : 'Not Enabled'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTwoFactorModal(true)}
+                    className={`px-4 py-2 rounded-lg transition font-medium ${user?.twoFactorEnabled ? 'bg-gray-500 text-white hover:bg-gray-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+                  >
+                    <i className={`fas ${user?.twoFactorEnabled ? 'fa-times' : 'fa-lock'} mr-2`}></i>
+                    {user?.twoFactorEnabled ? 'Disable' : 'Enable 2FA'}
                   </button>
                 </div>
 
@@ -912,6 +1045,72 @@ const Profile = () => {
         </div>
       )}
 
+      {/* 2FA Modal */}
+      {showTwoFactorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center mb-4">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center mr-4 ${user?.twoFactorEnabled ? 'bg-gray-100' : 'bg-blue-100'}`}>
+                <i className={`fas ${user?.twoFactorEnabled ? 'fa-unlock-alt text-gray-500' : 'fa-shield-alt text-blue-500'} text-2xl`}></i>
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">{user?.twoFactorEnabled ? 'Disable' : 'Enable'} Two-Factor Authentication</h3>
+                <p className="text-sm text-gray-500">Extra layer of security for your account</p>
+              </div>
+            </div>
+
+            <div className={`p-4 mb-6 rounded-lg ${user?.twoFactorEnabled ? 'bg-gray-50 border border-gray-200' : 'bg-blue-50 border border-blue-200'}`}>
+              <p className="text-sm text-gray-700">
+                {user?.twoFactorEnabled ? (
+                  <>
+                    <i className="fas fa-info-circle mr-1 text-gray-500"></i>
+                    Disabling 2FA will remove the extra security layer from your account. You will only need your password to log in.
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-info-circle mr-1 text-blue-500"></i>
+                    Enabling 2FA will require you to enter a 6-digit OTP sent to your registered email address every time you log in.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {twoFactorError && (
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center">
+                <i className="fas fa-exclamation-circle mr-2"></i>
+                {twoFactorError}
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowTwoFactorModal(false);
+                  setTwoFactorError('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleToggleTwoFactor}
+                disabled={twoFactorLoading}
+                className={`px-4 py-2 text-white rounded-lg transition font-medium disabled:opacity-50 disabled:cursor-not-allowed ${user?.twoFactorEnabled ? 'bg-gray-600 hover:bg-gray-700' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+              >
+                {twoFactorLoading ? (
+                  <><i className="fas fa-spinner fa-spin mr-2"></i>Processing...</>
+                ) : user?.twoFactorEnabled ? (
+                  <><i className="fas fa-times mr-2"></i>Disable 2FA</>
+                ) : (
+                  <><i className="fas fa-shield-alt mr-2"></i>Enable 2FA</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Vehicle Modal */}
       {showVehicleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -1054,7 +1253,7 @@ const Profile = () => {
                 <i className="fas fa-file-alt text-emerald-500 mr-2"></i>
                 Vehicle Documents
               </h4>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 {/* RC Book */}
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-emerald-400 transition">
@@ -1189,7 +1388,7 @@ const Profile = () => {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 

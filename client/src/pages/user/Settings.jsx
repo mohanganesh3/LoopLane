@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { Alert } from '../../components/common';
@@ -163,9 +164,9 @@ const Settings = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-6xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-800 mb-8 flex items-center">
+        <h1 className="text-3xl font-bold text-gray-800 mb-8 flex items-center" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
           <i className="fas fa-cog text-emerald-500 mr-3"></i> Settings
         </h1>
 
@@ -722,7 +723,7 @@ const Settings = () => {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 

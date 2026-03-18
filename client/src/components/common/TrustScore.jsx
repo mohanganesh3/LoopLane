@@ -72,7 +72,15 @@ const TrustScore = ({ userId = null, compact = false }) => {
     <div className={`bg-white rounded-xl shadow-lg p-6 border-2 ${colors.border}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-gray-800">Trust Score</h3>
+        <div className="flex items-center gap-2 group relative cursor-help">
+          <h3 className="text-lg font-bold text-gray-800">Trust Score</h3>
+          <i className="fas fa-info-circle text-gray-400 group-hover:text-emerald-500 transition-colors"></i>
+
+          <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-gray-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 shadow-lg pointer-events-none">
+            Your Trust Score reflects your reliability on LoopLane. Higher scores get you more bookings and exclusive perks!
+            <div className="absolute top-full left-6 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+          </div>
+        </div>
         <div className={`flex items-center px-3 py-1 rounded-full ${colors.bg} ${colors.text}`}>
           <i className={`fas ${levelIcons[level]} text-xl mr-2`}></i>
           <span className="font-bold">{levelInfo?.label || level}</span>
@@ -92,19 +100,19 @@ const TrustScore = ({ userId = null, compact = false }) => {
       {/* Score Breakdown */}
       <div className="space-y-3">
         <h4 className="text-sm font-semibold text-gray-600 mb-2">Score Breakdown</h4>
-        
+
         {[
-          { label: 'Profile Complete', value: factors.profileComplete, max: 20, iconClass: 'fa-user' },
-          { label: 'Verification', value: factors.verificationBonus, max: 20, iconClass: 'fa-check-circle' },
-          { label: 'Rating', value: factors.ratingBonus, max: 20, iconClass: 'fa-star' },
-          { label: 'Experience', value: factors.experienceBonus, max: 20, iconClass: 'fa-car' },
-          { label: 'Reliability', value: factors.reliabilityBonus, max: 20, iconClass: 'fa-gem' }
+          { label: 'Profile Complete', value: factors.profileComplete, max: 20, iconClass: 'fa-user', tip: 'Adding your bio, preferences, and verified phone/email.' },
+          { label: 'Verification', value: factors.verificationBonus, max: 20, iconClass: 'fa-check-circle', tip: 'Uploading government ID, driving license, and vehicle registration.' },
+          { label: 'Rating', value: factors.ratingBonus, max: 20, iconClass: 'fa-star', tip: 'Average ratings from past passengers or drivers.' },
+          { label: 'Experience', value: factors.experienceBonus, max: 20, iconClass: 'fa-car', tip: 'Number of successful trips completed on LoopLane.' },
+          { label: 'Reliability', value: factors.reliabilityBonus, max: 20, iconClass: 'fa-gem', tip: 'Low cancellation rate and high punctuality.' }
         ].map((factor, idx) => (
-          <div key={idx} className="flex items-center">
-            <i className={`fas ${factor.iconClass} w-6 text-center text-gray-500`}></i>
-            <span className="flex-1 text-sm text-gray-600 ml-2">{factor.label}</span>
+          <div key={idx} className="flex items-center group relative cursor-help">
+            <i className={`fas ${factor.iconClass} w-6 text-center text-gray-500 group-hover:text-emerald-500 transition-colors`}></i>
+            <span className="flex-1 text-sm text-gray-600 ml-2 group-hover:text-gray-900 transition-colors">{factor.label}</span>
             <div className="w-24 bg-gray-200 rounded-full h-2 mx-2">
-              <div 
+              <div
                 className={`h-2 rounded-full ${factor.value >= factor.max * 0.8 ? 'bg-green-500' : factor.value >= factor.max * 0.5 ? 'bg-yellow-500' : 'bg-gray-400'}`}
                 style={{ width: `${(factor.value / factor.max) * 100}%` }}
               ></div>
@@ -112,6 +120,12 @@ const TrustScore = ({ userId = null, compact = false }) => {
             <span className="text-sm font-medium text-gray-800 w-12 text-right">
               {Math.round(factor.value)}/{factor.max}
             </span>
+
+            {/* Tooltip */}
+            <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 w-48 p-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 text-center shadow-lg pointer-events-none">
+              {factor.tip}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-800"></div>
+            </div>
           </div>
         ))}
       </div>
@@ -122,10 +136,10 @@ const TrustScore = ({ userId = null, compact = false }) => {
           <p className="text-sm text-blue-800">
             <i className="fas fa-lightbulb mr-1"></i> <strong>Tip:</strong> {
               factors.profileComplete < 15 ? 'Complete your profile to boost your score!' :
-              factors.verificationBonus < 15 ? 'Verify your documents to earn more trust!' :
-              factors.ratingBonus < 15 ? 'Get more positive reviews from your trips!' :
-              factors.experienceBonus < 15 ? 'Complete more rides to gain experience!' :
-              'Keep up the reliable service to maintain your score!'
+                factors.verificationBonus < 15 ? 'Verify your documents to earn more trust!' :
+                  factors.ratingBonus < 15 ? 'Get more positive reviews from your trips!' :
+                    factors.experienceBonus < 15 ? 'Complete more rides to gain experience!' :
+                      'Keep up the reliable service to maintain your score!'
             }
           </p>
         </div>

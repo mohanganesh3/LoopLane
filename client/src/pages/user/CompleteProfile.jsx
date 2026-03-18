@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { Alert, LoadingSpinner } from '../../components/common';
@@ -214,7 +215,7 @@ const CompleteProfile = () => {
   }, [user, navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-12 px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-12 px-4" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -223,7 +224,7 @@ const CompleteProfile = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Complete Your Rider Profile</h1>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Complete Your Rider Profile</h1>
           <p className="text-lg text-gray-600">Let's get your vehicle details to start offering rides</p>
         </div>
 
@@ -232,9 +233,8 @@ const CompleteProfile = () => {
           <div className="flex items-center justify-center space-x-4">
             {/* Step 1 */}
             <div className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                step >= 1 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${step >= 1 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
+                }`}>
                 {step > 1 ? '✓' : '1'}
               </div>
               <span className="ml-2 text-sm font-medium text-gray-700">Vehicle Details</span>
@@ -243,9 +243,8 @@ const CompleteProfile = () => {
 
             {/* Step 2 */}
             <div className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                step >= 2 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${step >= 2 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
+                }`}>
                 {step > 2 ? '✓' : '2'}
               </div>
               <span className="ml-2 text-sm font-medium text-gray-700">Preferences</span>
@@ -254,9 +253,8 @@ const CompleteProfile = () => {
 
             {/* Step 3 */}
             <div className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                step >= 3 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${step >= 3 ? 'bg-emerald-500 text-white' : 'bg-gray-300 text-gray-600'
+                }`}>
                 3
               </div>
               <span className="ml-2 text-sm font-medium text-gray-700">License</span>
@@ -422,7 +420,7 @@ const CompleteProfile = () => {
           {step === 2 && (
             <div>
               <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                <span className="text-emerald-500 mr-3">⚙️</span>
+                <span className="text-emerald-500 mr-3"><i className="fas fa-cog"></i></span>
                 Riding Preferences
               </h2>
 
@@ -497,7 +495,7 @@ const CompleteProfile = () => {
               {/* Bio */}
               <div className="mt-8">
                 <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                  <span className="text-emerald-500 mr-3">ℹ️</span>
+                  <span className="text-emerald-500 mr-3"><i className="fas fa-info-circle"></i></span>
                   About You
                 </h3>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -566,12 +564,12 @@ const CompleteProfile = () => {
               <div className="mt-8 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <span className="text-blue-500 text-xl">ℹ️</span>
+                    <span className="text-blue-500 text-xl"><i className="fas fa-info-circle"></i></span>
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-blue-700">
-                      <strong>Next Step:</strong> After completing this form, you'll need to upload your 
-                      verification documents (Driver's License, Aadhar Card, RC Book, Insurance) before 
+                      <strong>Next Step:</strong> After completing this form, you'll need to upload your
+                      verification documents (Driver's License, Aadhar Card, RC Book, Insurance) before
                       you can start offering rides.
                     </p>
                   </div>
@@ -632,11 +630,11 @@ const CompleteProfile = () => {
         {/* Help Section */}
         <div className="mt-8 text-center">
           <p className="text-sm text-gray-600">
-            Need help? <a href="mailto:support@looplane.com" className="text-emerald-500 hover:underline font-medium">Contact Support</a>
+            Need help? <a href="mailto:support@looplane.in" className="text-emerald-500 hover:underline font-medium">Contact Support</a>
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

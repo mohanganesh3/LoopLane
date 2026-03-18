@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { LoadingSpinner, Alert } from '../../components/common';
@@ -170,7 +171,7 @@ const LicenseUpload = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen pb-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="container mx-auto px-4 max-w-2xl">
         {/* Progress Steps */}
         <div className="mb-8">
@@ -203,7 +204,7 @@ const LicenseUpload = () => {
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {/* Header */}
           <div className="bg-emerald-500 text-white p-6">
-            <h1 className="text-2xl font-bold flex items-center">
+            <h1 className="text-2xl font-bold flex items-center" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
               <i className="fas fa-id-card mr-3"></i>
               {step === 1 && 'Upload Driving License'}
               {step === 2 && 'License Details'}
@@ -452,7 +453,7 @@ const LicenseUpload = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

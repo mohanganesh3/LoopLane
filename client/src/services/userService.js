@@ -22,10 +22,7 @@ const userService = {
   // Update profile picture
   updateProfilePicture: async (formData) => {
     const response = await api.post('/api/user/profile/picture', formData, {
-      headers: { 
-        'Content-Type': 'multipart/form-data'
-      },
-      transformRequest: [(data) => data] // Prevent axios from transforming FormData
+      headers: { 'Content-Type': undefined } // Let browser set multipart boundary
     });
     return response.data;
   },
@@ -33,7 +30,7 @@ const userService = {
   // Upload driving license for verification
   uploadLicense: async (formData) => {
     const response = await api.post('/api/user/license/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': undefined } // Let browser set multipart boundary
     });
     return response.data;
   },
@@ -69,8 +66,12 @@ const userService = {
   },
 
   // Get trip history
-  getTripHistory: async (page = 1, limit = 10) => {
-    const response = await api.get(`/api/user/trip-history?page=${page}&limit=${limit}`);
+  getTripHistory: async (page = 1, status, dateFrom, dateTo, limit = 10) => {
+    const params = { page, limit };
+    if (status) params.status = status;
+    if (dateFrom) params.dateFrom = dateFrom;
+    if (dateTo) params.dateTo = dateTo;
+    const response = await api.get('/api/user/trip-history', { params });
     return response.data;
   },
 
@@ -152,6 +153,12 @@ const userService = {
     return response.data;
   },
 
+  // Delete a notification
+  deleteNotification: async (notificationId) => {
+    const response = await api.delete(`/api/notifications/${notificationId}`);
+    return response.data;
+  },
+
   // Change password
   changePassword: async (data) => {
     const response = await api.post('/api/user/change-password', data);
@@ -160,7 +167,7 @@ const userService = {
 
   // Delete account
   deleteAccount: async (data = {}) => {
-    const response = await api.delete('/api/user/account', { 
+    const response = await api.delete('/api/user/account', {
       data: data,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -169,12 +176,12 @@ const userService = {
 
   // Get unread notification count
   getUnreadNotificationCount: async () => {
-    const response = await api.get('/api/notifications/unread-count');
+    const response = await api.get('/api/notifications/count');
     return response.data;
   },
 
   // ✅ NEW: Trust Score & Badges APIs (Like BlaBlaCar/Uber)
-  
+
   // Get trust score
   getTrustScore: async (userId = null) => {
     const url = userId ? `/api/user/trust-score/${userId}` : '/api/user/trust-score';
@@ -227,7 +234,7 @@ const userService = {
   // ✅ NEW: Upload verification documents (License, Aadhar, RC, Insurance, Vehicle Photos)
   uploadDocuments: async (formData) => {
     const response = await api.post('/api/user/documents/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': undefined } // Let browser set multipart boundary
     });
     return response.data;
   },
@@ -235,6 +242,34 @@ const userService = {
   // ✅ NEW: Get document verification status
   getDocumentStatus: async () => {
     const response = await api.get('/api/user/documents/status');
+    return response.data;
+  },
+
+  // Route Demand Intelligence — Personalized Route Suggestions for Drivers
+  getRouteSuggestions: async () => {
+    const response = await api.get('/api/user/route-suggestions');
+    return response.data;
+  },
+
+  // Route Alerts — "Notify me when a ride is posted on this route"
+  getRouteAlerts: async () => {
+    const response = await api.get('/api/user/route-alerts');
+    return response.data;
+  },
+
+  createRouteAlert: async (data) => {
+    const response = await api.post('/api/user/route-alerts', data);
+    return response.data;
+  },
+
+  deleteRouteAlert: async (alertId) => {
+    const response = await api.delete(`/api/user/route-alerts/${alertId}`);
+    return response.data;
+  },
+
+  // Promo Code Validation
+  validatePromoCode: async (code, bookingAmount) => {
+    const response = await api.post('/api/user/validate-promo', { code, bookingAmount });
     return response.data;
   }
 };
