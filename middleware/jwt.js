@@ -11,10 +11,18 @@ const User = require('../models/User');
 const ACCESS_TOKEN_EXPIRY = process.env.JWT_ACCESS_EXPIRY || '2h';
 const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
 if (!JWT_SECRET) {
     throw new Error('JWT_SECRET must be defined in environment variables');
 }
+
+if (!JWT_REFRESH_SECRET) {
+    console.error('⛔ SECURITY WARNING: JWT_REFRESH_SECRET is not set. Falling back to derived secret. Set a unique JWT_REFRESH_SECRET in production.');
+    // Weak fallback — acceptable only in development
+}
+
+const EFFECTIVE_REFRESH_SECRET = JWT_REFRESH_SECRET || (JWT_SECRET + '_refresh');
 
 /**
  * Generate Access Token (short-lived)
@@ -43,7 +51,7 @@ exports.generateRefreshToken = (userId) => {
             userId: userId.toString(),
             type: 'refresh'
         },
-        JWT_SECRET,
+        EFFECTIVE_REFRESH_SECRET,
         { expiresIn: REFRESH_TOKEN_EXPIRY }
     );
 };
@@ -80,7 +88,7 @@ exports.verifyAccessToken = (token) => {
  */
 exports.verifyRefreshToken = (token) => {
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, EFFECTIVE_REFRESH_SECRET);
         if (decoded.type !== 'refresh') {
             throw new Error('Invalid token type');
         }
@@ -131,12 +139,42 @@ exports.isAuthenticatedJWT = async (req, res, next) => {
             });
         }
 
-        // Check account status
+        // Check account status — auto-lift expired suspensions
         if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
+            // Check if suspension has expired
+            const fullUser = await User.findById(decoded.userId).select('suspensionEnd accountStatusHistory');
+            if (fullUser?.suspensionEnd && new Date(fullUser.suspensionEnd) < new Date()) {
+                // Suspension has expired — auto-reactivate
+                await User.findByIdAndUpdate(decoded.userId, {
+                    accountStatus: 'ACTIVE',
+                    isSuspended: false,
+                    suspensionReason: null,
+                    suspendedAt: null,
+                    suspendedBy: null,
+                    suspensionEnd: null,
+                    $push: {
+                        accountStatusHistory: {
+                            status: 'ACTIVE',
+                            reason: 'Suspension period expired — auto-reactivated',
+                            changedBy: decoded.userId,
+                            changedAt: new Date()
+                        }
+                    }
+                });
+                // Refresh user object for the request
+                const reactivated = await User.findById(decoded.userId)
+                    .select('accountStatus isActive isSuspended suspensionReason role email profile');
+                req.user = reactivated;
+                req.userId = reactivated._id;
+                req.authMethod = 'jwt';
+                return next();
+            }
+
             return res.status(403).json({
                 success: false,
-                message: `Account suspended. Reason: ${user.suspensionReason || 'Policy violation'}`,
-                code: 'ACCOUNT_SUSPENDED'
+                message: `Account suspended${user.suspensionReason ? `. Reason: ${user.suspensionReason}` : ''}`,
+                code: 'ACCOUNT_SUSPENDED',
+                suspensionEnd: fullUser?.suspensionEnd || null
             });
         }
 
@@ -195,7 +233,7 @@ exports.getCookieOptions = (maxAge) => {
     return {
         httpOnly: true,
         secure: isProduction,
-        sameSite: 'lax',
+        sameSite: isProduction ? 'strict' : 'lax',
         maxAge: maxAge,
         path: '/'
     };

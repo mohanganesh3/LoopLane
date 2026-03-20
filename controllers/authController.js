@@ -5,24 +5,20 @@
 
 const User = require('../models/User');
 const RefreshToken = require('../models/RefreshToken');
+const crypto = require('crypto');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const emailService = require('../utils/emailService');
 const helpers = require('../utils/helpers');
+const { hashToken } = require('../utils/crypto');
 const { 
     generateAccessToken, 
     generateRefreshToken,
     getCookieOptions 
 } = require('../middleware/jwt');
 
-/**
- * Show registration page
- */
-exports.showRegisterPage = (req, res) => {
-    res.render('auth/register', {
-        title: 'Register - LANE Carpool',
-        error: null
-    });
-};
+const ADMIN_PANEL_ROLES = ['ADMIN', 'SUPER_ADMIN', 'SUPPORT_AGENT', 'FINANCE_MANAGER', 'OPERATIONS_MANAGER', 'CONTENT_MODERATOR', 'FLEET_MANAGER'];
+
+// G6: showRegisterPage removed (dead SSR code — React SPA handles all views)
 
 /**
  * Handle registration - Step 1 (Send OTP)
@@ -52,7 +48,6 @@ exports.register = asyncHandler(async (req, res) => {
     // Delete any unverified conflicting accounts to allow fresh registration
     for (const user of conflicts) {
         await User.findByIdAndDelete(user._id);
-        console.log(`🔄 Deleted unverified user conflict: ${user.email}`);
     }
 
     // Generate OTP
@@ -74,53 +69,33 @@ exports.register = asyncHandler(async (req, res) => {
             firstName: name.split(' ')[0],
             lastName: name.split(' ').slice(1).join(' ') || name.split(' ')[0]
         },
-        otpCode: otp,
+        otpCode: hashToken(otp),
         otpExpires: otpExpiry,
         accountStatus: 'ACTIVE',
         emailVerified: false,
         phoneVerified: false  // Phone not verified via OTP
     });
 
-    // In production, skip OTP and auto-verify to avoid email issues
-    if (process.env.NODE_ENV === 'production') {
-        newUser.emailVerified = true;
-        newUser.phoneVerified = true;
-        newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
-        await newUser.save();
-
-        console.log(`✅ Auto-verified user in production: ${email}`);
-
-        return res.status(200).json({
-            success: true,
-            message: 'Account created successfully!',
-            userId: newUser._id,
-            autoVerified: true,
-            redirectUrl: '/login'
-        });
-    }
-
-    // In development, try sending OTP email, auto-verify if email fails
+    // Try sending OTP email
     let emailSent = false;
     try {
-        await emailService.sendOTP(email, otp, firstName);
-        emailSent = true;
+        const result = await emailService.sendOTP(email, otp, firstName);
+        emailSent = result && result.success === true;
     } catch (error) {
         console.error('❌ Error sending OTP email:', error.message);
     }
 
     if (!emailSent) {
-        // Email failed — auto-verify so user can still register
-        newUser.emailVerified = true;
-        newUser.phoneVerified = true;
-        newUser.verificationStatus = role === 'PASSENGER' ? 'VERIFIED' : 'PENDING';
-        await newUser.save();
+        // Email delivery failed — user remains UNVERIFIED.
+        // Store OTP so they can retry verification via resendOTP endpoint.
+        console.warn('⚠️  [register] OTP email delivery failed for', email);
 
         return res.status(200).json({
             success: true,
-            message: 'Account created successfully!',
+            message: 'Account created. Email delivery failed — please use "Resend OTP" to verify your account.',
             userId: newUser._id,
-            autoVerified: true,
-            redirectUrl: '/login'
+            emailFailed: true,
+            redirectUrl: '/verify-otp'
         });
     }
 
@@ -132,15 +107,7 @@ exports.register = asyncHandler(async (req, res) => {
     });
 });
 
-/**
- * Show OTP verification page
- */
-exports.showVerifyOTPPage = (req, res) => {
-    res.render('auth/verify-otp', {
-        title: 'Verify OTP - LANE Carpool',
-        error: null
-    });
-};
+// G6: showVerifyOTPPage removed (dead SSR code)
 
 /**
  * Verify OTP - Step 2
@@ -160,9 +127,9 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
     }
     
     if (!user) {
-        // Fallback: Find unverified user with this OTP code
+        // Fallback: Find unverified user with this OTP code (hashed)
         user = await User.findOne({
-            otpCode: otp,
+            otpCode: hashToken(otp),
             emailVerified: false,
             otpExpires: { $gt: new Date() }
         });
@@ -177,8 +144,8 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         throw new AppError('Invalid or expired OTP', 400);
     }
 
-    // Then check if OTP matches (use constant-time comparison for security)
-    if (!user.otpCode || user.otpCode !== otp) {
+    // Then check if OTP matches (hash comparison)
+    if (!user.otpCode || user.otpCode !== hashToken(otp)) {
         throw new AppError('Invalid or expired OTP', 400);
     }
 
@@ -221,7 +188,7 @@ exports.verifyOTP = asyncHandler(async (req, res) => {
         message: 'Registration successful',
         accessToken,
         refreshToken,
-        expiresIn: 900,
+        expiresIn: 7200,
         redirectUrl: redirectUrl
     });
 });
@@ -240,16 +207,12 @@ exports.resendOTP = asyncHandler(async (req, res) => {
     }
 
     if (!user && bodyEmail) {
-        // Fallback: Find unverified user by email
-        user = await User.findOne({ email: bodyEmail.toLowerCase().trim(), emailVerified: false });
-    }
-
-    if (!user) {
-        // Last resort: Find most recent unverified user (within last 15 minutes)
+        // Fallback: Find unverified user by email (must be recent, within 15 minutes)
         user = await User.findOne({
+            email: bodyEmail.toLowerCase().trim(),
             emailVerified: false,
             createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
-        }).sort({ createdAt: -1 });
+        });
     }
 
     if (!user) {
@@ -260,7 +223,7 @@ exports.resendOTP = asyncHandler(async (req, res) => {
     const otp = helpers.generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.otpCode = otp;
+    user.otpCode = hashToken(otp);
     user.otpExpires = otpExpiry;
     await user.save();
 
@@ -278,15 +241,7 @@ exports.resendOTP = asyncHandler(async (req, res) => {
     });
 });
 
-/**
- * Show login page
- */
-exports.showLoginPage = (req, res) => {
-    res.render('auth/login', {
-        title: 'Login - LANE Carpool',
-        error: null
-    });
-};
+// G6: showLoginPage removed (dead SSR code)
 
 /**
  * Handle login
@@ -333,8 +288,8 @@ exports.login = asyncHandler(async (req, res) => {
         // If OTP not provided, send it and require verification
         if (!otp) {
             // Generate OTP for 2FA
-            const twoFactorOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            user.otp = twoFactorOtp;
+            const twoFactorOtp = require('crypto').randomInt(100000, 1000000).toString();
+            user.otpCode = hashToken(twoFactorOtp);
             user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
             await user.save();
             
@@ -349,13 +304,14 @@ exports.login = asyncHandler(async (req, res) => {
             });
         }
         
-        // Verify OTP
-        if (user.otp !== otp || new Date() > user.otpExpires) {
+        // Verify OTP with hash comparison
+        if (!user.otpCode || new Date() > user.otpExpires ||
+            user.otpCode !== hashToken(otp)) {
             throw new AppError('Invalid or expired OTP', 401);
         }
         
         // Clear OTP after successful verification
-        user.otp = undefined;
+        user.otpCode = undefined;
         user.otpExpires = undefined;
     }
 
@@ -365,7 +321,7 @@ exports.login = asyncHandler(async (req, res) => {
 
     // Store refresh token in database with device info
     const deviceInfo = req.headers['user-agent'] || 'Unknown Device';
-    const ipAddress = req.ip || req.connection.remoteAddress || 'Unknown';
+    const ipAddress = req.ip || req.socket?.remoteAddress || 'Unknown';
     
     await RefreshToken.createToken(user._id, refreshToken, {
         deviceInfo,
@@ -384,7 +340,7 @@ exports.login = asyncHandler(async (req, res) => {
     await user.save();
 
     // Redirect based on role
-    const redirectUrl = user.role === 'ADMIN' ? '/admin/dashboard' : '/user/dashboard';
+    const redirectUrl = ADMIN_PANEL_ROLES.includes(user.role) ? '/admin/dashboard' : '/dashboard';
 
     // Return user data (without password)
     const userData = {
@@ -405,7 +361,7 @@ exports.login = asyncHandler(async (req, res) => {
         user: userData,
         accessToken,
         refreshToken,
-        expiresIn: 900, // 15 minutes in seconds
+        expiresIn: 7200, // 2 hours in seconds
         redirectUrl
     });
 });
@@ -425,7 +381,6 @@ exports.logout = asyncHandler(async (req, res) => {
             
             if (tokenDoc) {
                 await RefreshToken.revokeToken(tokenDoc._id);
-                console.log('✅ Refresh token revoked on logout');
             }
         } catch (error) {
             console.error('⚠️ Error revoking refresh token:', error.message);
@@ -444,17 +399,7 @@ exports.logout = asyncHandler(async (req, res) => {
     });
 });
 
-/**
- * Show forgot password page
- */
-exports.showForgotPasswordPage = (req, res) => {
-    res.render('auth/forgot-password', {
-        title: 'Forgot Password - LANE Carpool',
-        error: null,
-        success: null,
-        email: req.query.email || ''
-    });
-};
+// G6: showForgotPasswordPage removed (dead SSR code)
 
 /**
  * Handle forgot password (Send OTP)
@@ -462,13 +407,11 @@ exports.showForgotPasswordPage = (req, res) => {
 exports.forgotPassword = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
-    console.log('🔵 [Forgot Password] Request for email:', email);
 
     // Find user by email
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
-        console.log('⚠️ [Forgot Password] User not found:', email);
         // Don't reveal if email exists (security best practice)
         return res.status(200).json({
             success: true,
@@ -477,7 +420,6 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
         });
     }
 
-    console.log('✅ [Forgot Password] User found:', user._id);
 
     // Generate 6-digit OTP
     const otp = helpers.generateOTP();
@@ -490,39 +432,26 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
             otp, 
             user.profile.firstName || 'User'
         );
-        console.log('✅ [Forgot Password] OTP email sent successfully');
     } catch (emailError) {
         console.error('❌ [Forgot Password] Error sending email:', emailError.message);
         // Save OTP anyway so user can still reset password if they see it in logs
-        console.log(`⚠️ [Forgot Password] OTP for ${email}: ${otp}`);
     }
 
-    // Save OTP to user
-    user.resetPasswordOTP = otp;
+    // Save hashed OTP to user (raw OTP only sent via email)
+    user.resetPasswordOTP = hashToken(otp);
     user.resetPasswordOTPExpires = otpExpiry;
     await user.save();
 
-    console.log('✅ [Forgot Password] OTP generated and saved');
 
     return res.status(200).json({
         success: true,
         message: 'Password reset code sent to your email. Please check your inbox.',
         email: user.email,
-        redirectUrl: '/auth/reset-password'
+        redirectUrl: '/reset-password'
     });
 });
 
-/**
- * Show reset password page
- */
-exports.showResetPasswordPage = (req, res) => {
-    res.render('auth/reset-password', {
-        title: 'Reset Password - LANE Carpool',
-        error: null,
-        success: null,
-        email: req.query.email || ''
-    });
-};
+// G6: showResetPasswordPage removed (dead SSR code)
 
 /**
  * Handle reset password
@@ -530,7 +459,6 @@ exports.showResetPasswordPage = (req, res) => {
 exports.resetPassword = asyncHandler(async (req, res) => {
     const { otp, newPassword, confirmPassword, email } = req.body;
 
-    console.log('🔵 [Reset Password] Request received');
 
     if (!email) {
         throw new AppError('Email is required. Please start the password reset process again.', 400);
@@ -556,25 +484,21 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     const user = await User.findById(userId);
 
     if (!user) {
-        console.log('❌ [Reset Password] User not found:', userId);
         throw new AppError('User not found', 404);
     }
 
-    console.log('✅ [Reset Password] User found:', user.email);
 
     // Verify OTP expiry first (prevent timing attacks)
     if (!user.resetPasswordOTPExpires || new Date() > user.resetPasswordOTPExpires) {
-        console.log('❌ [Reset Password] OTP expired or missing');
         throw new AppError('Invalid or expired reset code', 400);
     }
 
-    // Then verify OTP value
-    if (!user.resetPasswordOTP || user.resetPasswordOTP !== otp) {
-        console.log('❌ [Reset Password] Invalid OTP');
+    // Then verify OTP value (compare hashed)
+    const hashedOtp = hashToken(otp);
+    if (!user.resetPasswordOTP || user.resetPasswordOTP !== hashedOtp) {
         throw new AppError('Invalid or expired reset code', 400);
     }
 
-    console.log('✅ [Reset Password] OTP verified successfully');
 
     // Update password (will be hashed by pre-save middleware)
     user.password = newPassword;
@@ -585,7 +509,6 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     
     await user.save();
 
-    console.log('✅ [Reset Password] Password updated successfully');
 
     // Password updated — no session data to clear
 
@@ -595,7 +518,6 @@ exports.resetPassword = asyncHandler(async (req, res) => {
             user.email,
             user.profile.firstName || 'User'
         );
-        console.log('✅ [Reset Password] Confirmation email sent');
     } catch (emailError) {
         console.error('⚠️ [Reset Password] Failed to send confirmation email:', emailError);
         // Don't fail the password reset if email fails
@@ -604,20 +526,11 @@ exports.resetPassword = asyncHandler(async (req, res) => {
     return res.status(200).json({
         success: true,
         message: 'Password reset successful! You can now login with your new password.',
-        redirectUrl: '/auth/login'
+        redirectUrl: '/login'
     });
 });
 
-/**
- * Show change password page (for logged-in users)
- */
-exports.showChangePasswordPage = (req, res) => {
-    res.render('auth/change-password', {
-        title: 'Change Password - LANE Carpool',
-        user: req.user,
-        error: null
-    });
-};
+// G6: showChangePasswordPage removed (dead SSR code)
 
 /**
  * Handle change password (for logged-in users)

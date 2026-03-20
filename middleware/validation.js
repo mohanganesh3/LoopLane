@@ -15,24 +15,10 @@ exports.handleValidationErrors = (req, res, next) => {
         const errorArray = errors.array();
         
         // Enhanced logging with context
-        console.log('\n' + '='.repeat(80));
-        console.log('🚨 VALIDATION ERRORS DETECTED');
-        console.log('='.repeat(80));
-        console.log(`📍 Route: ${req.method} ${req.originalUrl}`);
-        console.log(`👤 User: ${req.user ? req.user._id : 'Not authenticated'}`);
-        console.log(`🕐 Time: ${new Date().toISOString()}`);
-        console.log(`📊 Total Errors: ${errorArray.length}`);
-        console.log('-'.repeat(80));
         
         errorArray.forEach((err, index) => {
-            console.log(`\n❌ Error #${index + 1}:`);
-            console.log(`   Field: ${err.param || err.path || 'unknown'}`);
-            console.log(`   Location: ${err.location || 'body'}`);
-            console.log(`   Value: ${JSON.stringify(err.value)}`);
-            console.log(`   Message: ${err.msg}`);
         });
         
-        console.log('\n' + '='.repeat(80) + '\n');
         
         // Check if JSON response is expected
         const expectsJson = req.xhr || 
@@ -130,6 +116,8 @@ exports.validateRegistration = [
         .withMessage('Password must contain uppercase, lowercase, number, and special character'),
     
     body('confirmPassword')
+        .notEmpty().withMessage('Confirm password is required')
+        .bail()
         .custom((value, { req }) => value === req.body.password)
         .withMessage('Passwords do not match'),
     
@@ -139,7 +127,8 @@ exports.validateRegistration = [
         .matches(/^[a-zA-Z\s]+$/).withMessage('Name can only contain letters'),
     
     body('role')
-        .optional()
+        .notEmpty().withMessage('Role is required')
+        .bail()
         .isIn(['RIDER', 'PASSENGER']).withMessage('Invalid role selected')
 ];
 
@@ -996,6 +985,8 @@ exports.validatePasswordChange = [
         .withMessage('New password must be different from current password'),
     
     body('confirmNewPassword')
+        .notEmpty().withMessage('Confirm new password is required')
+        .bail()
         .custom((value, { req }) => value === req.body.newPassword)
         .withMessage('Passwords do not match')
 ];
@@ -1023,9 +1014,8 @@ exports.validateResetPassword = [
     body('newPassword')
         .notEmpty().withMessage('New password is required')
         .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
-        .matches(/[A-Z]/).withMessage('Password must contain at least one uppercase letter')
-        .matches(/[a-z]/).withMessage('Password must contain at least one lowercase letter')
-        .matches(/[0-9]/).withMessage('Password must contain at least one number'),
+        .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+        .withMessage('Password must contain uppercase, lowercase, number, and special character'),
     
     body('confirmPassword')
         .notEmpty().withMessage('Please confirm your password')

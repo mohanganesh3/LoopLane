@@ -39,8 +39,8 @@ exports.isAuthenticated = async (req, res, next) => {
     try {
         // Fetch user from database to check current status
         const user = await User.findById(decoded.userId)
-            .select('accountStatus isActive isSuspended suspensionReason role email profile vehicles documents verificationStatus');
-        
+            .select('-password -resetPasswordToken -resetPasswordExpires -__v');
+
         if (!user) {
             return res.status(401).json({
                 success: false,
@@ -50,19 +50,47 @@ exports.isAuthenticated = async (req, res, next) => {
                 forceLogout: true
             });
         }
-        
+
         // Check if account is suspended
         if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
+            // Check if suspension has expired — auto-lift if so
+            if (user.suspensionEnd && new Date(user.suspensionEnd) < new Date()) {
+                await User.findByIdAndUpdate(user._id, {
+                    accountStatus: 'ACTIVE',
+                    isSuspended: false,
+                    suspensionReason: null,
+                    suspendedAt: null,
+                    suspendedBy: null,
+                    suspensionEnd: null,
+                    $push: {
+                        accountStatusHistory: {
+                            status: 'ACTIVE',
+                            reason: 'Suspension period expired — auto-reactivated',
+                            changedBy: user._id,
+                            changedAt: new Date()
+                        }
+                    }
+                });
+                // Refresh user object
+                const reactivated = await User.findById(user._id)
+                    .select('-password -resetPasswordToken -resetPasswordExpires -__v');
+                req.user = reactivated;
+                req.userId = decoded.userId;
+                req.authMethod = 'jwt';
+                return next();
+            }
+
             return res.status(403).json({
                 success: false,
                 message: `Your account has been suspended. Reason: ${user.suspensionReason || 'Policy violation'}. Please check your email for details.`,
                 code: 'ACCOUNT_SUSPENDED',
                 accountSuspended: true,
+                suspensionEnd: user.suspensionEnd || null,
                 redirectUrl: '/login',
                 forceLogout: true
             });
         }
-        
+
         // Check if account is deleted
         if (user.accountStatus === 'DELETED') {
             return res.status(403).json({
@@ -74,7 +102,7 @@ exports.isAuthenticated = async (req, res, next) => {
                 forceLogout: true
             });
         }
-        
+
         // Check if account is inactive
         if (user.isActive === false) {
             return res.status(403).json({
@@ -86,12 +114,12 @@ exports.isAuthenticated = async (req, res, next) => {
                 forceLogout: true
             });
         }
-        
+
         // Attach user and auth info to request for downstream use
         req.user = user;
         req.userId = decoded.userId;
         req.authMethod = 'jwt';
-        
+
         return next();
     } catch (error) {
         console.error('Error in isAuthenticated middleware:', error);
@@ -176,6 +204,78 @@ exports.isAdmin = (req, res, next) => {
 };
 
 /**
+ * Employee roles that have admin panel access
+ */
+const { ADMIN_ROLES } = require('../config/roles');
+
+/**
+ * Check if user is an admin or employee with admin panel access
+ * Must be used AFTER isAuthenticated middleware
+ */
+exports.isAdminOrEmployee = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({
+            success: false,
+            message: 'Authentication required',
+            code: 'AUTH_REQUIRED',
+            redirectUrl: '/login'
+        });
+    }
+
+    if (!ADMIN_ROLES.includes(req.user.role)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Admin or employee access required'
+        });
+    }
+
+    // Check if employee account is active
+    if (req.user.employeeDetails && !req.user.employeeDetails.isActive) {
+        return res.status(403).json({
+            success: false,
+            message: 'Your employee account has been deactivated'
+        });
+    }
+
+    next();
+};
+
+/**
+ * Check if user has specific permission(s)
+ * Usage: hasPermission('manage_users') or hasPermission('manage_users', 'manage_rides')
+ * ADMIN and SUPER_ADMIN have all permissions by default
+ */
+exports.hasPermission = (...requiredPermissions) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required',
+                code: 'AUTH_REQUIRED'
+            });
+        }
+
+        // ADMIN and SUPER_ADMIN have all permissions
+        if (['ADMIN', 'SUPER_ADMIN'].includes(req.user.role)) {
+            return next();
+        }
+
+        // Check employee permissions
+        const userPermissions = req.user.employeeDetails?.permissions || [];
+        const hasAll = requiredPermissions.every(p => userPermissions.includes(p));
+
+        if (!hasAll) {
+            return res.status(403).json({
+                success: false,
+                message: `Insufficient permissions. Required: ${requiredPermissions.join(', ')}`
+            });
+        }
+
+        next();
+    };
+};
+
+/**
  * Check if rider is verified
  * Must be used AFTER isAuthenticated middleware
  */
@@ -215,15 +315,15 @@ exports.isVerifiedRider = (req, res, next) => {
 exports.canAccessResource = (resourceUserIdField) => {
     return (req, res, next) => {
         const resourceUserId = req.params[resourceUserIdField] || req.body[resourceUserIdField];
-        
+
         if (req.user && req.user.role === 'ADMIN') {
             return next();
         }
-        
+
         if (resourceUserId && req.userId && resourceUserId === req.userId.toString()) {
             return next();
         }
-        
+
         return res.status(403).json({
             success: false,
             message: 'You do not have permission to access this resource'
@@ -244,7 +344,7 @@ exports.attachUser = async (req, res, next) => {
             const user = await User.findById(decoded.userId)
                 .select('-password')
                 .lean();
-            
+
             if (user && user.accountStatus !== 'SUSPENDED' && !user.isSuspended && user.accountStatus !== 'DELETED') {
                 req.user = user;
                 req.userId = decoded.userId;

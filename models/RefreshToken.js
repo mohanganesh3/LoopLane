@@ -6,6 +6,7 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const refreshTokenSchema = new mongoose.Schema({
     userId: {
@@ -18,6 +19,11 @@ const refreshTokenSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true,
+        index: true
+    },
+    // SHA-256 prefix of raw token for O(1) lookup (avoids iterating all tokens)
+    tokenIdentifier: {
+        type: String,
         index: true
     },
     deviceInfo: {
@@ -45,7 +51,7 @@ const refreshTokenSchema = new mongoose.Schema({
 
 // Compound index for efficient queries
 refreshTokenSchema.index({ userId: 1, expiresAt: 1 });
-refreshTokenSchema.index({ expiresAt: 1 }); // For cleanup job
+// Note: expiresAt standalone index already defined via index:true in field definition
 
 /**
  * Hash the refresh token before saving
@@ -75,6 +81,7 @@ refreshTokenSchema.statics.verifyToken = async function(token, hash) {
  */
 refreshTokenSchema.statics.createToken = async function(userId, token, options = {}) {
     const tokenHash = await this.hashToken(token);
+    const tokenIdentifier = crypto.createHash('sha256').update(token).digest('hex').slice(0, 16);
     
     // Calculate expiry (default 7 days)
     const expiryDays = parseInt(process.env.JWT_REFRESH_EXPIRY_DAYS) || 7;
@@ -84,6 +91,7 @@ refreshTokenSchema.statics.createToken = async function(userId, token, options =
     return await this.create({
         userId,
         tokenHash,
+        tokenIdentifier,
         deviceInfo: options.deviceInfo || 'Unknown Device',
         ipAddress: options.ipAddress || 'Unknown',
         expiresAt: options.expiresAt || expiresAt
@@ -97,21 +105,32 @@ refreshTokenSchema.statics.createToken = async function(userId, token, options =
  * @returns {Promise<object|null>} Token document if valid, null otherwise
  */
 refreshTokenSchema.statics.findValidToken = async function(userId, token) {
-    // Find all tokens for this user that haven't expired
-    const tokens = await this.find({
+    // O(1) lookup via tokenIdentifier (SHA-256 prefix), then bcrypt-verify
+    const tokenIdentifier = crypto.createHash('sha256').update(token).digest('hex').slice(0, 16);
+
+    const tokenDoc = await this.findOne({
         userId,
+        tokenIdentifier,
         expiresAt: { $gt: new Date() }
     });
 
-    // Check each token hash
-    for (const tokenDoc of tokens) {
-        const isValid = await this.verifyToken(token, tokenDoc.tokenHash);
-        if (isValid) {
-            return tokenDoc;
+    if (!tokenDoc) {
+        // Fallback: scan all tokens for backward compatibility with pre-identifier tokens
+        const tokens = await this.find({ userId, expiresAt: { $gt: new Date() } });
+        for (const doc of tokens) {
+            const isValid = await this.verifyToken(token, doc.tokenHash);
+            if (isValid) {
+                // Backfill tokenIdentifier for next time
+                doc.tokenIdentifier = tokenIdentifier;
+                await doc.save();
+                return doc;
+            }
         }
+        return null;
     }
 
-    return null;
+    const isValid = await this.verifyToken(token, tokenDoc.tokenHash);
+    return isValid ? tokenDoc : null;
 };
 
 /**

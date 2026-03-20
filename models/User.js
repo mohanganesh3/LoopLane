@@ -27,10 +27,110 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['PASSENGER', 'RIDER', 'ADMIN'],
+        enum: ['PASSENGER', 'RIDER', 'ADMIN', 'SUPER_ADMIN', 'SUPPORT_AGENT', 'FINANCE_MANAGER', 'OPERATIONS_MANAGER', 'CONTENT_MODERATOR', 'FLEET_MANAGER'],
         required: true
     },
-    
+
+    // ═══ Enterprise Employee Management ═══════════════════════════════
+    employeeDetails: {
+        employeeId: String,                // Auto: LL-OPS-0001
+        employeeType: { type: String, enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'], default: 'FULL_TIME' },
+        designation: String,               // "Senior Operations Manager"
+        department: String,                // Primary department
+        subDepartment: String,             // Sub-unit / vertical
+        team: String,                      // Team name
+        // Location — H3 hex-indexed, coords-first, all fields auto-derived
+        location: {
+            coordinates: {
+                type: [Number],            // [longitude, latitude] — real-world
+                index: '2dsphere',
+            },
+            h3Index: String,               // H3 hex @ res 7 (zone-level, ~5 km²) — PRIMARY spatial key
+            h3Neighborhood: String,        // H3 hex @ res 8 (~0.7 km²)
+            h3Block: String,               // H3 hex @ res 9 (~0.1 km²)
+            h3Metro: String,               // H3 hex @ res 5 (~252 km²) — metro grouping
+            city: String,                  // Auto-derived from coordinates via serviceAreas
+            areaKey: String,               // 'chennai', 'bangalore', etc. — FK to SERVICE_AREAS
+            office: String,                // Nearest office name (auto-resolved)
+            officeAddress: String,         // Full address of assigned office
+            zone: String,                  // SOUTH, NORTH, WEST, EAST, CENTRAL — auto from coords
+            state: String,                 // Auto-derived: Tamil Nadu, Karnataka, etc.
+        },
+        // Work Schedule
+        shift: {
+            schedule: { type: String, enum: ['MORNING', 'AFTERNOON', 'NIGHT', 'ROTATIONAL', 'FLEXIBLE'], default: 'MORNING' },
+            startTime: { type: String, default: '09:00' },
+            endTime: { type: String, default: '18:00' },
+        },
+        // Org Hierarchy (L1=C-Suite ... L7=Associate)
+        hierarchy: {
+            level: { type: Number, default: 7, min: 1, max: 7 },
+            reportsTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        },
+        // Permissions & Scope
+        permissions: [String],
+        permissionScope: {
+            locations: [String],           // City-scoped access (empty = all)
+            departments: [String],         // Department-scoped access (empty = all)
+        },
+        // ═══ H3 Zone Allocation — Territory/Jurisdiction System ═══
+        // Each employee is assigned hex zones they operate in / are responsible for.
+        // Think: "This support agent handles rides in THESE 15 hex zones"
+        // Multi-hex: employee can have many zones, zones can have many employees.
+        assignedZones: [{
+            hex: String,                   // H3 index at res 7 (~5.16 km²)
+            role: { type: String, enum: ['PRIMARY', 'BACKUP', 'ESCALATION'], default: 'PRIMARY' },
+            addedAt: { type: Date, default: Date.now },
+        }],
+        jurisdiction: {
+            type: { type: String, enum: ['ZONE', 'METRO', 'REGION', 'GLOBAL'], default: 'ZONE' },
+            // ZONE = assigned specific hexes, METRO = entire metro area, REGION = entire zone (SOUTH/NORTH), GLOBAL = all
+            coverage: { type: String, enum: ['EXCLUSIVE', 'SHARED', 'BACKUP'], default: 'SHARED' },
+            // EXCLUSIVE = sole coverage, SHARED = team coverage, BACKUP = only if primary unavailable
+            autoExpand: { type: Boolean, default: false },
+            // If true, auto-covers neighbor hexes when no employee is assigned there
+        },
+        // Cross-area visibility: when a ride crosses from one zone to another,
+        // both zone managers see it. This tracks which cross-area corridors this employee monitors.
+        crossAreaCorridors: [{
+            fromArea: String,              // e.g. 'chennai'
+            toArea: String,                // e.g. 'bangalore'
+            active: { type: Boolean, default: true },
+        }],
+        // Status & Lifecycle
+        status: {
+            type: String,
+            enum: ['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'PROBATION', 'NOTICE_PERIOD', 'TERMINATED', 'OFFBOARDED'],
+            default: 'ACTIVE'
+        },
+        isActive: { type: Boolean, default: true },
+        hiredAt: Date,
+        confirmationDate: Date,
+        lastPromotionDate: Date,
+        lastWorkingDate: Date,
+        managedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        // Skills & Capabilities
+        skills: [String],
+        languages: [String],
+        // Onboarding Checklist
+        onboarding: {
+            completed: { type: Boolean, default: false },
+            systemAccess: { type: Boolean, default: false },
+            training: { type: Boolean, default: false },
+            documentation: { type: Boolean, default: false },
+            teamIntro: { type: Boolean, default: false },
+            mentorAssigned: { type: Boolean, default: false },
+        },
+        // Emergency Contact (employee-specific)
+        emergencyContact: {
+            name: String,
+            phone: String,
+            relationship: String,
+        },
+        notes: String,
+        tags: [String],                    // "high-performer", "training-needed"
+    },
+
     // Verification Status
     verificationStatus: {
         type: String,
@@ -48,7 +148,15 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
-    
+
+    // Epic 4: B2B Enterprise Mapping
+    corporate: {
+        organization: { type: mongoose.Schema.Types.ObjectId, ref: 'Corporate' },
+        workEmail: String,
+        isVerified: { type: Boolean, default: false },
+        cohortRole: { type: String, enum: ['EMPLOYEE', 'ADMIN'], default: 'EMPLOYEE' }
+    },
+
     // Profile Information
     profile: {
         firstName: { type: String, required: true },
@@ -68,7 +176,7 @@ const userSchema = new mongoose.Schema({
             country: { type: String, default: 'India' }
         }
     },
-    
+
     // Documents (for Riders)
     documents: {
         driverLicense: {
@@ -110,14 +218,14 @@ const userSchema = new mongoose.Schema({
             }
         }
     },
-    
+
     // Vehicles (for Riders - can have multiple)
     vehicles: [{
         make: String,
         model: String,
         year: Number,
         color: String,
-        licensePlate: { type: String, unique: true, sparse: true },
+        licensePlate: { type: String },
         photos: [String],
         seats: Number,
         vehicleType: {
@@ -135,7 +243,7 @@ const userSchema = new mongoose.Schema({
             default: 'PENDING'
         }
     }],
-    
+
     // Emergency Contacts
     emergencyContacts: [{
         name: { type: String, required: true },
@@ -145,7 +253,7 @@ const userSchema = new mongoose.Schema({
         isPrimary: { type: Boolean, default: false },
         verified: { type: Boolean, default: false }
     }],
-    
+
     // Rating System
     rating: {
         overall: { type: Number, default: 0, min: 0, max: 5 },
@@ -158,13 +266,13 @@ const userSchema = new mongoose.Schema({
             oneStar: { type: Number, default: 0 }
         }
     },
-    
+
     // ✅ TRUST SCORE SYSTEM (Like BlaBlaCar/Uber)
     trustScore: {
-        level: { 
-            type: String, 
-            enum: ['NEWCOMER', 'REGULAR', 'EXPERIENCED', 'AMBASSADOR', 'EXPERT'], 
-            default: 'NEWCOMER' 
+        level: {
+            type: String,
+            enum: ['NEWCOMER', 'REGULAR', 'EXPERIENCED', 'AMBASSADOR', 'EXPERT'],
+            default: 'NEWCOMER'
         },
         score: { type: Number, default: 0, min: 0, max: 100 }, // 0-100 score
         lastCalculated: { type: Date, default: Date.now },
@@ -173,26 +281,46 @@ const userSchema = new mongoose.Schema({
             verificationBonus: { type: Number, default: 0 }, // 0-20 points
             ratingBonus: { type: Number, default: 0 }, // 0-20 points
             experienceBonus: { type: Number, default: 0 }, // 0-20 points based on completed rides
-            reliabilityBonus: { type: Number, default: 0 } // 0-20 points based on cancellation rate
+            reliabilityBonus: { type: Number, default: 0 }, // 0-20 points based on cancellation rate
+            socialBonus: { type: Number, default: 0 } // Epic 2: Social Graph (0-15 points)
         }
     },
-    
+
+    // Epic 2: Social Graph Connections
+    socialConnections: [{
+        provider: { type: String, enum: ['LINKEDIN', 'FACEBOOK', 'GOOGLE'] },
+        providerId: String,
+        connectionCount: { type: Number, default: 0 },
+        verifiedAt: Date
+    }],
+
     // ✅ BADGES SYSTEM (Gamification like Lyft Rewards)
     badges: [{
-        type: { 
-            type: String, 
+        type: {
+            type: String,
             enum: [
                 'VERIFIED_ID', 'VERIFIED_LICENSE', 'VERIFIED_VEHICLE',
                 'FIRST_RIDE', 'TEN_RIDES', 'FIFTY_RIDES', 'HUNDRED_RIDES',
                 'FIVE_STAR_DRIVER', 'ECO_CHAMPION', 'SUPER_HOST',
                 'QUICK_RESPONDER', 'RELIABLE_DRIVER', 'TOP_RATED',
                 'EARLY_ADOPTER', 'COMMUNITY_HELPER'
-            ] 
+            ]
         },
         earnedAt: { type: Date, default: Date.now },
         description: String
     }],
-    
+
+    // Epic 5: Gamification & Loyalty Tiers
+    gamification: {
+        tier: {
+            type: String,
+            enum: ['BLUE', 'GOLD', 'PLATINUM'],
+            default: 'BLUE'
+        },
+        loyaltyPoints: { type: Number, default: 0 },
+        nextTierProgress: { type: Number, default: 0 } // Percentage
+    },
+
     // ✅ CANCELLATION TRACKING (Like Uber/Lyft)
     cancellationRate: {
         totalBookings: { type: Number, default: 0 },
@@ -206,7 +334,7 @@ const userSchema = new mongoose.Schema({
             wasLastMinute: Boolean // Within 2 hours of departure
         }]
     },
-    
+
     // ✅ RESPONSE TIME TRACKING (Like BlaBlaCar)
     responseMetrics: {
         averageResponseTime: { type: Number, default: 0 }, // in minutes
@@ -214,7 +342,7 @@ const userSchema = new mongoose.Schema({
         quickResponder: { type: Boolean, default: false }, // Responds within 1 hour
         lastResponseAt: Date
     },
-    
+
     // Statistics
     statistics: {
         totalRidesPosted: { type: Number, default: 0 },
@@ -232,7 +360,15 @@ const userSchema = new mongoose.Schema({
         memberSince: { type: Date, default: Date.now },
         lastRideAt: Date
     },
-    
+
+    // Epic 6: Fraud Detection & Autonomous Ops
+    riskFlags: {
+        fraudFlag: { type: Boolean, default: false },
+        fraudReason: { type: String },
+        churnRisk: { type: Boolean, default: false }, // Epic 6: Task 23
+        churnRiskDetectedAt: { type: Date }
+    },
+
     // Preferences
     preferences: {
         // Notification Preferences
@@ -247,10 +383,10 @@ const userSchema = new mongoose.Schema({
             showPhone: { type: Boolean, default: false },
             showEmail: { type: Boolean, default: false },
             shareLocation: { type: Boolean, default: true }, // Allow live location sharing during rides
-            profileVisibility: { 
-                type: String, 
-                enum: ['PUBLIC', 'VERIFIED_ONLY', 'PRIVATE'], 
-                default: 'PUBLIC' 
+            profileVisibility: {
+                type: String,
+                enum: ['PUBLIC', 'VERIFIED_ONLY', 'PRIVATE'],
+                default: 'PUBLIC'
             }
         },
         // Security
@@ -261,17 +397,17 @@ const userSchema = new mongoose.Schema({
         },
         // Ride Comfort Preferences
         rideComfort: {
-            musicPreference: { 
-                type: String, 
-                enum: ['NO_MUSIC', 'SOFT_MUSIC', 'ANY_MUSIC', 'OPEN_TO_REQUESTS'], 
-                default: 'OPEN_TO_REQUESTS' 
+            musicPreference: {
+                type: String,
+                enum: ['NO_MUSIC', 'SOFT_MUSIC', 'ANY_MUSIC', 'OPEN_TO_REQUESTS'],
+                default: 'OPEN_TO_REQUESTS'
             },
             smokingAllowed: { type: Boolean, default: false },
             petsAllowed: { type: Boolean, default: false },
-            conversationPreference: { 
-                type: String, 
-                enum: ['QUIET', 'SOME_CHAT', 'CHATTY', 'DEPENDS_ON_MOOD'], 
-                default: 'DEPENDS_ON_MOOD' 
+            conversationPreference: {
+                type: String,
+                enum: ['QUIET', 'SOME_CHAT', 'CHATTY', 'DEPENDS_ON_MOOD'],
+                default: 'DEPENDS_ON_MOOD'
             }
         },
         // Booking Preferences (for Riders)
@@ -279,16 +415,16 @@ const userSchema = new mongoose.Schema({
             instantBooking: { type: Boolean, default: false }, // Allow instant booking without approval
             verifiedUsersOnly: { type: Boolean, default: false }, // Only accept verified users
             maxDetourKm: { type: Number, default: 10 }, // Maximum detour in km
-            preferredCoRiderGender: { 
-                type: String, 
-                enum: ['ANY', 'MALE_ONLY', 'FEMALE_ONLY', 'SAME_GENDER'], 
-                default: 'ANY' 
+            preferredCoRiderGender: {
+                type: String,
+                enum: ['ANY', 'MALE_ONLY', 'FEMALE_ONLY', 'SAME_GENDER'],
+                default: 'ANY'
             }
         },
         language: { type: String, default: 'en' },
         currency: { type: String, default: 'INR' }
     },
-    
+
     // Security
     loginAttempts: { type: Number, default: 0 },
     lockoutUntil: Date,
@@ -298,7 +434,15 @@ const userSchema = new mongoose.Schema({
     otpExpires: Date,
     resetPasswordOTP: String,
     resetPasswordOTPExpires: Date,
-    
+
+    // Telematics event flags (harsh braking, swerving, etc.) — feeds trust score, not ratings
+    telematicsFlags: [{
+        type: { type: String },
+        value: Number,
+        rideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
+        timestamp: { type: Date, default: Date.now }
+    }],
+
     // Account Status
     accountStatus: {
         type: String,
@@ -311,16 +455,16 @@ const userSchema = new mongoose.Schema({
     suspendedAt: Date,
     suspendedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     lastLogin: Date,
-    
+
     // Reactivation tracking (after appeal)
     reactivatedAt: Date,
     reactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     appealNotes: String, // Admin notes about appeal decision
-    
+
     // Deletion tracking
     deletedAt: Date,
     deletionReason: String,
-    
+
     // Account status history (for audit trail)
     accountStatusHistory: [{
         status: String,
@@ -334,16 +478,22 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 });
+// Note: email and phone already indexed via unique:true in field definition
 userSchema.index({ role: 1 });
 userSchema.index({ verificationStatus: 1 });
 userSchema.index({ 'rating.overall': -1 });
+userSchema.index({ 'corporate.organization': 1 });
+
+// Partial unique index: only enforce uniqueness when licensePlate is a non-null string
+userSchema.index(
+    { 'vehicles.licensePlate': 1 },
+    { unique: true, partialFilterExpression: { 'vehicles.licensePlate': { $type: 'string' } } }
+);
 
 // Hash password before saving
-userSchema.pre('save', async function(next) {
+userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) return next();
-    
+
     try {
         const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10);
         this.password = await bcrypt.hash(this.password, salt);
@@ -353,13 +503,30 @@ userSchema.pre('save', async function(next) {
     }
 });
 
+// Encrypt 2FA secret before saving (if modified)
+userSchema.pre('save', function (next) {
+    if (!this.isModified('preferences.security.twoFactorSecret')) return next();
+
+    const secret = this.preferences?.security?.twoFactorSecret;
+    if (secret && !secret.includes(':')) {
+        // Not yet encrypted (encrypted format is iv:authTag:ciphertext)
+        try {
+            const { encrypt } = require('../utils/crypto');
+            this.preferences.security.twoFactorSecret = encrypt(secret);
+        } catch (err) {
+            console.error('⚠️  Failed to encrypt 2FA secret:', err.message);
+        }
+    }
+    next();
+});
+
 // Method to compare password
-userSchema.methods.comparePassword = async function(candidatePassword) {
+userSchema.methods.comparePassword = async function (candidatePassword) {
     return await bcrypt.compare(candidatePassword, this.password);
 };
 
 // Method to get public profile
-userSchema.methods.toPublicJSON = function() {
+userSchema.methods.toPublicJSON = function () {
     return {
         id: this._id,
         name: `${this.profile.firstName} ${this.profile.lastName}`,
@@ -373,17 +540,17 @@ userSchema.methods.toPublicJSON = function() {
 };
 
 // Virtual for full name
-userSchema.virtual('fullName').get(function() {
+userSchema.virtual('fullName').get(function () {
     return `${this.profile.firstName} ${this.profile.lastName}`;
 });
 
 // Virtual for name (alias for fullName)
-userSchema.virtual('name').get(function() {
+userSchema.virtual('name').get(function () {
     return `${this.profile.firstName} ${this.profile.lastName}`.trim();
 });
 
 // Static method to safely get user name from any user object (even plain objects from .lean())
-userSchema.statics.getUserName = function(userObj) {
+userSchema.statics.getUserName = function (userObj) {
     const sanitize = (s) => (s || '').toString().trim();
     const looksInvalid = (s) => {
         const v = sanitize(s);
@@ -392,7 +559,6 @@ userSchema.statics.getUserName = function(userObj) {
     };
 
     if (!userObj) {
-        console.log('⚠️  [getUserName] User object is null/undefined');
         return 'Unknown User';
     }
 
@@ -425,21 +591,38 @@ userSchema.statics.getUserName = function(userObj) {
     }
 
     // If only _id is populated (not fully populated)
-    if (userObj._id && !userObj.profile) {
-        console.log('⚠️  [getUserName] User not fully populated - only ID:', userObj._id);
-    } else {
-        console.log('⚠️  [getUserName] Fallback reached - userObj:', JSON.stringify(userObj));
-    }
     return 'Unknown User';
 };
 
 // Instance method to get name safely
-userSchema.methods.getName = function() {
+userSchema.methods.getName = function () {
     return `${this.profile.firstName || ''} ${this.profile.lastName || ''}`.trim() || 'Unknown User';
 };
 
-// Ensure virtuals are included in JSON
-userSchema.set('toJSON', { virtuals: true });
-userSchema.set('toObject', { virtuals: true });
+// Ensure virtuals are included in JSON — strip sensitive fields
+const SENSITIVE_FIELDS = [
+    'password',
+    'otpCode',
+    'otpExpires',
+    'resetPasswordOTP',
+    'resetPasswordOTPExpires',
+    'passwordResetToken',
+    'passwordResetExpires',
+    'loginAttempts',
+    'lockoutUntil'
+];
+
+const stripSensitive = (doc, ret) => {
+    SENSITIVE_FIELDS.forEach(field => delete ret[field]);
+    // Nested sensitive fields under preferences.security
+    if (ret.preferences && ret.preferences.security) {
+        delete ret.preferences.security.twoFactorSecret;
+        delete ret.preferences.security.twoFactorBackupCodes;
+    }
+    return ret;
+};
+
+userSchema.set('toJSON', { virtuals: true, transform: stripSensitive });
+userSchema.set('toObject', { virtuals: true, transform: stripSensitive });
 
 module.exports = mongoose.model('User', userSchema);

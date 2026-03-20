@@ -6,22 +6,56 @@
 const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
-const { 
-    generateAccessToken, 
-    generateRefreshToken, 
+const {
+    generateAccessToken,
+    generateRefreshToken,
     verifyRefreshToken,
     getCookieOptions,
-    isAuthenticatedJWT 
+    isAuthenticatedJWT
 } = require('../middleware/jwt');
 const RefreshToken = require('../models/RefreshToken');
+const { loginLimiter, apiLimiter } = require('../middleware/rateLimiter');
+
+// Apply apiLimiter to all token routes as baseline
+router.use(apiLimiter);
 
 /**
- * POST /api/token/refresh
- * Refresh access token using refresh token
- * Implements token rotation (old refresh token is invalidated)
+ * @swagger
+ * /api/token/refresh:
+ *   post:
+ *     tags: ['🔑 Token']
+ *     summary: Refresh access token
+ *     description: |
+ *       Exchanges a valid refresh token for a new access token + new refresh token (token rotation).
+ *       The old refresh token is immediately invalidated after use.
+ *       
+ *       Send the refresh token either as a cookie (browser) or in the request body (API clients).
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: Required if not sending as a cookie
+ *                 example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+ *     responses:
+ *       200:
+ *         description: New tokens issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 accessToken: { type: string }
+ *                 refreshToken: { type: string }
+ *                 expiresIn: { type: integer, example: 7200 }
+ *       401:
+ *         description: Invalid or expired refresh token
  */
-router.post('/refresh', asyncHandler(async (req, res) => {
-    // Extract refresh token from cookie or request body
+router.post('/refresh', loginLimiter, asyncHandler(async (req, res) => {
     const oldRefreshToken = req.cookies?.refreshToken || req.body.refreshToken;
 
     if (!oldRefreshToken) {
@@ -32,12 +66,9 @@ router.post('/refresh', asyncHandler(async (req, res) => {
         });
     }
 
-    // Verify refresh token signature
     const decoded = verifyRefreshToken(oldRefreshToken);
-    
-    // Find and verify token in database
     const tokenDoc = await RefreshToken.findValidToken(decoded.userId, oldRefreshToken);
-    
+
     if (!tokenDoc) {
         return res.status(401).json({
             success: false,
@@ -46,25 +77,21 @@ router.post('/refresh', asyncHandler(async (req, res) => {
         });
     }
 
-    // Generate new tokens
     const newAccessToken = generateAccessToken(decoded.userId);
     const newRefreshToken = generateRefreshToken(decoded.userId);
 
-    // Save new refresh token to database
     const deviceInfo = req.headers['user-agent'] || 'Unknown Device';
     const ipAddress = req.ip || req.connection.remoteAddress || 'Unknown';
-    
+
     await RefreshToken.createToken(decoded.userId, newRefreshToken, {
         deviceInfo,
         ipAddress
     });
 
-    // Revoke old refresh token (token rotation)
     await RefreshToken.revokeToken(tokenDoc._id);
 
-    // Set new tokens in HTTP-only cookies
-    const accessTokenMaxAge = 2 * 60 * 60 * 1000; // 2 hours
-    const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const accessTokenMaxAge = 2 * 60 * 60 * 1000;
+    const refreshTokenMaxAge = 7 * 24 * 60 * 60 * 1000;
 
     res.cookie('accessToken', newAccessToken, getCookieOptions(accessTokenMaxAge));
     res.cookie('refreshToken', newRefreshToken, getCookieOptions(refreshTokenMaxAge));
@@ -74,13 +101,33 @@ router.post('/refresh', asyncHandler(async (req, res) => {
         message: 'Tokens refreshed successfully',
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
-        expiresIn: 7200 // 2 hours in seconds
+        expiresIn: 7200
     });
 }));
 
 /**
- * POST /api/token/revoke
- * Revoke current refresh token (logout from this device)
+ * @swagger
+ * /api/token/revoke:
+ *   post:
+ *     tags: ['🔑 Token']
+ *     summary: Revoke refresh token (logout this device)
+ *     description: Invalidates the current refresh token in the database and clears auth cookies. Use this for proper logout that also invalidates server-side sessions.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: Required if not sending as cookie
+ *     responses:
+ *       200:
+ *         description: Token revoked. Logged out from this device.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
  */
 router.post('/revoke', asyncHandler(async (req, res) => {
     const refreshToken = req.cookies?.refreshToken || req.body.refreshToken;
@@ -93,17 +140,13 @@ router.post('/revoke', asyncHandler(async (req, res) => {
     }
 
     try {
-        // Verify token
         const decoded = verifyRefreshToken(refreshToken);
-        
-        // Find and revoke token
         const tokenDoc = await RefreshToken.findValidToken(decoded.userId, refreshToken);
-        
+
         if (tokenDoc) {
             await RefreshToken.revokeToken(tokenDoc._id);
         }
 
-        // Clear cookies
         res.clearCookie('accessToken');
         res.clearCookie('refreshToken');
 
@@ -112,7 +155,6 @@ router.post('/revoke', asyncHandler(async (req, res) => {
             message: 'Token revoked successfully'
         });
     } catch (error) {
-        // Even if token is invalid, clear cookies
         res.clearCookie('accessToken');
         res.clearCookie('refreshToken');
 
@@ -124,14 +166,32 @@ router.post('/revoke', asyncHandler(async (req, res) => {
 }));
 
 /**
- * POST /api/token/revoke-all
- * Revoke all refresh tokens for current user (logout from all devices)
- * Requires authentication
+ * @swagger
+ * /api/token/revoke-all:
+ *   post:
+ *     tags: ['🔑 Token']
+ *     summary: Revoke all sessions (logout all devices)
+ *     description: Invalidates ALL refresh tokens for the current user. Useful when account is compromised. Requires authentication.
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out from all devices
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: 'Logged out from 3 device(s) successfully' }
+ *                 devicesLoggedOut: { type: integer, example: 3 }
+ *       401:
+ *         description: Not authenticated
  */
 router.post('/revoke-all', isAuthenticatedJWT, asyncHandler(async (req, res) => {
     const deletedCount = await RefreshToken.revokeAllUserTokens(req.userId);
 
-    // Clear cookies
     res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
 
@@ -143,9 +203,38 @@ router.post('/revoke-all', isAuthenticatedJWT, asyncHandler(async (req, res) => 
 }));
 
 /**
- * GET /api/token/sessions
- * Get all active sessions for current user
- * Requires authentication
+ * @swagger
+ * /api/token/sessions:
+ *   get:
+ *     tags: ['🔑 Token']
+ *     summary: List all active sessions
+ *     description: Returns all active login sessions for the current user (device info, IP, creation time). Useful for security monitoring.
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Active sessions list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 sessions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       deviceInfo: { type: string, example: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17...)' }
+ *                       ipAddress: { type: string, example: '49.207.xx.xx' }
+ *                       createdAt: { type: string, format: date-time }
+ *                       lastUsedAt: { type: string, format: date-time }
+ *                       expiresAt: { type: string, format: date-time }
+ *                 count: { type: integer, example: 2 }
+ *       401:
+ *         description: Not authenticated
  */
 router.get('/sessions', isAuthenticatedJWT, asyncHandler(async (req, res) => {
     const sessions = await RefreshToken.getActiveSessions(req.userId);
@@ -167,16 +256,40 @@ router.get('/sessions', isAuthenticatedJWT, asyncHandler(async (req, res) => {
 }));
 
 /**
- * DELETE /api/token/sessions/:sessionId
- * Revoke a specific session (logout from specific device)
- * Requires authentication
+ * @swagger
+ * /api/token/sessions/{sessionId}:
+ *   delete:
+ *     tags: ['🔑 Token']
+ *     summary: Revoke a specific session
+ *     description: Logs out from a specific device by invalidating its session. You can only revoke your own sessions.
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Session ID from GET /api/token/sessions
+ *         example: '64a1b2c3d4e5f6g7h8i9j0k1'
+ *     responses:
+ *       200:
+ *         description: Session revoked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       403:
+ *         description: Not authorized to revoke this session
+ *       404:
+ *         description: Session not found
  */
 router.delete('/sessions/:sessionId', isAuthenticatedJWT, asyncHandler(async (req, res) => {
     const { sessionId } = req.params;
 
-    // Verify session belongs to current user
     const tokenDoc = await RefreshToken.findById(sessionId);
-    
+
     if (!tokenDoc) {
         return res.status(404).json({
             success: false,
@@ -200,9 +313,33 @@ router.delete('/sessions/:sessionId', isAuthenticatedJWT, asyncHandler(async (re
 }));
 
 /**
- * POST /api/token/verify
- * Verify if current access token is valid
- * Useful for client-side token validation
+ * @swagger
+ * /api/token/verify:
+ *   post:
+ *     tags: ['🔑 Token']
+ *     summary: Verify if access token is valid
+ *     description: Validates the current access token and returns the authenticated user's basic info. Useful for client-side token health checks.
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Token is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: 'Token is valid' }
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     email: { type: string }
+ *                     role: { type: string }
+ *       401:
+ *         description: Invalid or expired token
  */
 router.post('/verify', isAuthenticatedJWT, asyncHandler(async (req, res) => {
     res.json({

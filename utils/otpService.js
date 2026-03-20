@@ -5,23 +5,32 @@
 
 const crypto = require('crypto');
 
+const parseValidityMinutes = (value, fallback) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const DEFAULT_OTP_VALIDITY_MINUTES = parseValidityMinutes(process.env.OTP_VALIDITY_MINUTES, 15);
+const PICKUP_OTP_VALIDITY_MINUTES = parseValidityMinutes(process.env.PICKUP_OTP_VALIDITY_MINUTES, 6 * 60);
+const DROPOFF_OTP_VALIDITY_MINUTES = parseValidityMinutes(process.env.DROPOFF_OTP_VALIDITY_MINUTES, 12 * 60);
+
 /**
- * Generate a random 4-digit OTP
+ * Generate a cryptographically secure random 4-digit OTP
  * @returns {string} 4-digit OTP
  */
 const generateOTP = () => {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return crypto.randomInt(1000, 10000).toString();
 };
 
 /**
- * Generate OTP without expiry (valid indefinitely)
- * @param {number} validityMinutes - DEPRECATED: No longer used, kept for backward compatibility
+ * Generate OTP with expiry
+ * @param {number} validityMinutes
  * @returns {Object} { code, expiresAt, verified }
  */
-const generateOTPWithExpiry = (validityMinutes = 15) => {
+const generateOTPWithExpiry = (validityMinutes = DEFAULT_OTP_VALIDITY_MINUTES) => {
     const code = generateOTP();
-    // Set expiry to far future (100 years) - effectively no expiry
-    const expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
+    const safeValidityMinutes = parseValidityMinutes(validityMinutes, DEFAULT_OTP_VALIDITY_MINUTES);
+    const expiresAt = new Date(Date.now() + safeValidityMinutes * 60 * 1000);
     
     return {
         code,
@@ -31,7 +40,7 @@ const generateOTPWithExpiry = (validityMinutes = 15) => {
 };
 
 /**
- * Verify OTP (without expiry check)
+ * Verify OTP
  * @param {string} inputOTP - OTP entered by user
  * @param {Object} storedOTP - Stored OTP object { code, expiresAt, verified }
  * @returns {Object} { valid: boolean, reason: string }
@@ -53,13 +62,12 @@ const verifyOTP = (inputOTP, storedOTP) => {
         };
     }
     
-    // ⚠️ EXPIRY CHECK REMOVED - OTPs are now valid indefinitely
-    // if (new Date() > new Date(storedOTP.expiresAt)) {
-    //     return {
-    //         valid: false,
-    //         reason: 'EXPIRED'
-    //     };
-    // }
+    if (isOTPExpired(storedOTP)) {
+        return {
+            valid: false,
+            reason: 'EXPIRED'
+        };
+    }
     
     // Check if OTP matches
     if (inputOTP !== storedOTP.code) {
@@ -77,13 +85,17 @@ const verifyOTP = (inputOTP, storedOTP) => {
 };
 
 /**
- * Check if OTP is expired (always returns false now - OTPs never expire)
+ * Check if OTP is expired
  * @param {Object} otp - OTP object
  * @returns {boolean}
  */
 const isOTPExpired = (otp) => {
-    // OTPs no longer expire
-    return false;
+    if (!otp?.expiresAt) {
+        return false;
+    }
+
+    const expiresAt = new Date(otp.expiresAt);
+    return !Number.isNaN(expiresAt.getTime()) && Date.now() > expiresAt.getTime();
 };
 
 /**
@@ -106,11 +118,11 @@ const maskOTP = (otp) => {
 };
 
 /**
- * Generate secure OTP for sensitive operations (6-digit)
+ * Generate cryptographically secure 6-digit OTP for sensitive operations
  * @returns {string}
  */
 const generateSecureOTP = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return crypto.randomInt(100000, 1000000).toString();
 };
 
 /**
@@ -136,11 +148,13 @@ const getOTPErrorMessage = (reason) => {
  * @returns {Object} New OTP object
  */
 const regenerateOTP = (oldOTP, validityMinutes = 15) => {
-    console.log('🔄 [OTP] Regenerating expired OTP');
     return generateOTPWithExpiry(validityMinutes);
 };
 
 module.exports = {
+    DEFAULT_OTP_VALIDITY_MINUTES,
+    PICKUP_OTP_VALIDITY_MINUTES,
+    DROPOFF_OTP_VALIDITY_MINUTES,
     generateOTP,
     generateOTPWithExpiry,
     verifyOTP,
