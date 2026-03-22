@@ -210,7 +210,7 @@ transactionSchema.statics.getFinancialSummary = async function(startDate, endDat
 
 // Static method to get rider earnings
 transactionSchema.statics.getRiderEarnings = async function(riderId, startDate, endDate) {
-    const match = { rider: mongoose.Types.ObjectId(riderId) };
+    const match = { rider: new mongoose.Types.ObjectId(riderId) };
     if (startDate) match.createdAt = { $gte: new Date(startDate) };
     if (endDate) match.createdAt = { ...match.createdAt, $lte: new Date(endDate) };
     

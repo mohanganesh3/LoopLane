@@ -40,14 +40,17 @@ const reviewSchema = new mongoose.Schema({
             min: 1,
             max: 5
         },
-        // Category-wise ratings
+        // Category-wise ratings (role-aware)
         categories: {
+            // Shared
             punctuality: { type: Number, min: 1, max: 5 },
-            driving: { type: Number, min: 1, max: 5 }, // For drivers only
-            cleanliness: { type: Number, min: 1, max: 5 }, // For drivers only
             communication: { type: Number, min: 1, max: 5 },
-            friendliness: { type: Number, min: 1, max: 5 },
-            respectfulness: { type: Number, min: 1, max: 5 } // For passengers only
+            // Driver-only (DRIVER_REVIEW)
+            driving: { type: Number, min: 1, max: 5 },
+            cleanliness: { type: Number, min: 1, max: 5 },
+            // Passenger-only (PASSENGER_REVIEW)
+            respectfulness: { type: Number, min: 1, max: 5 },
+            friendliness: { type: Number, min: 1, max: 5 }
         }
     },
     

@@ -11,68 +11,6 @@ const Notification = require('../models/Notification');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 
 /**
- * Show review page
- */
-exports.showReviewPage = asyncHandler(async (req, res) => {
-    const { bookingId } = req.params;
-
-    const booking = await Booking.findById(bookingId)
-        .populate('passenger', 'profile profilePhoto')
-        .populate({
-            path: 'ride',
-            populate: { path: 'rider', select: 'profile profilePhoto' }
-        });
-
-    if (!booking) {
-        throw new AppError('Booking not found', 404);
-    }
-
-    // Check if ride is completed: status is COMPLETED OR (DROPPED_OFF/PICKED_UP and payment is PAID)
-    const isPaymentPaid = booking.payment && booking.payment.status === 'PAID';
-    const isDroppedOff = booking.status === 'DROPPED_OFF';
-    const isPickedUp = booking.status === 'PICKED_UP';
-    const isCompleted = booking.status === 'COMPLETED' || ((isDroppedOff || isPickedUp) && isPaymentPaid);
-
-    if (!isCompleted) {
-        throw new AppError('Can only review completed rides', 400);
-    }
-
-    // Check if user is part of this booking
-    const isPassenger = booking.passenger._id.toString() === req.user._id.toString();
-    const isRider = booking.ride.rider._id.toString() === req.user._id.toString();
-
-    if (!isPassenger && !isRider) {
-        throw new AppError('Not authorized', 403);
-    }
-
-    // Check if already reviewed
-    const existingReview = await Review.findOne({
-        reviewer: req.user._id,
-        reviewee: isPassenger ? booking.ride.rider._id : booking.passenger._id,
-        booking: booking._id
-    });
-
-    if (existingReview) {
-        throw new AppError('You have already reviewed this ride', 400);
-    }
-
-    const reviewee = isPassenger ? booking.ride.rider : booking.passenger;
-    
-    // Ensure name is available (compute from profile if virtual doesn't work)
-    if (!reviewee.name && reviewee.profile) {
-        reviewee.name = `${reviewee.profile.firstName} ${reviewee.profile.lastName}`.trim();
-    }
-
-    res.render('reviews/create', {
-        title: `Review ${reviewee.name || 'User'} - LANE Carpool`,
-        user: req.user,
-        booking,
-        reviewee,
-        isPassenger
-    });
-});
-
-/**
  * Submit review
  */
 exports.submitReview = asyncHandler(async (req, res) => {
@@ -85,15 +23,11 @@ exports.submitReview = asyncHandler(async (req, res) => {
         communication,
         cleanliness,
         driving,
-        tags
+        respectfulness,
+        friendliness,
+        tags,
+        photos
     } = req.body;
-
-    console.log('📝 [Review] ========================================');
-    console.log('📝 [Review] Submitting review for booking:', bookingId);
-    console.log('📝 [Review] Reviewer:', req.user._id);
-    console.log('📝 [Review] Reviewee:', revieweeId);
-    console.log('📝 [Review] Rating:', rating);
-    console.log('📝 [Review] ========================================');
 
     // STEP 1: Validate booking exists
     const booking = await Booking.findById(bookingId)
@@ -101,19 +35,15 @@ exports.submitReview = asyncHandler(async (req, res) => {
         .populate('passenger', '_id');
 
     if (!booking) {
-        console.log('❌ [Review] Booking not found');
         return res.status(404).json({
             success: false,
             message: 'Booking not found'
         });
     }
 
-    console.log('📝 [Review] Booking found, status:', booking.status);
-
     // STEP 2: Check booking status - allow DROPPED_OFF, COMPLETED, or IN_TRANSIT
     const allowedStatuses = ['DROPPED_OFF', 'COMPLETED', 'PICKED_UP', 'IN_TRANSIT'];
     if (!allowedStatuses.includes(booking.status)) {
-        console.log('❌ [Review] Invalid booking status:', booking.status);
         return res.status(400).json({
             success: false,
             message: `Cannot review this booking. Current status: ${booking.status}. Reviews are only allowed for completed rides.`
@@ -125,15 +55,10 @@ exports.submitReview = asyncHandler(async (req, res) => {
     const riderId = booking.ride.rider?.toString();
     const currentUserId = req.user._id.toString();
 
-    console.log('📝 [Review] PassengerId:', passengerId);
-    console.log('📝 [Review] RiderId:', riderId);
-    console.log('📝 [Review] CurrentUserId:', currentUserId);
-
     const isPassenger = passengerId === currentUserId;
     const isRider = riderId === currentUserId;
 
     if (!isPassenger && !isRider) {
-        console.log('❌ [Review] User not part of booking');
         return res.status(403).json({
             success: false,
             message: 'You are not authorized to review this booking'
@@ -142,9 +67,8 @@ exports.submitReview = asyncHandler(async (req, res) => {
 
     // STEP 4: Verify reviewee is correct
     const expectedRevieweeId = isPassenger ? riderId : passengerId;
-    
+
     if (revieweeId !== expectedRevieweeId) {
-        console.log('❌ [Review] Reviewee mismatch. Expected:', expectedRevieweeId, 'Got:', revieweeId);
         return res.status(400).json({
             success: false,
             message: 'Invalid reviewee. Please refresh the page and try again.'
@@ -158,7 +82,6 @@ exports.submitReview = asyncHandler(async (req, res) => {
     });
 
     if (existingReview) {
-        console.log('❌ [Review] Already reviewed');
         return res.status(400).json({
             success: false,
             message: 'You have already reviewed this ride'
@@ -167,11 +90,26 @@ exports.submitReview = asyncHandler(async (req, res) => {
 
     // STEP 6: Create review
     const reviewType = isPassenger ? 'DRIVER_REVIEW' : 'PASSENGER_REVIEW';
-    
-    // Parse tags
+
+    // Parse tags (handles both JSON array and raw array depending on form-data/json)
     let parsedTags = [];
-    if (tags && Array.isArray(tags)) {
-        parsedTags = tags.map(tag => tag.toUpperCase().replace(/\s+/g, '_'));
+    if (tags && typeof tags === 'string') {
+        try {
+            parsedTags = JSON.parse(tags);
+        } catch (e) {
+            parsedTags = tags.split(',').map(tag => tag.trim());
+        }
+    } else if (Array.isArray(tags)) {
+        parsedTags = tags;
+    }
+    parsedTags = parsedTags.map(tag => tag.toUpperCase().replace(/\s+/g, '_'));
+
+    // Handle photos from multer (Cloudinary URLs)
+    let uploadedPhotos = [];
+    if (req.files && req.files.length > 0) {
+        uploadedPhotos = req.files.map(file => file.path);
+    } else if (photos && Array.isArray(photos)) {
+        uploadedPhotos = photos.slice(0, 5); // Fallback
     }
 
     try {
@@ -185,15 +123,22 @@ exports.submitReview = asyncHandler(async (req, res) => {
                 categories: {
                     punctuality: punctuality ? parseFloat(punctuality) : undefined,
                     communication: communication ? parseFloat(communication) : undefined,
-                    cleanliness: cleanliness ? parseFloat(cleanliness) : undefined,
-                    driving: driving ? parseFloat(driving) : undefined
+                    // Driver-only categories (DRIVER_REVIEW)
+                    ...(reviewType === 'DRIVER_REVIEW' ? {
+                        cleanliness: cleanliness ? parseFloat(cleanliness) : undefined,
+                        driving: driving ? parseFloat(driving) : undefined
+                    } : {}),
+                    // Passenger-only categories (PASSENGER_REVIEW)
+                    ...(reviewType === 'PASSENGER_REVIEW' ? {
+                        respectfulness: respectfulness ? parseFloat(respectfulness) : undefined,
+                        friendliness: friendliness ? parseFloat(friendliness) : undefined
+                    } : {})
                 }
             },
             tags: parsedTags,
-            comment: comment || ''
+            comment: comment || '',
+            photos: uploadedPhotos
         });
-
-        console.log('✅ [Review] Review created:', review._id);
 
         // Update user's rating
         const ratingStats = await Review.calculateUserRating(revieweeId);
@@ -218,7 +163,7 @@ exports.submitReview = asyncHandler(async (req, res) => {
             await Notification.create({
                 user: revieweeId,
                 type: 'REVIEW_RECEIVED',
-                title: 'New Review Received! ⭐',
+                title: 'New Review Received',
                 message: `${reviewerName} rated you ${rating} stars`,
                 data: { reviewId: review._id, bookingId: booking._id }
             });
@@ -228,7 +173,7 @@ exports.submitReview = asyncHandler(async (req, res) => {
             if (io) {
                 io.to(`user-${revieweeId}`).emit('notification', {
                     type: 'REVIEW_RECEIVED',
-                    title: 'New Review Received! ⭐',
+                    title: 'New Review Received',
                     message: `${reviewerName} gave you ${rating} stars`,
                     timestamp: new Date()
                 });
@@ -237,8 +182,6 @@ exports.submitReview = asyncHandler(async (req, res) => {
             console.error('⚠️ [Review] Notification error:', notifError.message);
         }
 
-        console.log('✅ [Review] Review submitted successfully');
-        
         return res.status(201).json({
             success: true,
             message: 'Review submitted successfully!',
@@ -260,9 +203,9 @@ exports.submitReview = asyncHandler(async (req, res) => {
 exports.getUserReviews = asyncHandler(async (req, res) => {
     const { userId } = req.params;
     const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
     const skip = (page - 1) * limit;
-    
+
     const mongoose = require('mongoose');
 
     const totalReviews = await Review.countDocuments({ reviewee: userId, isPublished: true });
@@ -275,11 +218,11 @@ exports.getUserReviews = asyncHandler(async (req, res) => {
 
     // Calculate rating breakdown - Fixed ObjectId usage
     const ratingBreakdown = await Review.aggregate([
-        { 
-            $match: { 
+        {
+            $match: {
                 reviewee: new mongoose.Types.ObjectId(userId), // ✅ Fixed
-                isPublished: true 
-            } 
+                isPublished: true
+            }
         },
         {
             $group: {
@@ -310,7 +253,7 @@ exports.getUserReviews = asyncHandler(async (req, res) => {
  */
 exports.getMyGivenReviews = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
     const skip = (page - 1) * limit;
 
     const totalReviews = await Review.countDocuments({ reviewer: req.user._id });
@@ -335,9 +278,9 @@ exports.getMyGivenReviews = asyncHandler(async (req, res) => {
  */
 exports.getMyReceivedReviews = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
     const skip = (page - 1) * limit;
-    
+
     const mongoose = require('mongoose');
 
     const totalReviews = await Review.countDocuments({ reviewee: req.user._id, isPublished: true });
@@ -350,11 +293,11 @@ exports.getMyReceivedReviews = asyncHandler(async (req, res) => {
 
     // Calculate rating breakdown
     const ratingBreakdown = await Review.aggregate([
-        { 
-            $match: { 
+        {
+            $match: {
                 reviewee: new mongoose.Types.ObjectId(req.user._id),
-                isPublished: true 
-            } 
+                isPublished: true
+            }
         },
         {
             $group: {
@@ -405,22 +348,22 @@ exports.reportReview = asyncHandler(async (req, res) => {
         reportedAt: new Date()
     });
     review.reportedCount = (review.reportedCount || 0) + 1;
-    
+
     // Auto-hide if multiple reports (e.g., 3 or more)
     if (review.reportedCount >= 3) {
         review.isPublished = false;
     }
-    
+
     await review.save();
 
     // Create report in Report system
     const Report = require('../models/Report');
     await Report.create({
         reporter: req.user._id,
-        reported: review.reviewer,
-        category: 'INAPPROPRIATE_REVIEW',
-        description: reason || 'Inappropriate content',
-        relatedReview: review._id
+        reportedUser: review.reviewer,
+        category: 'OTHER',
+        severity: 'LOW',
+        description: reason || 'Inappropriate review content reported by user. Review ID: ' + review._id
     });
 
     res.status(200).json({
@@ -470,6 +413,133 @@ exports.deleteReview = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Update a review
+ * Allows the reviewer to update their review comment and rating
+ */
+exports.updateReview = asyncHandler(async (req, res) => {
+    const { reviewId } = req.params;
+    const { comment, rating } = req.body;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    if (review.reviewer.toString() !== req.user._id.toString()) {
+        throw new AppError('Not authorized to update this review', 403);
+    }
+
+    if (comment !== undefined) review.comment = comment;
+    if (rating !== undefined) {
+        review.rating = rating;
+        if (review.ratings) review.ratings.overall = rating;
+    }
+
+    await review.save();
+
+    // Re-calculate reviewee stats (simplified)
+    const User = require('../models/User');
+    const allReviews = await Review.find({ reviewee: review.reviewee, isPublished: true });
+    const totalRatings = allReviews.length;
+    const avgRating = totalRatings > 0
+        ? allReviews.reduce((sum, r) => sum + (r.ratings?.overall || r.rating || 0), 0) / totalRatings
+        : 0;
+
+    await User.findByIdAndUpdate(review.reviewee, {
+        'rating.overall': avgRating,
+        'rating.totalRatings': totalRatings
+    });
+
+    res.status(200).json({
+        success: true,
+        data: review
+    });
+});
+
+/**
+ * Respond to a review (only the reviewee can respond)
+ */
+exports.respondToReview = asyncHandler(async (req, res) => {
+    const { reviewId } = req.params;
+    const { text } = req.body;
+
+    if (!text || text.trim().length === 0) {
+        throw new AppError('Response text is required', 400);
+    }
+
+    if (text.length > 500) {
+        throw new AppError('Response must be 500 characters or less', 400);
+    }
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    // Only the reviewee can respond
+    if (review.reviewee.toString() !== req.user._id.toString()) {
+        throw new AppError('Only the reviewed person can respond', 403);
+    }
+
+    // Can only respond once
+    if (review.response && review.response.text) {
+        throw new AppError('You have already responded to this review', 400);
+    }
+
+    review.response = {
+        text: text.trim(),
+        respondedAt: new Date()
+    };
+    await review.save();
+
+    // Notify the reviewer about the response
+    try {
+        const responderName = req.user.profile?.firstName || req.user.name || 'Someone';
+        await Notification.create({
+            user: review.reviewer,
+            type: 'REVIEW_RESPONSE',
+            title: 'Response to Your Review',
+            message: `${responderName} responded to your review`,
+            data: { reviewId: review._id }
+        });
+    } catch (notifError) {
+        console.error('Review response notification error:', notifError.message);
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Response submitted successfully',
+        response: review.response
+    });
+});
+
+/**
+ * Mark a review as helpful
+ */
+exports.markAsHelpful = asyncHandler(async (req, res) => {
+    const { reviewId } = req.params;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    // Cannot mark own review as helpful
+    if (review.reviewer.toString() === req.user._id.toString()) {
+        throw new AppError('Cannot mark your own review as helpful', 400);
+    }
+
+    review.helpfulCount = (review.helpfulCount || 0) + 1;
+    await review.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Marked as helpful',
+        helpfulCount: review.helpfulCount
+    });
+});
+
+/**
  * Get review statistics for a user
  */
 exports.getUserReviewStats = asyncHandler(async (req, res) => {
@@ -477,11 +547,11 @@ exports.getUserReviewStats = asyncHandler(async (req, res) => {
     const mongoose = require('mongoose');
 
     const stats = await Review.aggregate([
-        { 
-            $match: { 
+        {
+            $match: {
                 reviewee: new mongoose.Types.ObjectId(userId), // ✅ Fixed
-                isPublished: true 
-            } 
+                isPublished: true
+            }
         },
         {
             $group: {
@@ -490,19 +560,21 @@ exports.getUserReviewStats = asyncHandler(async (req, res) => {
                 averageRating: { $avg: '$ratings.overall' }, // ✅ Fixed path
                 avgPunctuality: { $avg: '$ratings.categories.punctuality' }, // ✅ Fixed path
                 avgCommunication: { $avg: '$ratings.categories.communication' }, // ✅ Fixed path
-                avgCleanliness: { $avg: '$ratings.categories.cleanliness' }, // ✅ Fixed path
-                avgDriving: { $avg: '$ratings.categories.driving' } // ✅ Fixed path
+                avgCleanliness: { $avg: '$ratings.categories.cleanliness' },
+                avgDriving: { $avg: '$ratings.categories.driving' },
+                avgRespectfulness: { $avg: '$ratings.categories.respectfulness' },
+                avgFriendliness: { $avg: '$ratings.categories.friendliness' }
             }
         }
     ]);
 
     // Get most common tags
     const commonTags = await Review.aggregate([
-        { 
-            $match: { 
+        {
+            $match: {
                 reviewee: new mongoose.Types.ObjectId(userId), // ✅ Fixed
-                isPublished: true 
-            } 
+                isPublished: true
+            }
         },
         { $unwind: '$tags' },
         {
