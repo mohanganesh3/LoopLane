@@ -1,427 +1,746 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
-import { Alert } from '../../components/common';
+import { cn } from '@/lib/utils';
+import {
+  AlertTriangle, CheckCircle2, ShieldCheck, Loader2, X, MapPin,
+  User, Phone, Mail, Clock, ChevronDown, ChevronUp, Shield,
+  AlertOctagon, XCircle, RefreshCw, ChevronLeft, ChevronRight,
+  Siren, Ambulance, Flame, Activity
+} from 'lucide-react';
+import { AdminPageHeader, AIInsightCard } from '../../components/admin';
+
+/* ── Constants ──────────────────────────────────────────────────────────────────────────────── */
+
+const STATUS_STYLES = {
+  ACTIVE:       'bg-red-50 text-red-700 ring-red-200 dark:bg-red-900/20 dark:text-red-400 dark:ring-red-800',
+  ACKNOWLEDGED: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-800',
+  RESOLVED:     'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:ring-emerald-800',
+  CANCELLED:    'bg-zinc-50 text-zinc-600 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700',
+};
+
+const SEVERITY_STYLES = {
+  CRITICAL: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-900/20 dark:text-red-400 dark:ring-red-800',
+  HIGH:     'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:ring-orange-800',
+  MODERATE: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:ring-amber-800',
+  LOW:      'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:ring-blue-800',
+};
+
+const TYPE_ICONS = {
+  SOS:      Siren,
+  ACCIDENT: AlertOctagon,
+  MEDICAL:  Ambulance,
+  SAFETY:   Shield,
+  OTHER:    AlertTriangle,
+};
+
+/* ── Action Configurations ──────────────────────────────────────────────────────────── */
+
+const ACTION_CONFIGS = {
+  acknowledge: {
+    title: 'Acknowledge Alert',
+    description: 'Acknowledge that you are aware of this emergency and are actively monitoring the situation. The status will move to ACKNOWLEDGED.',
+    Icon: CheckCircle2,
+    iconColor: 'text-amber-600 dark:text-amber-400',
+    confirmClass: 'bg-amber-500 hover:bg-amber-600 text-white',
+    confirmLabel: 'Acknowledge',
+    targetStatus: 'ACKNOWLEDGED',
+    requiresNotes: false,
+  },
+  escalate: {
+    title: 'Escalate to Critical',
+    description: 'Bumps this emergency to CRITICAL severity. All platform admins will be notified. The user\'s emergency contacts will be re-alerted. A permanent escalation record is saved with: timestamp, escalating admin, reason, and the full list of who was notified.',
+    Icon: AlertOctagon,
+    iconColor: 'text-red-600 dark:text-red-400',
+    confirmClass: 'bg-red-600 hover:bg-red-700 text-white',
+    confirmLabel: 'Escalate — Notify All Admins',
+    targetStatus: 'ACKNOWLEDGED',
+    requiresNotes: false,
+  },
+  resolve: {
+    title: 'Resolve Alert',
+    description: 'Close this emergency alert as successfully handled. The situation has been addressed and no further action is required.',
+    Icon: ShieldCheck,
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    confirmClass: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    confirmLabel: 'Mark Resolved',
+    targetStatus: 'RESOLVED',
+    requiresNotes: false,
+  },
+  false_alarm: {
+    title: 'Mark as False Alarm',
+    description: 'Cancel this alert as a false alarm or accidental trigger. The user will be notified and the alert will be closed.',
+    Icon: XCircle,
+    iconColor: 'text-zinc-500 dark:text-zinc-400',
+    confirmClass: 'bg-zinc-600 hover:bg-zinc-700 text-white',
+    confirmLabel: 'Mark False Alarm',
+    targetStatus: 'CANCELLED',
+    requiresNotes: false,
+  },
+};
+
+/* ── Action Modal ────────────────────────────────────────────────────────────────────────────── */
+
+const ActionModal = ({ emergency, actionKey, onConfirm, onCancel, loading }) => {
+  const [notes, setNotes] = useState('');
+  const cfg = ACTION_CONFIGS[actionKey];
+  if (!cfg) return null;
+
+  const userName = emergency.user?.profile?.firstName
+    ? `${emergency.user.profile.firstName} ${emergency.user.profile.lastName || ''}`.trim()
+    : emergency.user?.email?.split('@')[0] || 'Unknown User';
+
+  const handleConfirm = () => {
+    const finalNotes = cfg.notePrefix ? cfg.notePrefix + notes : notes;
+    onConfirm(cfg.targetStatus, finalNotes);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-2xl w-full max-w-md"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 p-5 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="shrink-0 w-9 h-9 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center">
+            <cfg.Icon size={18} className={cfg.iconColor} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{cfg.title}</h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              For: <span className="font-medium text-zinc-700 dark:text-zinc-300">{userName}</span>
+              {emergency.user?.phone && (
+                <span className="ml-1 text-zinc-400">({emergency.user.phone})</span>
+              )}
+            </p>
+          </div>
+          <button
+            onClick={onCancel}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">{cfg.description}</p>
+
+          <div className="bg-zinc-50 dark:bg-zinc-800/60 rounded-lg p-3 space-y-1.5">
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">Alert type</span>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">{emergency.type}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">Severity</span>
+              <span className={cn('font-medium',
+                emergency.severity === 'CRITICAL' ? 'text-red-600 dark:text-red-400' :
+                emergency.severity === 'HIGH'     ? 'text-orange-600 dark:text-orange-400' :
+                emergency.severity === 'MODERATE' ? 'text-amber-600 dark:text-amber-400' :
+                'text-blue-600 dark:text-blue-400'
+              )}>{emergency.severity}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-zinc-500">Current status</span>
+              <span className={cn('font-medium',
+                emergency.status === 'ACTIVE' ? 'text-red-600 dark:text-red-400' :
+                'text-amber-600 dark:text-amber-400'
+              )}>{emergency.status}</span>
+            </div>
+            {emergency.location?.address && (
+              <div className="flex justify-between text-xs">
+                <span className="text-zinc-500">Location</span>
+                <span className="font-medium text-zinc-800 dark:text-zinc-200 text-right max-w-[60%] truncate">
+                  {emergency.location.address}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {actionKey === 'escalate' && (
+            <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3">
+              <p className="text-[11px] font-bold text-red-700 dark:text-red-400 mb-2 flex items-center gap-1.5">
+                <AlertOctagon size={12} /> WHO GETS NOTIFIED
+              </p>
+              <div className="space-y-1 text-[11px] text-red-600 dark:text-red-300">
+                <div className="flex items-start gap-1.5"><span>&#8594;</span><span>All platform admins — immediate email alert</span></div>
+                <div className="flex items-start gap-1.5"><span>&#8594;</span><span>User's emergency contacts — re-notified immediately</span></div>
+                <div className="flex items-start gap-1.5"><span>&#8594;</span><span>Escalation log saved: timestamp, your name, reason, full recipient list</span></div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+              {actionKey === 'escalate' ? 'Reason for Escalation' : 'Admin Notes'}
+              {cfg.requiresNotes
+                ? <span className="text-red-500 ml-0.5">*</span>
+                : <span className="text-zinc-400 font-normal ml-1">(optional)</span>}
+            </label>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder={actionKey === 'escalate'
+                ? 'Reason for escalation... e.g. "User unresponsive, suspected accident on Ring Road"'
+                : `Notes for ${cfg.title.toLowerCase()}...`}
+              className="w-full px-3 py-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-400 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end px-5 pb-5">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-4 py-2 text-xs font-medium border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={loading || (cfg.requiresNotes && !notes.trim())}
+            className={cn('px-4 py-2 text-xs font-medium rounded-md transition-colors disabled:opacity-50 flex items-center gap-1.5', cfg.confirmClass)}
+          >
+            {loading && <Loader2 size={12} className="animate-spin" />}
+            {cfg.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ── Status-aware Action Row ──────────────────────────────────────────────────────────── */
+
+const ActionRow = ({ emergency, onAction }) => {
+  const { status } = emergency;
+
+  if (status === 'ACTIVE') {
+    return (
+      <div className="flex flex-wrap gap-1.5 ml-4 shrink-0">
+        <button
+          onClick={() => onAction(emergency, 'acknowledge')}
+          className="px-2.5 py-1.5 text-[11px] font-medium rounded-md bg-amber-500 hover:bg-amber-600 text-white transition-colors flex items-center gap-1"
+        >
+          <CheckCircle2 size={11} /> Acknowledge
+        </button>
+        <button
+          onClick={() => onAction(emergency, 'escalate')}
+          className="px-2.5 py-1.5 text-[11px] font-medium rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center gap-1"
+        >
+          <AlertOctagon size={11} /> Escalate Critical
+        </button>
+        <button
+          onClick={() => onAction(emergency, 'false_alarm')}
+          className="px-2.5 py-1.5 text-[11px] font-medium rounded-md border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"
+        >
+          <XCircle size={11} /> False Alarm
+        </button>
+      </div>
+    );
+  }
+
+  if (status === 'ACKNOWLEDGED') {
+    const notYetEscalated = !emergency.escalation?.level;
+    return (
+      <div className="flex flex-wrap gap-1.5 ml-4 shrink-0">
+        <button
+          onClick={() => onAction(emergency, 'resolve')}
+          className="px-2.5 py-1.5 text-[11px] font-medium rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors flex items-center gap-1"
+        >
+          <ShieldCheck size={11} /> Resolve Alert
+        </button>
+        {notYetEscalated && (
+          <button
+            onClick={() => onAction(emergency, 'escalate')}
+            className="px-2.5 py-1.5 text-[11px] font-medium rounded-md bg-red-600 hover:bg-red-700 text-white transition-colors flex items-center gap-1"
+          >
+            <AlertOctagon size={11} /> Escalate
+          </button>
+        )}
+        <button
+          onClick={() => onAction(emergency, 'false_alarm')}
+          className="px-2.5 py-1.5 text-[11px] font-medium rounded-md border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1"
+        >
+          <XCircle size={11} /> Cancel
+        </button>
+      </div>
+    );
+  }
+
+  const isResolved = status === 'RESOLVED';
+  return (
+    <div className="ml-4 shrink-0 flex items-center gap-1.5 text-xs">
+      {isResolved
+        ? <><ShieldCheck size={13} className="text-emerald-500" /><span className="text-emerald-600 dark:text-emerald-400 font-medium">Resolved</span></>
+        : <><XCircle size={13} className="text-zinc-400" /><span className="text-zinc-500 font-medium">Cancelled</span></>
+      }
+    </div>
+  );
+};
+
+/* ── Emergency Card ────────────────────────────────────────────────────────────────────────────── */
+
+const EmergencyCard = ({ emergency, onAction }) => {
+  const [expanded, setExpanded] = useState(false);
+  const TypeIcon = TYPE_ICONS[emergency.type] || AlertTriangle;
+  const isCritical = emergency.severity === 'CRITICAL';
+  const isActive = emergency.status === 'ACTIVE';
+
+  const formatDate = (d) => d
+    ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  const mapsUrl = emergency.location?.coordinates?.coordinates?.length === 2
+    ? `https://www.google.com/maps?q=${emergency.location.coordinates.coordinates[1]},${emergency.location.coordinates.coordinates[0]}`
+    : null;
+
+  const userName = emergency.user?.profile?.firstName
+    ? `${emergency.user.profile.firstName} ${emergency.user.profile.lastName || ''}`.trim()
+    : emergency.user?.email?.split('@')[0] || 'Unknown';
+
+  return (
+    <div
+      className={cn(
+        'border-l-4 bg-white dark:bg-zinc-900 transition',
+        isActive && isCritical ? 'border-l-red-600 bg-red-50/30 dark:bg-red-900/10' :
+        isActive              ? 'border-l-red-400' :
+        emergency.status === 'ACKNOWLEDGED' ? 'border-l-amber-400' :
+        emergency.status === 'RESOLVED'     ? 'border-l-emerald-400' :
+        'border-l-zinc-300 dark:border-l-zinc-700'
+      )}
+    >
+      <div className="px-4 py-4 flex items-start gap-3">
+        <div className={cn('shrink-0 w-9 h-9 rounded-lg flex items-center justify-center',
+          isActive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-zinc-100 dark:bg-zinc-800')}>
+          <TypeIcon size={17} className={isActive ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400'} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap mb-2">
+            <span className={cn('px-1.5 py-0.5 text-[10px] font-bold rounded-md ring-1 ring-inset', STATUS_STYLES[emergency.status] || STATUS_STYLES.CANCELLED)}>
+              {emergency.status}
+            </span>
+            <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded-md ring-1 ring-inset', SEVERITY_STYLES[emergency.severity] || SEVERITY_STYLES.LOW)}>
+              {emergency.severity}
+            </span>
+            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+              {emergency.type}
+            </span>
+            {isCritical && isActive && (
+              <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-red-600 text-white animate-pulse">
+                CRITICAL — IMMEDIATE ACTION
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400 mb-2">
+            <span className="flex items-center gap-1"><User size={12} /> {userName}</span>
+            {emergency.user?.email && (
+              <span className="flex items-center gap-1"><Mail size={12} /> {emergency.user.email}</span>
+            )}
+            {emergency.user?.phone && (
+              <span className="flex items-center gap-1"><Phone size={12} /> {emergency.user.phone}</span>
+            )}
+          </div>
+
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-1.5">
+            <MapPin size={11} className="inline mr-1" />
+            {emergency.location?.address || 'Location not available'}
+            {mapsUrl && (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-zinc-700 dark:text-zinc-300 underline hover:no-underline"
+              >
+                View Map
+              </a>
+            )}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-[10px] text-zinc-400">
+            <span className="flex items-center gap-1"><Clock size={10} /> Triggered {formatDate(emergency.triggeredAt)}</span>
+            {emergency.acknowledgedAt && <span>Acknowledged {formatDate(emergency.acknowledgedAt)}</span>}
+            {emergency.resolvedAt && <span>Resolved {formatDate(emergency.resolvedAt)}</span>}
+          </div>
+
+          {emergency.adminNotes && (
+            <div className="mt-2 px-3 py-2 bg-zinc-50 dark:bg-zinc-800 rounded-md text-xs text-zinc-600 dark:text-zinc-400 border border-zinc-100 dark:border-zinc-700">
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">Admin note:</span> {emergency.adminNotes}
+            </div>
+          )}
+
+          {emergency.escalation?.level > 0 && (
+            <div className="mt-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 rounded-md border border-red-200 dark:border-red-800">
+              <p className="text-[11px] font-black text-red-700 dark:text-red-400">
+                &#x26A1; ESCALATED L{emergency.escalation.level}
+                {emergency.escalation.escalatedAt && (
+                  <span className="font-normal ml-1">&mdash; {formatDate(emergency.escalation.escalatedAt)}</span>
+                )}
+              </p>
+              {emergency.escalation.reason && (
+                <p className="text-[10px] text-red-600 dark:text-red-300 mt-0.5">{emergency.escalation.reason}</p>
+              )}
+              {emergency.escalation.notifiedTo?.length > 0 && (
+                <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-1">
+                  Notified {emergency.escalation.notifiedTo.length} recipient{emergency.escalation.notifiedTo.length !== 1 ? 's' : ''} &mdash;{' '}
+                  {emergency.escalation.notifiedTo.filter(e => e.startsWith('admin:')).length} admin(s),{' '}
+                  {emergency.escalation.notifiedTo.filter(e => e.startsWith('contact:')).length} emergency contact(s)
+                </p>
+              )}
+            </div>
+          )}
+
+          <button
+            onClick={() => setExpanded(v => !v)}
+            className="mt-2 flex items-center gap-1 text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            {expanded ? 'Less detail' : 'More detail'}
+          </button>
+        </div>
+
+        <ActionRow emergency={emergency} onAction={onAction} />
+      </div>
+
+      {expanded && (
+        <div className="px-4 pb-4 pt-0 border-t border-zinc-100 dark:border-zinc-800">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
+            {emergency.contacts?.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Notified Contacts ({emergency.contacts.length})</p>
+                <div className="space-y-1.5">
+                  {emergency.contacts.map((c, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 rounded-md">
+                      <User size={11} className="text-zinc-400" />
+                      <span className="font-medium">{c.name}</span>
+                      {c.email && <span className="text-zinc-400">{c.email}</span>}
+                      {c.phone && <span className="text-zinc-400">{c.phone}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {emergency.responder && (
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Assigned Responder</p>
+                <div className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 px-3 py-1.5 rounded-md">
+                  <Shield size={11} className="text-zinc-500" />
+                  <span>
+                    {emergency.responder?.profile?.firstName
+                      ? `${emergency.responder.profile.firstName} ${emergency.responder.profile.lastName || ''}`.trim()
+                      : emergency.responder?.email || 'Admin'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {emergency.deviceInfo && (
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Device Info</p>
+                <div className="space-y-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {emergency.deviceInfo.platform && <p>Platform: <span className="text-zinc-700 dark:text-zinc-300 font-medium">{emergency.deviceInfo.platform}</span></p>}
+                  {emergency.deviceInfo.language && <p>Language: <span className="text-zinc-700 dark:text-zinc-300 font-medium">{emergency.deviceInfo.language}</span></p>}
+                </div>
+              </div>
+            )}
+
+            {emergency.description && emergency.description !== 'Emergency alert sent by user' && (
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Description</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 px-3 py-2 rounded-md leading-relaxed">
+                  {emergency.description}
+                </p>
+              </div>
+            )}
+
+            {emergency.notifications?.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase mb-2">Notifications Sent ({emergency.notifications.length})</p>
+                <div className="space-y-1">
+                  {emergency.notifications.map((n, i) => (
+                    <div key={i} className="flex items-center justify-between text-[10px] text-zinc-500 bg-zinc-50 dark:bg-zinc-800 px-3 py-1 rounded-md">
+                      <span className="font-medium">{n.channel}</span>
+                      <span className="truncate max-w-[60%] text-right">{n.target}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ── Stat Defs & Page Size ──────────────────────────────────────────────────────────── */
+
+const STAT_DEFS = [
+  { key: 'ACTIVE',       label: 'Active Alerts',   Icon: Flame,       color: 'text-red-600 dark:text-red-400',         bg: 'bg-red-50 dark:bg-red-900/20' },
+  { key: 'ACKNOWLEDGED', label: 'Acknowledged',     Icon: Activity,    color: 'text-amber-600 dark:text-amber-400',     bg: 'bg-amber-50 dark:bg-amber-900/20' },
+  { key: 'RESOLVED',     label: 'Resolved',         Icon: ShieldCheck, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+  { key: 'CANCELLED',    label: 'Cancelled',        Icon: XCircle,     color: 'text-zinc-500 dark:text-zinc-400',       bg: 'bg-zinc-50 dark:bg-zinc-800' },
+  { key: 'total',        label: 'Total Alerts',     Icon: Shield,      color: 'text-zinc-700 dark:text-zinc-300',       bg: 'bg-white dark:bg-zinc-900' },
+];
+
+const PAGE_SIZE = 15;
 
 const AdminSafety = () => {
   const [emergencies, setEmergencies] = useState([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    ACTIVE: { count: 0 },
-    ACKNOWLEDGED: { count: 0 },
-    RESOLVED: { count: 0 },
-    CANCELLED: { count: 0 }
-  });
+  const [stats, setStats] = useState({ total: 0, ACTIVE: { count: 0 }, ACKNOWLEDGED: { count: 0 }, RESOLVED: { count: 0 }, CANCELLED: { count: 0 } });
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [filter, setFilter] = useState('all');
-  const [selectedEmergency, setSelectedEmergency] = useState(null);
-  const [adminNotes, setAdminNotes] = useState('');
-  const [updating, setUpdating] = useState(false);
+  const [modal, setModal] = useState(null); // { emergency, actionKey }
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    loadData();
-  }, [filter]);
-
-  const loadData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      
-      // Load emergencies
       const endpoint = filter === 'active' ? '/api/sos/admin/active' : '/api/sos/admin/all';
-      const [emergencyRes, statsRes] = await Promise.all([
+      const [emRes, stRes] = await Promise.all([
         api.get(endpoint),
-        api.get('/api/sos/admin/stats')
+        api.get('/api/sos/admin/stats'),
       ]);
-      
-      if (emergencyRes.data.success) {
-        setEmergencies(emergencyRes.data.emergencies || []);
-      }
-      
-      if (statsRes.data.success) {
-        setStats(statsRes.data.stats || {
-          total: 0,
-          ACTIVE: { count: 0 },
-          ACKNOWLEDGED: { count: 0 },
-          RESOLVED: { count: 0 },
-          CANCELLED: { count: 0 }
-        });
-      }
+      if (emRes.data.success)  setEmergencies(emRes.data.emergencies || []);
+      if (stRes.data.success)  setStats(stRes.data.stats || { total: 0, ACTIVE: { count: 0 }, ACKNOWLEDGED: { count: 0 }, RESOLVED: { count: 0 }, CANCELLED: { count: 0 } });
     } catch (err) {
-      console.error('Error loading safety data:', err);
       setError(err.response?.data?.message || 'Failed to load safety alerts');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
-  const updateEmergencyStatus = async (emergencyId, newStatus) => {
+  useEffect(() => {
+    setPage(1);
+    fetchData();
+  }, [fetchData]);
+
+  const handleOpenAction = (emergency, actionKey) => setModal({ emergency, actionKey });
+  const handleCloseModal = () => setModal(null);
+
+  const handleConfirmAction = async (targetStatus, notes) => {
+    if (!modal) return;
     try {
-      setUpdating(true);
-      setError('');
-      
-      const response = await api.post(`/api/sos/admin/${emergencyId}/update`, {
-        status: newStatus,
-        adminNotes: adminNotes
-      });
-      
-      if (response.data.success) {
-        setSuccess(`Alert ${newStatus.toLowerCase()} successfully`);
-        setSelectedEmergency(null);
-        setAdminNotes('');
-        loadData();
-        
-        setTimeout(() => setSuccess(''), 3000);
+      setActionLoading(true);
+      if (modal.actionKey === 'escalate') {
+        // Use dedicated escalation endpoint — not the generic update.
+        // This notifies all admins + emergency contacts and records the escalation chain.
+        const res = await api.post(`/api/sos/admin/${modal.emergency._id}/escalate`, {
+          reason: notes || undefined,
+        });
+        const n = res.data.notifiedCount ?? 0;
+        setSuccess(`Escalated to CRITICAL — ${n} recipient${n !== 1 ? 's' : ''} notified (admins + emergency contacts)`);
+      } else {
+        await api.post(`/api/sos/admin/${modal.emergency._id}/update`, {
+          status: targetStatus,
+          adminNotes: notes || undefined,
+        });
+        setSuccess(`Alert ${targetStatus.toLowerCase()} successfully`);
       }
+      setModal(null);
+      fetchData();
+      setTimeout(() => setSuccess(''), 6000);
     } catch (err) {
-      console.error('Error updating emergency:', err);
       setError(err.response?.data?.message || 'Failed to update alert');
     } finally {
-      setUpdating(false);
+      setActionLoading(false);
     }
   };
 
-  const getStatusBadge = (status) => {
-    const badges = {
-      'ACTIVE': 'bg-red-100 text-red-800 animate-pulse',
-      'ACKNOWLEDGED': 'bg-yellow-100 text-yellow-800',
-      'RESOLVED': 'bg-green-100 text-green-800',
-      'CANCELLED': 'bg-gray-100 text-gray-800'
-    };
-    return badges[status] || 'bg-gray-100 text-gray-800';
-  };
+  // Sort: ACTIVE first → CRITICAL severity → ACKNOWLEDGED → others
+  const sorted = [...emergencies].sort((a, b) => {
+    const statusOrder = { ACTIVE: 0, ACKNOWLEDGED: 1, RESOLVED: 2, CANCELLED: 3 };
+    const severityOrder = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3 };
+    if (statusOrder[a.status] !== statusOrder[b.status]) return statusOrder[a.status] - statusOrder[b.status];
+    return severityOrder[a.severity] - severityOrder[b.severity];
+  });
 
-  const getSeverityBadge = (severity) => {
-    const badges = {
-      'CRITICAL': 'bg-red-600 text-white',
-      'HIGH': 'bg-orange-500 text-white',
-      'MODERATE': 'bg-yellow-500 text-white',
-      'LOW': 'bg-blue-500 text-white'
-    };
-    return badges[severity] || 'bg-gray-500 text-white';
-  };
+  const totalPages = Math.ceil(sorted.length / PAGE_SIZE);
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const activeCount = (stats.ACTIVE?.count || 0) + (stats.ACKNOWLEDGED?.count || 0);
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'N/A';
-    return new Date(dateStr).toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getUserName = (user) => {
-    if (!user) return 'Unknown';
-    if (user.profile?.firstName) {
-      return `${user.profile.firstName} ${user.profile.lastName || ''}`.trim();
-    }
-    return user.email?.split('@')[0] || 'Unknown';
-  };
+  const FILTER_TABS = [
+    { key: 'active', label: 'Active Alerts',  count: activeCount },
+    { key: 'all',    label: 'All Alerts',      count: stats.total || 0 },
+  ];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-500"></div>
+      <div className="flex items-center justify-center py-32">
+        <Loader2 size={24} className="animate-spin text-zinc-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Safety Alerts
-              </h1>
-              <p className="text-gray-500 text-sm">Manage emergency and safety alerts</p>
-            </div>
-            <Link to="/admin" className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition flex items-center">
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to Dashboard
-            </Link>
-          </div>
+    <div className="space-y-6">
+      <AdminPageHeader
+        title="Safety Alerts"
+        subtitle="Monitor and respond to emergency SOS alerts across the platform"
+        actions={
+          <button
+            onClick={fetchData}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        }
+      />
+
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 text-sm text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg">
+          <AlertTriangle size={16} className="shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600"><X size={14} /></button>
         </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-2 px-4 py-3 text-sm text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+          <CheckCircle2 size={16} className="shrink-0" /> <span>{success}</span>
+        </div>
+      )}
+
+      {(stats.ACTIVE?.count || 0) > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-red-600 text-white rounded-lg">
+          <Flame size={18} className="shrink-0 animate-pulse" />
+          <span className="font-semibold text-sm">
+            {stats.ACTIVE.count} active emergency alert{stats.ACTIVE.count > 1 ? 's' : ''} require immediate attention
+          </span>
+        </div>
+      )}
+
+      <AIInsightCard context="safety" metrics={{
+        totalAlerts: stats.total || 0,
+        activeSOS: stats.ACTIVE?.count || 0,
+        acknowledged: stats.ACKNOWLEDGED?.count || 0,
+        resolvedCount: stats.RESOLVED?.count || 0,
+        cancelledCount: stats.CANCELLED?.count || 0,
+        unresolvedCount: (stats.ACTIVE?.count || 0) + (stats.ACKNOWLEDGED?.count || 0),
+        resolutionRate: stats.total > 0 ? Math.round(((stats.RESOLVED?.count || 0) / stats.total) * 100) : 0,
+      }} title="Safety Intelligence" />
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {STAT_DEFS.map(({ key, label, Icon, color, bg }) => (
+          <div key={key} className={cn('rounded-lg border border-zinc-200 dark:border-zinc-800 p-4', bg)}>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+                <p className={cn('text-2xl font-semibold mt-1', color)}>
+                  {key === 'total' ? (stats.total || 0) : (stats[key]?.count || 0)}
+                </p>
+              </div>
+              <Icon size={20} className={color} />
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {error && <Alert type="error" message={error} className="mb-6" />}
-        {success && <Alert type="success" message={success} className="mb-6" />}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Active Alerts</p>
-                <p className="text-2xl font-bold text-red-600">{stats.ACTIVE?.count || 0}</p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-red-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Acknowledged</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.ACKNOWLEDGED?.count || 0}</p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Resolved</p>
-                <p className="text-2xl font-bold text-green-600">{stats.RESOLVED?.count || 0}</p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Alerts</p>
-                <p className="text-2xl font-bold text-gray-600">{stats.total || 0}</p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filter Tabs */}
-        <div className="bg-white rounded-lg shadow-sm mb-6">
-          <div className="flex border-b">
-            <button
-              onClick={() => setFilter('active')}
-              className={`flex-1 py-3 px-4 text-center font-medium transition ${
-                filter === 'active' 
-                  ? 'text-red-600 border-b-2 border-red-600 bg-red-50' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Active Alerts ({(stats.ACTIVE?.count || 0) + (stats.ACKNOWLEDGED?.count || 0)})
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`flex-1 py-3 px-4 text-center font-medium transition ${
-                filter === 'all' 
-                  ? 'text-gray-900 border-b-2 border-gray-900' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              All Alerts ({stats.total || 0})
-            </button>
-          </div>
-        </div>
-
-        {/* Emergencies List */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          {emergencies.length === 0 ? (
-            <div className="p-12 text-center">
-              <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Safety Alerts</h3>
-              <p className="text-gray-500">
-                {filter === 'active' ? 'No active safety alerts at the moment' : 'No safety alerts found'}
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {emergencies.map((emergency) => (
-                <div 
-                  key={emergency._id} 
-                  className={`p-4 hover:bg-gray-50 transition ${
-                    emergency.status === 'ACTIVE' ? 'bg-red-50 border-l-4 border-red-500' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(emergency.status)}`}>
-                          {emergency.status}
-                        </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getSeverityBadge(emergency.severity)}`}>
-                          {emergency.severity}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {emergency.type}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                          {getUserName(emergency.user)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          {emergency.user?.email || 'N/A'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          {emergency.user?.phone || 'N/A'}
-                        </span>
-                      </div>
-                      
-                      <p className="text-sm text-gray-500 mb-2">
-                        <span className="font-medium">Location:</span> {emergency.location?.address || 'Unknown'}
-                      </p>
-                      
-                      {emergency.location?.coordinates?.coordinates && (
-                        <a 
-                          href={`https://www.google.com/maps?q=${emergency.location.coordinates.coordinates[1]},${emergency.location.coordinates.coordinates[0]}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mb-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          View on Map
-                        </a>
-                      )}
-                      
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span>Triggered: {formatDate(emergency.triggeredAt)}</span>
-                        {emergency.acknowledgedAt && (
-                          <span>Acknowledged: {formatDate(emergency.acknowledgedAt)}</span>
-                        )}
-                        {emergency.resolvedAt && (
-                          <span>Resolved: {formatDate(emergency.resolvedAt)}</span>
-                        )}
-                      </div>
-                      
-                      {emergency.adminNotes && (
-                        <p className="text-sm text-gray-600 mt-2 bg-gray-100 p-2 rounded">
-                          <span className="font-medium">Notes:</span> {emergency.adminNotes}
-                        </p>
-                      )}
-                      
-                      {/* Emergency Contacts */}
-                      {emergency.contacts && emergency.contacts.length > 0 && (
-                        <div className="mt-3">
-                          <p className="text-xs font-medium text-gray-600 mb-1">Notified Contacts:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {emergency.contacts.map((contact, idx) => (
-                              <span key={idx} className="text-xs bg-gray-100 px-2 py-1 rounded">
-                                {contact.name} ({contact.email || contact.phone})
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Actions */}
-                    <div className="flex flex-col gap-2 ml-4">
-                      {emergency.status === 'ACTIVE' && (
-                        <button
-                          onClick={() => setSelectedEmergency({ ...emergency, newStatus: 'ACKNOWLEDGED' })}
-                          className="px-3 py-1 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600 transition"
-                        >
-                          Acknowledge
-                        </button>
-                      )}
-                      {(emergency.status === 'ACTIVE' || emergency.status === 'ACKNOWLEDGED') && (
-                        <button
-                          onClick={() => setSelectedEmergency({ ...emergency, newStatus: 'RESOLVED' })}
-                          className="px-3 py-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition"
-                        >
-                          Resolve
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Filter tabs */}
+      <div className="flex gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1 w-fit">
+        {FILTER_TABS.map(({ key, label, count }) => (
+          <button
+            key={key}
+            onClick={() => setFilter(key)}
+            className={cn(
+              'px-4 py-2 text-sm font-medium rounded-md transition flex items-center gap-2',
+              filter === key
+                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+            )}
+          >
+            {label}
+            <span className={cn(
+              'px-1.5 py-0.5 rounded-md text-[10px] font-bold',
+              filter === key
+                ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300'
+                : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500'
+            )}>
+              {count}
+            </span>
+          </button>
+        ))}
       </div>
 
-      {/* Update Modal */}
-      {selectedEmergency && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">
-              {selectedEmergency.newStatus === 'ACKNOWLEDGED' ? 'Acknowledge Alert' : 'Resolve Alert'}
-            </h3>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Notes (Optional)</label>
-              <textarea
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                placeholder="Add any notes about this alert..."
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                rows={3}
-              />
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setSelectedEmergency(null);
-                  setAdminNotes('');
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-                disabled={updating}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => updateEmergencyStatus(selectedEmergency._id, selectedEmergency.newStatus)}
-                className={`flex-1 px-4 py-2 text-white rounded-lg transition ${
-                  selectedEmergency.newStatus === 'ACKNOWLEDGED' 
-                    ? 'bg-yellow-500 hover:bg-yellow-600' 
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
-                disabled={updating}
-              >
-                {updating ? 'Updating...' : selectedEmergency.newStatus === 'ACKNOWLEDGED' ? 'Acknowledge' : 'Resolve'}
-              </button>
-            </div>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-zinc-500">
+        {[
+          { dot: 'bg-red-600',     label: 'ACTIVE — Immediate action required' },
+          { dot: 'bg-amber-500',   label: 'ACKNOWLEDGED — Being handled' },
+          { dot: 'bg-emerald-500', label: 'RESOLVED — Closed successfully' },
+          { dot: 'bg-zinc-400',    label: 'CANCELLED — False alarm or dismissed' },
+        ].map(({ dot, label }) => (
+          <span key={label} className="flex items-center gap-1.5">
+            <span className={cn('w-2 h-2 rounded-full', dot)} />{label}
+          </span>
+        ))}
+      </div>
+
+      {/* Alert list */}
+      <div className="bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+        {paginated.length === 0 ? (
+          <div className="p-16 text-center">
+            <ShieldCheck size={36} className="mx-auto mb-3 text-zinc-300 dark:text-zinc-600" />
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1">No Safety Alerts</h3>
+            <p className="text-sm text-zinc-400">
+              {filter === 'active' ? 'No active safety alerts — platform is safe' : 'No safety alerts found'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {paginated.map(em => (
+              <EmergencyCard key={em._id} emergency={em} onAction={handleOpenAction} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-zinc-500">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length} alerts
+          </p>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(p => p - 1)}
+              disabled={page === 1}
+              className="p-2 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 transition"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="flex items-center px-3 text-sm text-zinc-600 dark:text-zinc-400">
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={page === totalPages}
+              className="p-2 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-40 transition"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
+      )}
+
+      {/* Action Modal */}
+      {modal && (
+        <ActionModal
+          emergency={modal.emergency}
+          actionKey={modal.actionKey}
+          onConfirm={handleConfirmAction}
+          onCancel={handleCloseModal}
+          loading={actionLoading}
+        />
       )}
     </div>
   );

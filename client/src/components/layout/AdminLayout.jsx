@@ -1,142 +1,241 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getUserDisplayName, getUserPhoto, getInitials, getAvatarColor } from '../../utils/imageHelpers';
+import { isFullAdmin } from '../../utils/roles';
+import { cn } from '@/lib/utils';
+import {
+  Brain, BarChart3, Globe, Users, UserCheck, Car, ClipboardList,
+  AlertTriangle, Flag, MapPin, PieChart, Wallet, UserCog, FileText,
+  Settings, Shield, UserMinus, Tag, Leaf, SlidersHorizontal, Activity,
+  ChevronsLeft, ChevronsRight, ArrowLeft, LogOut, User, ChevronDown,
+} from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator,
+} from '../ui/DropdownMenu';
+
+const safeSrc = (url) => {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return ['http:', 'https:'].includes(parsed.protocol) ? url : '';
+  } catch { return ''; }
+};
+
+const ICON_MAP = {
+  brain: Brain, 'bar-chart': BarChart3, globe: Globe, users: Users,
+  'user-check': UserCheck, car: Car, clipboard: ClipboardList,
+  'alert-triangle': AlertTriangle, flag: Flag, 'map-pin': MapPin,
+  'pie-chart': PieChart, wallet: Wallet, 'user-cog': UserCog,
+  'file-text': FileText, settings: Settings, shield: Shield,
+  'user-minus': UserMinus, tag: Tag, leaf: Leaf,
+  sliders: SlidersHorizontal, activity: Activity,
+};
 
 const AdminLayout = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout failed:', error);
-      navigate('/login');
-    }
-  };
+  const handleLogout = useCallback(async () => {
+    try { await logout(); } catch {}
+    navigate('/admin/login');
+  }, [logout, navigate]);
 
-  const navItems = [
-    { path: '/admin/dashboard', icon: 'fa-chart-line', label: 'Dashboard', description: 'Overview & stats' },
-    { path: '/admin/users', icon: 'fa-users', label: 'Users', description: 'Manage users' },
-    { path: '/admin/verifications', icon: 'fa-user-check', label: 'Verifications', description: 'Driver approvals' },
-    { path: '/admin/rides', icon: 'fa-car-side', label: 'Rides', description: 'All rides' },
-    { path: '/admin/bookings', icon: 'fa-clipboard-list', label: 'Bookings', description: 'All bookings' },
-    { path: '/admin/safety', icon: 'fa-exclamation-triangle', label: 'Safety', description: 'Emergency alerts' },
-  ];
+  const permissions = user?.employeeDetails?.permissions || [];
+  const userIsFullAdmin = isFullAdmin(user?.role);
+  const hasPermission = (perm) => userIsFullAdmin || permissions.includes(perm);
 
-  const isActive = (path) => {
+  const navGroups = useMemo(() => {
+    const groups = [
+      {
+        label: 'AI',
+        items: [
+          { path: '/admin/ai', icon: 'brain', label: 'Command Center', show: true },
+        ],
+      },
+      {
+        label: 'Overview',
+        items: [
+          { path: '/admin/dashboard', icon: 'bar-chart', label: 'Dashboard', show: true },
+          { path: '/admin/bird-eye', icon: 'globe', label: 'Bird Eye', show: userIsFullAdmin || hasPermission('manage_reports') },
+        ],
+      },
+      {
+        label: 'Operations',
+        items: [
+          { path: '/admin/rides', icon: 'car', label: 'Rides', show: hasPermission('manage_rides') },
+          { path: '/admin/bookings', icon: 'clipboard', label: 'Bookings', show: hasPermission('manage_rides') },
+          { path: '/admin/geo-fencing', icon: 'map-pin', label: 'Geo-Fencing', show: hasPermission('manage_rides') },
+        ],
+      },
+      {
+        label: 'Users',
+        items: [
+          { path: '/admin/users', icon: 'users', label: 'Users', show: hasPermission('manage_users') },
+          { path: '/admin/verifications', icon: 'user-check', label: 'Verifications', show: hasPermission('manage_users') },
+          { path: '/admin/employees', icon: 'user-cog', label: 'Employees', show: userIsFullAdmin },
+        ],
+      },
+      {
+        label: 'Safety & Trust',
+        items: [
+          { path: '/admin/safety', icon: 'alert-triangle', label: 'Safety', show: hasPermission('manage_reports') },
+          { path: '/admin/reports', icon: 'flag', label: 'Reports', show: hasPermission('manage_reports') },
+          { path: '/admin/fraud', icon: 'shield', label: 'Fraud', show: userIsFullAdmin },
+        ],
+      },
+      {
+        label: 'Finance',
+        items: [
+          { path: '/admin/financials', icon: 'wallet', label: 'Financials', show: hasPermission('manage_finances') },
+          { path: '/admin/analytics', icon: 'pie-chart', label: 'Analytics', show: hasPermission('manage_finances') || hasPermission('manage_rides') },
+          { path: '/admin/promo-codes', icon: 'tag', label: 'Promo Codes', show: hasPermission('manage_finances') },
+          { path: '/admin/pricing', icon: 'sliders', label: 'Pricing', show: hasPermission('manage_finances') },
+        ],
+      },
+      {
+        label: 'Platform',
+        items: [
+          { path: '/admin/churn', icon: 'user-minus', label: 'Churn', show: userIsFullAdmin || hasPermission('manage_users') },
+          { path: '/admin/sustainability', icon: 'leaf', label: 'Sustainability', show: hasPermission('manage_reports') },
+          { path: '/admin/health', icon: 'activity', label: 'System Health', show: userIsFullAdmin },
+          { path: '/admin/audit-logs', icon: 'file-text', label: 'Audit Logs', show: userIsFullAdmin },
+          { path: '/admin/settings', icon: 'settings', label: 'Settings', show: hasPermission('manage_settings') },
+        ],
+      },
+    ];
+    return groups
+      .map(g => ({ ...g, items: g.items.filter(i => i.show) }))
+      .filter(g => g.items.length > 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, JSON.stringify(permissions)]);
+
+  const allItems = useMemo(() => navGroups.flatMap(g => g.items), [navGroups]);
+
+  const isActive = useCallback((path) => {
     if (path === '/admin/dashboard') {
       return location.pathname === '/admin/dashboard' || location.pathname === '/admin';
     }
     return location.pathname.startsWith(path);
-  };
+  }, [location.pathname]);
+
+  const currentItem = allItems.find(item => isActive(item.path));
+
+  // Breadcrumb
+  const breadcrumbs = useMemo(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts.length <= 2) return [{ label: currentItem?.label || 'Admin', path: location.pathname }];
+    return [
+      { label: currentItem?.label || parts[1], path: `/admin/${parts[1]}` },
+      { label: parts.slice(2).join('/'), path: location.pathname },
+    ];
+  }, [location.pathname, currentItem]);
 
   const displayName = getUserDisplayName(user);
-  const userPhoto = getUserPhoto(user);
+  const rawPhoto = getUserPhoto(user);
+  const userPhoto = safeSrc(rawPhoto);
   const initials = getInitials(displayName);
   const avatarColor = getAvatarColor(displayName);
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex">
       {/* Sidebar */}
-      <aside className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-gradient-to-b from-indigo-900 via-indigo-800 to-purple-900 text-white fixed h-full z-40 transition-all duration-300 shadow-xl`}>
+      <aside className={cn(
+        'fixed h-full z-40 flex flex-col border-r border-zinc-200 dark:border-zinc-800 bg-zinc-950 text-zinc-300 transition-all duration-200',
+        collapsed ? 'w-16' : 'w-60'
+      )}>
         {/* Logo */}
-        <div className="p-4 border-b border-indigo-700/50">
-          <Link to="/admin/dashboard" className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-              <i className="fas fa-car-side text-xl text-white"></i>
+        <div className="h-14 flex items-center px-4 border-b border-zinc-800 flex-shrink-0">
+          <Link to="/admin/dashboard" className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0">
+              <Car size={16} className="text-white" />
             </div>
-            {!sidebarCollapsed && (
-              <div>
-                <h1 className="text-xl font-bold">LOOPLANE</h1>
-                <p className="text-xs text-indigo-300">Admin Panel</p>
-              </div>
+            {!collapsed && (
+              <span className="font-semibold text-sm text-white tracking-wide">LoopLane</span>
             )}
           </Link>
         </div>
 
-        {/* Toggle Button */}
+        {/* Collapse toggle */}
         <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-500 transition"
+          onClick={() => setCollapsed(!collapsed)}
+          className="absolute -right-3 top-[4.5rem] w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center hover:bg-zinc-700 transition-colors z-50"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <i className={`fas fa-chevron-${sidebarCollapsed ? 'right' : 'left'} text-xs`}></i>
+          {collapsed ? <ChevronsRight size={12} className="text-zinc-400" /> : <ChevronsLeft size={12} className="text-zinc-400" />}
         </button>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-2">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                isActive(item.path)
-                  ? 'bg-white/20 shadow-lg'
-                  : 'hover:bg-white/10'
-              }`}
-              title={sidebarCollapsed ? item.label : undefined}
-            >
-              <i className={`fas ${item.icon} text-lg ${isActive(item.path) ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}></i>
-              {!sidebarCollapsed && (
-                <div>
-                  <p className="font-medium">{item.label}</p>
-                  <p className="text-xs text-indigo-300">{item.description}</p>
-                </div>
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3 px-2 space-y-4 scrollbar-hide">
+          {navGroups.map((group) => (
+            <div key={group.label}>
+              {!collapsed && (
+                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                  {group.label}
+                </p>
               )}
-              {isActive(item.path) && !sidebarCollapsed && (
-                <div className="ml-auto w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
-              )}
-            </Link>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = ICON_MAP[item.icon];
+                  const active = isActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      aria-current={active ? 'page' : undefined}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors',
+                        active
+                          ? 'bg-zinc-800 text-white font-medium'
+                          : 'text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200'
+                      )}
+                    >
+                      {Icon && <Icon size={18} className="flex-shrink-0" />}
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </nav>
 
-        {/* Divider */}
-        <div className="mx-4 my-4 border-t border-indigo-700/50"></div>
-
-        {/* Quick Actions */}
-        {!sidebarCollapsed && (
-          <div className="px-4 space-y-2">
-            <p className="text-xs text-indigo-400 uppercase tracking-wider mb-2">Quick Actions</p>
-            <Link
-              to="/dashboard"
-              className="flex items-center space-x-3 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition text-sm"
-            >
-              <i className="fas fa-arrow-left"></i>
-              <span>User Dashboard</span>
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 transition text-sm text-red-300"
-            >
-              <i className="fas fa-sign-out-alt"></i>
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-
-        {/* User Profile at Bottom */}
-        <div className={`absolute bottom-0 left-0 right-0 p-4 border-t border-indigo-700/50 bg-indigo-900/50`}>
-          <div className="flex items-center space-x-3">
+        {/* Bottom */}
+        <div className="flex-shrink-0 border-t border-zinc-800 p-2 space-y-1">
+          {!collapsed && (
+            <>
+              <Link
+                to="/dashboard"
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200 transition-colors"
+              >
+                <ArrowLeft size={18} />
+                <span>User Dashboard</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <LogOut size={18} />
+                <span>Logout</span>
+              </button>
+            </>
+          )}
+          <div className="flex items-center gap-3 px-3 py-2">
             {userPhoto ? (
-              <img
-                src={userPhoto}
-                alt={displayName}
-                className="w-10 h-10 rounded-full object-cover border-2 border-emerald-400"
-              />
+              <img src={userPhoto} alt={displayName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
             ) : (
-              <div className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center text-white font-bold border-2 border-emerald-400`}>
+              <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0', avatarColor)}>
                 {initials}
               </div>
             )}
-            {!sidebarCollapsed && (
+            {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{displayName}</p>
-                <p className="text-xs text-indigo-300 truncate">{user?.email}</p>
+                <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                <p className="text-[11px] text-zinc-500 truncate">{user?.email}</p>
               </div>
             )}
           </div>
@@ -144,57 +243,54 @@ const AdminLayout = ({ children }) => {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 ${sidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
+      <main className={cn('flex-1 transition-all duration-200', collapsed ? 'ml-16' : 'ml-60')}>
         {/* Top Header */}
-        <header className="bg-white shadow-sm sticky top-0 z-30">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800">
-                {navItems.find(item => isActive(item.path))?.label || 'Admin'}
-              </h2>
-              <p className="text-sm text-gray-500">
-                {navItems.find(item => isActive(item.path))?.description || 'Manage your platform'}
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              {/* User Menu */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition"
-                >
-                  {userPhoto ? (
-                    <img src={userPhoto} alt={displayName} className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <div className={`w-8 h-8 rounded-full ${avatarColor} flex items-center justify-center text-white text-sm font-bold`}>
-                      {initials}
-                    </div>
-                  )}
-                  <span className="text-gray-700 font-medium">{displayName?.split(' ')[0]}</span>
-                  <i className="fas fa-chevron-down text-xs text-gray-500"></i>
-                </button>
-
-                {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl py-2 z-50 border">
-                    <Link to="/profile" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-50">
-                      <i className="fas fa-user mr-3 text-gray-400"></i>Profile
-                    </Link>
-                    <Link to="/dashboard" className="flex items-center px-4 py-2 text-gray-700 hover:bg-gray-50">
-                      <i className="fas fa-home mr-3 text-gray-400"></i>User Dashboard
-                    </Link>
-                    <hr className="my-2" />
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50"
-                    >
-                      <i className="fas fa-sign-out-alt mr-3"></i>Logout
-                    </button>
-                  </div>
+        <header className="sticky top-0 z-30 h-14 bg-white dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-6">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-zinc-400">Admin</span>
+            {breadcrumbs.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-2">
+                <span className="text-zinc-300 dark:text-zinc-600">/</span>
+                {i === breadcrumbs.length - 1 ? (
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">{crumb.label}</span>
+                ) : (
+                  <Link to={crumb.path} className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
+                    {crumb.label}
+                  </Link>
                 )}
-              </div>
-            </div>
+              </span>
+            ))}
           </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex items-center gap-2 p-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors outline-none">
+              {userPhoto ? (
+                <img src={userPhoto} alt={displayName} className="w-7 h-7 rounded-full object-cover" />
+              ) : (
+                <div className={cn('w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold', avatarColor)}>
+                  {initials}
+                </div>
+              )}
+              <span className="text-sm text-zinc-700 dark:text-zinc-300 font-medium hidden sm:inline">{displayName?.split(' ')[0]}</span>
+              <ChevronDown size={14} className="text-zinc-400" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem asChild>
+                <Link to="/profile" className="flex items-center gap-2 cursor-pointer">
+                  <User size={14} /> Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/dashboard" className="flex items-center gap-2 cursor-pointer">
+                  <ArrowLeft size={14} /> User Dashboard
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-red-600 dark:text-red-400 cursor-pointer">
+                <LogOut size={14} className="mr-2" /> Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
         {/* Page Content */}
