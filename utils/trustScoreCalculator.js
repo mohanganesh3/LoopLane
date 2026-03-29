@@ -182,15 +182,17 @@ const calculateTrustScore = async (userId) => {
     
     const level = getTrustLevel(totalScore);
     
-    // Update user's trust score
-    user.trustScore = {
-        level,
-        score: totalScore,
-        lastCalculated: new Date(),
-        factors
-    };
-    
-    await user.save();
+    // Only save if score or level actually changed
+    if (user.trustScore?.score !== totalScore || user.trustScore?.level !== level) {
+        user.trustScore = {
+            level,
+            score: totalScore,
+            lastCalculated: new Date(),
+            factors
+        };
+        
+        await user.save();
+    }
     
     return {
         level,
@@ -232,83 +234,103 @@ const awardBadge = async (userId, badgeType) => {
 
 /**
  * Check and award applicable badges based on user activity
+ * Batched: single findById, evaluate all criteria in memory, single save
  */
 const checkAndAwardBadges = async (userId) => {
     const user = await User.findById(userId);
     if (!user) return [];
     
-    const awardedBadges = [];
+    const existingBadgeTypes = new Set((user.badges || []).map(b => b.type));
+    const newBadges = [];
+    
+    const mayAward = (type) => {
+        if (!BADGES[type] || existingBadgeTypes.has(type)) return;
+        newBadges.push({
+            type,
+            earnedAt: new Date(),
+            description: BADGES[type].description
+        });
+        existingBadgeTypes.add(type);
+    };
     
     // Verification badges
-    if (user.documents?.governmentId?.status === 'APPROVED') {
-        const badge = await awardBadge(userId, 'VERIFIED_ID');
-        if (badge) awardedBadges.push(badge);
-    }
-    
-    if (user.documents?.driverLicense?.status === 'APPROVED') {
-        const badge = await awardBadge(userId, 'VERIFIED_LICENSE');
-        if (badge) awardedBadges.push(badge);
-    }
-    
-    if (user.vehicles?.some(v => v.status === 'APPROVED')) {
-        const badge = await awardBadge(userId, 'VERIFIED_VEHICLE');
-        if (badge) awardedBadges.push(badge);
-    }
+    if (user.documents?.governmentId?.status === 'APPROVED') mayAward('VERIFIED_ID');
+    if (user.documents?.driverLicense?.status === 'APPROVED') mayAward('VERIFIED_LICENSE');
+    if (user.vehicles?.some(v => v.status === 'APPROVED')) mayAward('VERIFIED_VEHICLE');
     
     // Ride milestone badges
     const completedRides = user.statistics?.completedRides || 0;
-    
-    if (completedRides >= 1) {
-        const badge = await awardBadge(userId, 'FIRST_RIDE');
-        if (badge) awardedBadges.push(badge);
-    }
-    
-    if (completedRides >= 10) {
-        const badge = await awardBadge(userId, 'TEN_RIDES');
-        if (badge) awardedBadges.push(badge);
-    }
-    
-    if (completedRides >= 50) {
-        const badge = await awardBadge(userId, 'FIFTY_RIDES');
-        if (badge) awardedBadges.push(badge);
-    }
-    
-    if (completedRides >= 100) {
-        const badge = await awardBadge(userId, 'HUNDRED_RIDES');
-        if (badge) awardedBadges.push(badge);
-    }
+    if (completedRides >= 1) mayAward('FIRST_RIDE');
+    if (completedRides >= 10) mayAward('TEN_RIDES');
+    if (completedRides >= 50) mayAward('FIFTY_RIDES');
+    if (completedRides >= 100) mayAward('HUNDRED_RIDES');
     
     // Rating badges
-    if (user.rating?.overall >= 4.9 && user.rating?.totalRatings >= 10) {
-        const badge = await awardBadge(userId, 'FIVE_STAR_DRIVER');
-        if (badge) awardedBadges.push(badge);
-    }
+    if (user.rating?.overall >= 4.9 && user.rating?.totalRatings >= 10) mayAward('FIVE_STAR_DRIVER');
     
     // Eco badge
-    if ((user.statistics?.carbonSaved || 0) >= 100) {
-        const badge = await awardBadge(userId, 'ECO_CHAMPION');
-        if (badge) awardedBadges.push(badge);
-    }
+    if ((user.statistics?.carbonSaved || 0) >= 100) mayAward('ECO_CHAMPION');
     
     // Super host badge
-    if (completedRides >= 50 && (user.rating?.overall || 0) >= 4.5) {
-        const badge = await awardBadge(userId, 'SUPER_HOST');
-        if (badge) awardedBadges.push(badge);
-    }
+    if (completedRides >= 50 && (user.rating?.overall || 0) >= 4.5) mayAward('SUPER_HOST');
     
     // Quick responder badge
-    if (user.responseMetrics?.quickResponder) {
-        const badge = await awardBadge(userId, 'QUICK_RESPONDER');
-        if (badge) awardedBadges.push(badge);
-    }
+    if (user.responseMetrics?.quickResponder) mayAward('QUICK_RESPONDER');
     
     // Reliable driver badge
-    if ((user.cancellationRate?.rate || 0) <= 5 && (user.cancellationRate?.totalBookings || 0) >= 10) {
-        const badge = await awardBadge(userId, 'RELIABLE_DRIVER');
-        if (badge) awardedBadges.push(badge);
+    if ((user.cancellationRate?.rate || 0) <= 5 && (user.cancellationRate?.totalBookings || 0) >= 10) mayAward('RELIABLE_DRIVER');
+    
+    // Single save for all new badges
+    if (newBadges.length > 0) {
+        if (!user.badges) user.badges = [];
+        user.badges.push(...newBadges);
+        await user.save();
     }
     
-    return awardedBadges;
+    // Also update loyalty tier based on completed rides
+    await updateLoyaltyTier(userId);
+
+    return newBadges.map(b => ({
+        badge: b.type,
+        ...BADGES[b.type],
+        earnedAt: b.earnedAt
+    }));
+};
+
+/**
+ * Update gamification loyalty tier based on completed rides.
+ * BLUE: 0-9 rides, GOLD: 10-49 rides, PLATINUM: 50+ rides
+ */
+const updateLoyaltyTier = async (userId) => {
+    const user = await User.findById(userId).select('statistics.completedRides gamification');
+    if (!user) return null;
+
+    const completedRides = user.statistics?.completedRides || 0;
+    let newTier;
+    let nextTierProgress;
+
+    if (completedRides >= 50) {
+        newTier = 'PLATINUM';
+        nextTierProgress = 100;
+    } else if (completedRides >= 10) {
+        newTier = 'GOLD';
+        nextTierProgress = Math.round(((completedRides - 10) / 40) * 100); // 10→50 = 0→100%
+    } else {
+        newTier = 'BLUE';
+        nextTierProgress = Math.round((completedRides / 10) * 100); // 0→10 = 0→100%
+    }
+
+    const currentTier = user.gamification?.tier || 'BLUE';
+    if (currentTier !== newTier || (user.gamification?.nextTierProgress || 0) !== nextTierProgress) {
+        await User.findByIdAndUpdate(userId, {
+            $set: {
+                'gamification.tier': newTier,
+                'gamification.nextTierProgress': nextTierProgress
+            }
+        });
+    }
+
+    return { tier: newTier, nextTierProgress };
 };
 
 /**
@@ -348,6 +370,16 @@ const updateCancellationRate = async (userId, rideId, reason, wasLastMinute = fa
     await user.save();
     
     return user.cancellationRate;
+};
+
+/**
+ * Increment totalBookings counter so cancellation rate stays accurate.
+ * Call this every time a booking is successfully created.
+ */
+const incrementTotalBookings = async (userId) => {
+    await User.findByIdAndUpdate(userId, {
+        $inc: { 'cancellationRate.totalBookings': 1 }
+    });
 };
 
 /**
@@ -435,6 +467,8 @@ module.exports = {
     awardBadge,
     checkAndAwardBadges,
     updateCancellationRate,
+    incrementTotalBookings,
+    updateLoyaltyTier,
     updateResponseTime,
     calculateRecommendedPrice,
     getTrustLevel

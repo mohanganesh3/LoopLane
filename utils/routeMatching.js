@@ -13,8 +13,6 @@ class RouteMatching {
         // How far from the route polyline a point can be and still be considered "on route"
         this.ROUTE_PROXIMITY_THRESHOLD = 5; // 5 km from route line
         
-        console.log('🔧 [RouteMatching] Initialized');
-        console.log(`   ROUTE_PROXIMITY_THRESHOLD: ${this.ROUTE_PROXIMITY_THRESHOLD} km`);
     }
 
     /**
@@ -107,11 +105,9 @@ class RouteMatching {
             };
         }
 
-        console.log(`    Checking ${routeCoords.length} polyline points...`);
 
         // Step 1: Check if PICKUP is on the route
         const pickupResult = this.isPointOnRoute(pickup, routeCoords);
-        console.log(`    Pickup: ${pickupResult.isOnRoute ? '✅ ON ROUTE' : '❌ OFF ROUTE'} (${pickupResult.distance.toFixed(2)}km from route, threshold: ${this.ROUTE_PROXIMITY_THRESHOLD}km)`);
         
         if (!pickupResult.isOnRoute) {
             return {
@@ -122,7 +118,6 @@ class RouteMatching {
 
         // Step 2: Check if DROPOFF is on the route
         const dropoffResult = this.isPointOnRoute(dropoff, routeCoords);
-        console.log(`    Dropoff: ${dropoffResult.isOnRoute ? '✅ ON ROUTE' : '❌ OFF ROUTE'} (${dropoffResult.distance.toFixed(2)}km from route, threshold: ${this.ROUTE_PROXIMITY_THRESHOLD}km)`);
         
         if (!dropoffResult.isOnRoute) {
             return {
@@ -208,39 +203,29 @@ class RouteMatching {
     findMatchingRides(passengerRoute, availableRides, maxResults = 20) {
         const matches = [];
 
-        console.log('🔍 [findMatchingRides] Starting polyline matching for', availableRides.length, 'rides');
-        console.log('  Passenger pickup:', passengerRoute.pickup);
-        console.log('  Passenger dropoff:', passengerRoute.dropoff);
 
         for (const ride of availableRides) {
             // Skip if ride doesn't have route geometry
             if (!ride.route?.geometry?.coordinates || ride.route.geometry.coordinates.length < 2) {
-                console.log(`  ⚠️ Ride ${ride._id}: Skipped - no geometry`);
                 continue;
             }
 
-            console.log(`\n  🔄 Matching ride ${ride._id}:`);
-            console.log(`    Route: ${ride.route.start?.name} → ${ride.route.destination?.name}`);
-            console.log(`    Polyline points: ${ride.route.geometry.coordinates.length}`);
 
             // Match using polyline
             const matchResult = this.matchRoutes(passengerRoute, ride.route);
 
             if (matchResult.isMatch) {
-                console.log(`    ✅ MATCH! Score: ${matchResult.matchScore}, Quality: ${matchResult.matchQuality}`);
                 matches.push({
                     ride: ride,
                     matchDetails: matchResult
                 });
             } else {
-                console.log(`    ❌ No match: ${matchResult.reason}`);
             }
         }
 
         // Sort by match score (descending)
         matches.sort((a, b) => b.matchDetails.matchScore - a.matchDetails.matchScore);
 
-        console.log(`\n🎯 [findMatchingRides] Total matches: ${matches.length}`);
         return matches.slice(0, maxResults);
     }
 

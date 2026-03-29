@@ -15,8 +15,10 @@ const rideSchema = new mongoose.Schema({
     vehicle: {
         type: mongoose.Schema.Types.ObjectId,
         required: true
+        // Note: vehicles are subdocuments of User, not a separate collection.
+        // Use manual lookup from rider.vehicles array instead of populate().
     },
-    
+
     // Route Information
     route: {
         start: {
@@ -24,8 +26,7 @@ const rideSchema = new mongoose.Schema({
             address: String,
             coordinates: {
                 type: [Number], // [longitude, latitude]
-                required: true,
-                index: '2dsphere' // Geospatial index
+                required: true
             }
         },
         destination: {
@@ -33,8 +34,7 @@ const rideSchema = new mongoose.Schema({
             address: String,
             coordinates: {
                 type: [Number],
-                required: true,
-                index: '2dsphere'
+                required: true
             }
         },
         intermediateStops: [{
@@ -55,7 +55,7 @@ const rideSchema = new mongoose.Schema({
         distance: { type: Number, required: true }, // in kilometers
         duration: { type: Number, required: true } // in minutes
     },
-    
+
     // Schedule
     schedule: {
         date: { type: Date, required: true },
@@ -68,7 +68,23 @@ const rideSchema = new mongoose.Schema({
             time: String
         }
     },
-    
+
+    // F1: Recurring Rides
+    recurring: {
+        isRecurring: { type: Boolean, default: false },
+        pattern: {
+            type: String,
+            enum: ['DAILY', 'WEEKLY', 'WEEKDAYS', 'CUSTOM']
+        },
+        daysOfWeek: [{
+            type: Number, // 0 = Sunday, 1 = Monday, etc.
+            min: 0,
+            max: 6
+        }],
+        endDate: Date,
+        parentRideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' }
+    },
+
     // Pricing
     pricing: {
         pricePerSeat: { type: Number, required: true, min: 0 },
@@ -77,7 +93,7 @@ const rideSchema = new mongoose.Schema({
         currency: { type: String, default: 'INR' },
         totalEarnings: { type: Number, default: 0 }
     },
-    
+
     // Preferences & Rules
     preferences: {
         gender: {
@@ -105,13 +121,13 @@ const rideSchema = new mongoose.Schema({
         },
         maxLuggagePerPassenger: { type: Number, default: 1 }
     },
-    
+
     // Special Instructions
     specialInstructions: {
         type: String,
         maxlength: 500
     },
-    
+
     // Carbon Footprint
     carbon: {
         totalEmission: Number, // Total CO2 for journey
@@ -119,20 +135,20 @@ const rideSchema = new mongoose.Schema({
         carbonSaved: Number, // CO2 saved through carpooling
         equivalentTrees: Number // Trees equivalent
     },
-    
+
     // Ride Status
     status: {
         type: String,
         enum: ['ACTIVE', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'EXPIRED'],
         default: 'ACTIVE'
     },
-    
+
     // Bookings for this ride
     bookings: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Booking'
     }],
-    
+
     // Tracking Information (when ride is in progress)
     tracking: {
         isLive: { type: Boolean, default: false },
@@ -168,60 +184,78 @@ const rideSchema = new mongoose.Schema({
             timestamp: Date
         }]
     },
-    
+
     // Views and Interactions
     views: { type: Number, default: 0 },
     bookmarkCount: { type: Number, default: 0 },
-    
+
     // Cancellation
     cancellation: {
         cancelled: { type: Boolean, default: false },
         cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         cancelledAt: Date,
         reason: String
+    },
+
+    // GeoJSON point fields for 2dsphere indexing (synced from route.start/destination via pre-save)
+    startPoint: {
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] }
+    },
+    destPoint: {
+        type: { type: String, enum: ['Point'], default: 'Point' },
+        coordinates: { type: [Number] }
     }
-    
+
 }, {
     timestamps: true
 });
 
-// Indexes for efficient queries
-rideSchema.index({ 'route.start.coordinates': '2dsphere' });
-rideSchema.index({ 'route.destination.coordinates': '2dsphere' });
+// Indexes for efficient queries — use GeoJSON point fields for 2dsphere
+rideSchema.index({ startPoint: '2dsphere' });
+rideSchema.index({ destPoint: '2dsphere' });
 rideSchema.index({ rider: 1, status: 1 });
 rideSchema.index({ 'schedule.departureDateTime': 1 });
 rideSchema.index({ status: 1, 'schedule.departureDateTime': 1 });
 rideSchema.index({ 'pricing.availableSeats': 1 });
 
-// Pre-save middleware to set availableSeats
-rideSchema.pre('save', function(next) {
+// Sync GeoJSON point fields from route.start/destination coordinates
+rideSchema.pre('save', function (next) {
     if (this.isNew) {
         this.pricing.availableSeats = this.pricing.totalSeats;
     }
+
+    // Sync start/dest GeoJSON points for geospatial queries
+    if (this.route?.start?.coordinates?.length >= 2) {
+        this.startPoint = {
+            type: 'Point',
+            coordinates: this.route.start.coordinates
+        };
+    }
+    if (this.route?.destination?.coordinates?.length >= 2) {
+        this.destPoint = {
+            type: 'Point',
+            coordinates: this.route.destination.coordinates
+        };
+    }
+
     next();
 });
 
 // Method to check if ride is bookable
-rideSchema.methods.isBookable = function() {
-    return this.status === 'ACTIVE' && 
-           this.pricing.availableSeats > 0 && 
-           new Date(this.schedule.departureDateTime) > new Date();
-};
-
-// Method to calculate route matching score
-rideSchema.methods.calculateMatchScore = function(pickupCoords, dropoffCoords) {
-    // This will be implemented in the controller using Turf.js
-    // Returns a score between 0-100 indicating how well this ride matches
-    return 0;
+rideSchema.methods.isBookable = function () {
+    return this.status === 'ACTIVE' &&
+        this.pricing.availableSeats > 0 &&
+        new Date(this.schedule.departureDateTime) > new Date();
 };
 
 // Virtual for formatted price
-rideSchema.virtual('formattedPrice').get(function() {
+rideSchema.virtual('formattedPrice').get(function () {
     return `₹${this.pricing.pricePerSeat}`;
 });
 
 // Virtual for seats info
-rideSchema.virtual('seatsInfo').get(function() {
+rideSchema.virtual('seatsInfo').get(function () {
     return `${this.pricing.availableSeats}/${this.pricing.totalSeats} available`;
 });
 

@@ -14,27 +14,70 @@ const { AppError, asyncHandler } = require('../middleware/errorHandler');
 const helpers = require('../utils/helpers');
 const { sendEmail } = require('../config/email');
 
+const VEHICLE_TYPE_ALIASES = {
+    CAR: 'SEDAN',
+    BIKE: 'MOTORCYCLE',
+    SCOOTER: 'MOTORCYCLE'
+};
+
+const toPlainObject = (value) => {
+    if (!value) return {};
+    return typeof value.toObject === 'function' ? value.toObject() : value;
+};
+
+const mergeObjects = (base, updates) => ({
+    ...toPlainObject(base),
+    ...updates
+});
+
+const normalizeVehicleType = (value) => {
+    if (!value) return undefined;
+
+    const normalized = String(value).trim().toUpperCase();
+    return VEHICLE_TYPE_ALIASES[normalized] || normalized;
+};
+
+const normalizeVehiclePayload = (payload = {}) => {
+    const vehicleType = normalizeVehicleType(payload.vehicleType || payload.type);
+    const licensePlate = payload.licensePlate || payload.registrationNumber || payload.vehicleNumber;
+    const seats = payload.seats || payload.seatingCapacity || payload.capacity;
+
+    return {
+        vehicleType,
+        make: payload.make ? String(payload.make).trim() : undefined,
+        model: payload.model ? String(payload.model).trim() : undefined,
+        year: payload.year !== undefined ? parseInt(payload.year, 10) : undefined,
+        color: payload.color ? String(payload.color).trim() : undefined,
+        licensePlate: licensePlate ? String(licensePlate).trim().toUpperCase() : undefined,
+        seats: seats !== undefined ? parseInt(seats, 10) : undefined
+    };
+};
+
+const preventConditionalProfileCaching = (req, res) => {
+    // Authenticated profile payloads must always return fresh JSON, not 304 responses.
+    delete req.headers['if-none-match'];
+    delete req.headers['if-modified-since'];
+
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+        Pragma: 'no-cache',
+        Expires: '0',
+        'Surrogate-Control': 'no-store'
+    });
+};
+
 /**
  * Show user dashboard
  */
 exports.showDashboard = asyncHandler(async (req, res) => {
     const now = new Date();
-    
-    console.log('📊 [Dashboard] Request from user:', req.user?._id);
-    
+
+
     // Re-fetch user with complete data including vehicles and documents
     const user = await User.findById(req.user._id)
         .select('role vehicles documents verificationStatus profile email rating statistics')
         .lean();
-    
-    console.log('📊 [Dashboard] User fetched:', user ? {
-        _id: user._id,
-        email: user.email,
-        role: user.role,
-        vehiclesCount: user.vehicles?.length || 0,
-        vehicles: user.vehicles?.map(v => ({ licensePlate: v.licensePlate, status: v.status }))
-    } : 'NOT FOUND');
-    
+
     if (!user) {
         return res.status(404).json({
             success: false,
@@ -47,16 +90,8 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         // Check if vehicles array is empty or doesn't exist OR no approved vehicles
         const hasApprovedVehicle = user.vehicles && user.vehicles.some(v => v.status === 'APPROVED');
         const hasAnyVehicle = user.vehicles && user.vehicles.length > 0;
-        
-        console.log('📊 [Dashboard] Profile check:', { 
-            role: user.role, 
-            hasAnyVehicle, 
-            hasApprovedVehicle,
-            vehiclesArray: user.vehicles
-        });
-        
+
         if (!hasAnyVehicle) {
-            console.log('📊 [Dashboard] ⚠️ Returning requiresProfileCompletion=true (no vehicles)');
             return res.json({
                 success: true,
                 requiresProfileCompletion: true,
@@ -64,13 +99,13 @@ exports.showDashboard = asyncHandler(async (req, res) => {
                 message: 'Please complete your profile and add vehicle details'
             });
         }
-        
+
         // Check if documents are not uploaded AND status is UNVERIFIED (not PENDING or VERIFIED)
         const hasLicense = user.documents?.driverLicense?.frontImage;
-        const verificationPending = user.verificationStatus === 'PENDING' || 
-                                    user.verificationStatus === 'UNDER_REVIEW' ||
-                                    user.verificationStatus === 'VERIFIED';
-        
+        const verificationPending = user.verificationStatus === 'PENDING' ||
+            user.verificationStatus === 'UNDER_REVIEW' ||
+            user.verificationStatus === 'VERIFIED';
+
         if (!hasLicense && !verificationPending) {
             return res.json({
                 success: true,
@@ -89,40 +124,46 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         // Get rider's upcoming rides
         const rides = await Ride.find({
             rider: user._id,
-            departureTime: { $gte: now },
+            'schedule.departureDateTime': { $gte: now },
             status: { $in: ['ACTIVE', 'IN_PROGRESS'] }
         })
-        .populate('bookings.passenger', 'name profilePhoto rating')
-        .sort({ departureTime: 1 })
-        .limit(5);
+            .populate({
+                path: 'bookings',
+                populate: {
+                    path: 'passenger',
+                    select: 'profile.firstName profile.lastName profile.photo rating'
+                }
+            })
+            .sort({ 'schedule.departureDateTime': 1 })
+            .limit(5);
 
         upcomingTrips = rides;
 
         // Calculate rider stats
         const totalRides = await Ride.countDocuments({ rider: user._id });
-        const completedRides = await Ride.countDocuments({ 
-            rider: user._id, 
-            status: 'COMPLETED' 
+        const completedRides = await Ride.countDocuments({
+            rider: user._id,
+            status: 'COMPLETED'
+        });
+        const cancelledRides = await Ride.countDocuments({
+            rider: user._id,
+            status: 'CANCELLED'
+        });
+        const pendingBookings = await Booking.countDocuments({
+            ride: { $in: await Ride.find({ rider: user._id }).distinct('_id') },
+            status: 'PENDING'
         });
         const totalEarnings = await Booking.aggregate([
             {
-                $lookup: {
-                    from: 'rides',
-                    localField: 'ride',
-                    foreignField: '_id',
-                    as: 'rideInfo'
-                }
-            },
-            {
                 $match: {
-                    'rideInfo.rider': user._id,
+                    rider: user._id,
                     status: 'COMPLETED'
                 }
             },
             {
                 $group: {
                     _id: null,
-                    total: { $sum: '$payment.amount' }
+                    total: { $sum: { $ifNull: ['$payment.rideFare', '$payment.amount'] } }
                 }
             }
         ]);
@@ -130,7 +171,9 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         stats = {
             totalRides,
             completedRides,
-            activeRides: totalRides - completedRides,
+            cancelledRides,
+            pendingBookings,
+            activeRides: totalRides - completedRides - cancelledRides,
             totalEarnings: totalEarnings[0]?.total || 0,
             carbonSaved: user.statistics?.carbonSaved || 0,
             rating: user.rating?.overall || 0
@@ -139,23 +182,32 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         // Get passenger's upcoming bookings
         const bookings = await Booking.find({
             passenger: user._id,
-            'journeyDetails.actualPickupTime': { $gte: now },
-            status: { $in: ['CONFIRMED', 'IN_PROGRESS'] }
+            status: { $in: ['CONFIRMED', 'PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING'] }
         })
-        .populate({
-            path: 'ride',
-            populate: { path: 'rider', select: 'name profilePhoto rating vehicles' }
-        })
-        .sort({ 'journeyDetails.actualPickupTime': 1 })
-        .limit(5);
+            .populate({
+                path: 'ride',
+                populate: { path: 'rider', select: 'profile.firstName profile.lastName profile.photo rating vehicles' }
+            })
+            .sort({ createdAt: 1 });
 
-        upcomingTrips = bookings;
+        upcomingTrips = bookings
+            .filter((booking) => booking.ride?.schedule?.departureDateTime && new Date(booking.ride.schedule.departureDateTime) >= now)
+            .sort((a, b) => new Date(a.ride.schedule.departureDateTime) - new Date(b.ride.schedule.departureDateTime))
+            .slice(0, 5);
 
         // Calculate passenger stats
         const totalBookings = await Booking.countDocuments({ passenger: user._id });
         const completedBookings = await Booking.countDocuments({
             passenger: user._id,
             status: 'COMPLETED'
+        });
+        const cancelledBookings = await Booking.countDocuments({
+            passenger: user._id,
+            status: 'CANCELLED'
+        });
+        const pendingBookingsCount = await Booking.countDocuments({
+            passenger: user._id,
+            status: 'PENDING'
         });
         const totalSpent = await Booking.aggregate([
             {
@@ -175,7 +227,9 @@ exports.showDashboard = asyncHandler(async (req, res) => {
         stats = {
             totalBookings,
             completedBookings,
-            activeBookings: totalBookings - completedBookings,
+            cancelledBookings,
+            pendingBookings: pendingBookingsCount,
+            activeBookings: totalBookings - completedBookings - cancelledBookings,
             totalSpent: totalSpent[0]?.total || 0,
             carbonSaved: user.statistics?.carbonSaved || 0,
             rating: user.rating?.overall || 0
@@ -275,7 +329,7 @@ exports.completeProfile = asyncHandler(async (req, res) => {
     if (!user.preferences) {
         user.preferences = {};
     }
-    
+
     user.preferences.genderPreference = genderPreference || 'ANY';
     user.preferences.musicPreference = musicPreference || 'OPEN_TO_REQUESTS';
     user.preferences.smokingAllowed = smokingAllowed === 'on';
@@ -327,7 +381,7 @@ exports.uploadDocumentsLegacy = asyncHandler(async (req, res) => {
         // Forward to modern handler
         return exports.uploadDocumentsAPI(req, res);
     }
-    
+
     // Legacy EJS handling
     const user = await User.findById(req.user._id);
 
@@ -343,7 +397,7 @@ exports.uploadDocumentsLegacy = asyncHandler(async (req, res) => {
 
     // Process files and update user
     await processDocumentUpload(user, req.files);
-    
+
     if (req.flash) req.flash('success', 'Documents uploaded successfully! Admin will verify within 24-48 hours.');
     res.redirect('/user/dashboard');
 });
@@ -359,9 +413,9 @@ exports.showProfile = asyncHandler(async (req, res) => {
     const reviews = await Review.find({
         reviewee: user._id
     })
-    .populate('reviewer', 'name profilePhoto')
-    .sort({ createdAt: -1 })
-    .limit(10);
+        .populate('reviewer', 'name profilePhoto')
+        .sort({ createdAt: -1 })
+        .limit(10);
 
     res.json({
         success: true,
@@ -376,6 +430,8 @@ exports.showProfile = asyncHandler(async (req, res) => {
  * ✅ CHECKS: Account suspension status
  */
 exports.getProfileAPI = asyncHandler(async (req, res) => {
+    preventConditionalProfileCaching(req, res);
+
     const user = await User.findById(req.user._id)
         .populate('emergencyContacts')
         .select('-password -resetPasswordToken -resetPasswordExpires');
@@ -387,7 +443,7 @@ exports.getProfileAPI = asyncHandler(async (req, res) => {
             forceLogout: true
         });
     }
-    
+
     // Check if account is suspended
     if (user.accountStatus === 'SUSPENDED' || user.isSuspended) {
         return res.status(403).json({
@@ -397,7 +453,7 @@ exports.getProfileAPI = asyncHandler(async (req, res) => {
             forceLogout: true
         });
     }
-    
+
     // Check if account is deleted
     if (user.accountStatus === 'DELETED') {
         return res.status(403).json({
@@ -412,9 +468,9 @@ exports.getProfileAPI = asyncHandler(async (req, res) => {
     const reviews = await Review.find({
         reviewee: user._id
     })
-    .populate('reviewer', 'name profilePhoto')
-    .sort({ createdAt: -1 })
-    .limit(10);
+        .populate('reviewer', 'name profilePhoto')
+        .sort({ createdAt: -1 })
+        .limit(10);
 
     res.status(200).json({
         success: true,
@@ -429,7 +485,7 @@ exports.getProfileAPI = asyncHandler(async (req, res) => {
  */
 exports.getPublicProfile = asyncHandler(async (req, res) => {
     const { userId } = req.params;
-    
+
     const targetUser = await User.findById(userId)
         .select('profile rating statistics verificationStatus createdAt preferences.privacy.profileVisibility preferences.rideComfort');
 
@@ -439,7 +495,7 @@ exports.getPublicProfile = asyncHandler(async (req, res) => {
 
     // ✅ CHECK PROFILE VISIBILITY
     const visibility = targetUser.preferences?.privacy?.profileVisibility || 'PUBLIC';
-    
+
     if (visibility === 'PRIVATE') {
         // Check if there's a confirmed booking between these users
         const hasBookingRelation = await Booking.findOne({
@@ -448,7 +504,7 @@ exports.getPublicProfile = asyncHandler(async (req, res) => {
                 { passenger: userId, rider: req.user._id, status: { $in: ['CONFIRMED', 'COMPLETED'] } }
             ]
         });
-        
+
         if (!hasBookingRelation) {
             return res.status(200).json({
                 success: true,
@@ -466,7 +522,7 @@ exports.getPublicProfile = asyncHandler(async (req, res) => {
             });
         }
     }
-    
+
     if (visibility === 'VERIFIED_ONLY' && req.user.verificationStatus !== 'VERIFIED') {
         return res.status(200).json({
             success: true,
@@ -509,6 +565,8 @@ exports.getPublicProfile = asyncHandler(async (req, res) => {
  * Get profile data (for SOS page and other components)
  */
 exports.getProfileData = asyncHandler(async (req, res) => {
+    preventConditionalProfileCaching(req, res);
+
     const user = await User.findById(req.user._id)
         .select('profile email phone emergencyContacts');
 
@@ -525,37 +583,43 @@ exports.getProfileData = asyncHandler(async (req, res) => {
  * Update profile with comprehensive validation and normalization
  */
 exports.updateProfile = asyncHandler(async (req, res) => {
-    console.log('📝 [Profile Update] Request:', { userId: req.user._id, body: req.body });
-    
+
     const user = await User.findById(req.user._id);
     const { name, bio, preferences, profile, address, gender, phone } = req.body;
+
+    if (!user.profile) {
+        user.profile = {};
+    }
 
     // ============================================
     // NORMALIZE AND VALIDATE INPUT DATA
     // ============================================
-    
+
     // Update basic info
     if (name) {
         if (typeof name !== 'string' || name.trim().length < 2) {
-            throw new AppError('❌ Invalid Name: Name must be at least 2 characters long.', 400);
+            throw new AppError('Invalid Name: Name must be at least 2 characters long.', 400);
         }
-        user.name = name.trim();
+        const [firstName, ...rest] = name.trim().split(/\s+/);
+        user.profile.firstName = firstName;
+        if (rest.length > 0) {
+            user.profile.lastName = rest.join(' ');
+        }
     }
-    
+
     // Update phone number
     if (phone !== undefined) {
         user.phone = phone.trim();
-        console.log('📱 [Profile Update] Phone updated to:', user.phone);
     }
-    
+
     if (bio !== undefined) {
         if (typeof bio !== 'string') {
-            throw new AppError('❌ Invalid Bio: Bio must be a string.', 400);
+            throw new AppError('Invalid Bio: Bio must be a string.', 400);
         }
         if (bio.length > 500) {
-            throw new AppError(`📝 Bio Too Long: Your bio is ${bio.length} characters, but maximum is 500. Please shorten by ${bio.length - 500} characters.`, 400);
+            throw new AppError(`Bio Too Long: Your bio is ${bio.length} characters, but maximum is 500. Please shorten by ${bio.length - 500} characters.`, 400);
         }
-        user.bio = bio.trim();
+        user.profile.bio = bio.trim();
     }
 
     // ============================================
@@ -563,28 +627,27 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     // ============================================
     if (profile) {
         let profileData = typeof profile === 'string' ? JSON.parse(profile) : profile;
-        
+
         // Update the main name field if firstName/lastName are provided
         if (profileData.firstName || profileData.lastName) {
-            const firstName = profileData.firstName || user.profile?.firstName || '';
-            const lastName = profileData.lastName || user.profile?.lastName || '';
-            user.name = `${firstName} ${lastName}`.trim();
+            profileData.firstName = profileData.firstName || user.profile?.firstName || '';
+            profileData.lastName = profileData.lastName || user.profile?.lastName || '';
         }
-        
+
         // Normalize gender to uppercase enum values
         if (profileData.gender) {
             const genderUpper = profileData.gender.toUpperCase();
             const validGenders = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'];
-            
+
             if (!validGenders.includes(genderUpper)) {
                 throw new AppError(
-                    `👤 Invalid Gender: "${profileData.gender}" is not valid. Please select from: Male, Female, Other, or Prefer Not to Say.`,
+                    `Invalid Gender: "${profileData.gender}" is not valid. Please select from: Male, Female, Other, or Prefer Not to Say.`,
                     400
                 );
             }
             profileData.gender = genderUpper;
         }
-        
+
         // Handle address - convert string to object if needed
         if (profileData.address) {
             if (typeof profileData.address === 'string') {
@@ -597,7 +660,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
                     zipCode: '',
                     country: 'India'
                 };
-                
+
                 // Try to extract city/state from comma-separated string
                 const parts = addressStr.split(',').map(p => p.trim()).filter(p => p);
                 if (parts.length >= 2) {
@@ -615,12 +678,9 @@ exports.updateProfile = asyncHandler(async (req, res) => {
                 };
             }
         }
-        
+
         // Merge with existing profile
-        user.profile = {
-            ...user.profile.toObject(),
-            ...profileData
-        };
+        user.profile = mergeObjects(user.profile, profileData);
     }
 
     // ============================================
@@ -629,14 +689,14 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     if (gender && !profile) {
         const genderUpper = gender.toUpperCase();
         const validGenders = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'];
-        
+
         if (!validGenders.includes(genderUpper)) {
             throw new AppError(
-                `👤 Invalid Gender: "${gender}" is not valid. ✅ Valid options: Male, Female, Other, Prefer Not to Say.`,
+                `Invalid Gender: "${gender}" is not valid. Valid options: Male, Female, Other, Prefer Not to Say.`,
                 400
             );
         }
-        
+
         user.profile.gender = genderUpper;
     }
 
@@ -653,7 +713,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
                 zipCode: '',
                 country: 'India'
             };
-            
+
             // Try to parse comma-separated address
             const parts = addressStr.split(',').map(p => p.trim()).filter(p => p);
             if (parts.length >= 2) {
@@ -677,12 +737,9 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     if (preferences) {
         try {
             const prefsData = typeof preferences === 'string' ? JSON.parse(preferences) : preferences;
-            user.preferences = {
-                ...user.preferences.toObject(),
-                ...prefsData
-            };
+            user.preferences = mergeObjects(user.preferences, prefsData);
         } catch (e) {
-            throw new AppError('❌ Invalid Preferences: Unable to parse preferences data.', 400);
+            throw new AppError('Invalid Preferences: Unable to parse preferences data.', 400);
         }
     }
 
@@ -692,9 +749,9 @@ exports.updateProfile = asyncHandler(async (req, res) => {
     if (req.files && req.files.profilePhoto) {
         const photoPath = req.files.profilePhoto[0].path;
         if (!photoPath || !photoPath.match(/\.(jpg|jpeg|png|gif)$/i)) {
-            throw new AppError('❌ Invalid Image: Profile photo must be JPG, PNG, or GIF format.', 400);
+            throw new AppError('Invalid Image: Profile photo must be JPG, PNG, or GIF format.', 400);
         }
-        user.profilePhoto = photoPath;
+        user.profile.photo = photoPath;
     }
 
     // ============================================
@@ -704,7 +761,7 @@ exports.updateProfile = asyncHandler(async (req, res) => {
         await user.save();
     } catch (saveError) {
         console.error('Profile save error:', saveError);
-        
+
         // Handle specific mongoose validation errors
         if (saveError.name === 'ValidationError') {
             const errorMessages = Object.values(saveError.errors).map(err => {
@@ -715,21 +772,20 @@ exports.updateProfile = asyncHandler(async (req, res) => {
             });
             throw new AppError(`Validation Error: ${errorMessages.join(', ')}`, 400);
         }
-        
+
         throw saveError;
     }
 
     res.status(200).json({
         success: true,
-        message: '✅ Profile updated successfully!',
+        message: 'Profile updated successfully',
         user: {
             _id: user._id,
-            name: user.name,
             email: user.email,
             phone: user.phone,
             profile: user.profile,
-            profilePhoto: user.profilePhoto,
-            bio: user.bio,
+            profilePhoto: user.profile?.photo,
+            bio: user.profile?.bio,
             preferences: user.preferences
         }
     });
@@ -788,15 +844,16 @@ exports.addVehicle = asyncHandler(async (req, res) => {
         throw new AppError('Only riders can add vehicles', 400);
     }
 
-    const { type, make, model, year, registrationNumber, color, seatingCapacity } = req.body;
+    const normalizedVehicle = normalizeVehiclePayload(req.body);
+    const { vehicleType, make, model, year, licensePlate, color, seats } = normalizedVehicle;
 
     // Validate required fields
-    if (!type || !make || !model || !year || !registrationNumber || !seatingCapacity) {
+    if (!vehicleType || !make || !model || !year || !licensePlate || !seats) {
         throw new AppError('All vehicle fields are required', 400);
     }
 
     // Validate field formats
-    if (typeof type !== 'string' || type.trim().length === 0) {
+    if (typeof vehicleType !== 'string' || vehicleType.trim().length === 0) {
         throw new AppError('Vehicle type is required', 400);
     }
 
@@ -816,26 +873,34 @@ exports.addVehicle = asyncHandler(async (req, res) => {
     }
 
     // Validate registration number
-    const cleanRegistrationNumber = registrationNumber.trim().toUpperCase();
-    if (cleanRegistrationNumber.length === 0) {
+    if (licensePlate.length === 0) {
         throw new AppError('Registration number is required', 400);
     }
 
     // Validate seating capacity
-    const capacity = parseInt(seatingCapacity);
-    if (isNaN(capacity) || capacity < 1 || capacity > 15) {
+    if (isNaN(seats) || seats < 1 || seats > 15) {
         throw new AppError('Seating capacity must be between 1 and 15', 400);
     }
 
+    const existingVehicle = await User.findOne({
+        _id: { $ne: user._id },
+        'vehicles.licensePlate': licensePlate
+    });
+
+    if (existingVehicle) {
+        throw new AppError('A vehicle with this registration number already exists', 400);
+    }
+
     const vehicle = {
-        type: type.trim(),
-        make: make.trim(),
-        model: model.trim(),
+        vehicleType,
+        make,
+        model,
         year: vehicleYear,
-        registrationNumber: cleanRegistrationNumber,
-        color: color ? color.trim() : '',
-        seatingCapacity: capacity,
-        isVerified: false
+        licensePlate,
+        color: color || '',
+        seats,
+        isDefault: !user.vehicles || user.vehicles.length === 0,
+        status: 'PENDING'
     };
 
     if (req.files && req.files.vehiclePhoto && req.files.vehiclePhoto.length > 0) {
@@ -888,46 +953,57 @@ exports.showTripHistory = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 10;
     const skip = (page - 1) * limit;
+    const statusFilter = req.query.status; // optional status filter
+    const dateFrom = req.query.dateFrom;
+    const dateTo = req.query.dateTo;
 
     let trips, totalTrips;
 
     if (user.role === 'RIDER') {
-        // For riders, fetch completed rides
-        totalTrips = await Ride.countDocuments({
-            rider: user._id,
-            status: 'COMPLETED'
-        });
+        // For riders, fetch rides
+        const rideQuery = { rider: user._id };
+        if (statusFilter) {
+            rideQuery.status = statusFilter;
+        } else {
+            rideQuery.status = 'COMPLETED';
+        }
 
-        const rides = await Ride.find({
-            rider: user._id,
-            status: 'COMPLETED'
-        })
-        .populate({
-            path: 'bookings',
-            populate: {
-                path: 'passenger',
-                select: 'name profilePhoto rating'
-            }
-        })
-        .sort({ 'schedule.departureDateTime': -1 })
-        .skip(skip)
-        .limit(limit);
+        // Date range filter
+        if (dateFrom || dateTo) {
+            rideQuery['schedule.departureDateTime'] = {};
+            if (dateFrom) rideQuery['schedule.departureDateTime'].$gte = new Date(dateFrom);
+            if (dateTo) rideQuery['schedule.departureDateTime'].$lte = new Date(dateTo + 'T23:59:59.999Z');
+        }
+
+        totalTrips = await Ride.countDocuments(rideQuery);
+
+        const rides = await Ride.find(rideQuery)
+            .populate({
+                path: 'bookings',
+                populate: {
+                    path: 'passenger',
+                    select: 'name profilePhoto rating'
+                }
+            })
+            .sort({ 'schedule.departureDateTime': -1 })
+            .skip(skip)
+            .limit(limit);
 
         // Transform rides to include expected properties and carbon calculations
         trips = rides.map(ride => {
             const rideObj = ride.toObject();
-            
+
             // Calculate carbon savings for this ride
             let carbonSaved = 0;
             const distance = rideObj.route?.distance || 0;
             const completedBookings = (rideObj.bookings || []).filter(b => b.status === 'COMPLETED');
             const totalPassengers = completedBookings.length;
-            
+
             if (distance > 0 && totalPassengers > 0) {
                 const vehicle = user.vehicles?.find(v => v._id.toString() === rideObj.vehicle?.toString());
-                const vehicleType = vehicle?.type || 'SEDAN';
+                const vehicleType = vehicle?.vehicleType || vehicle?.type || 'SEDAN';
                 const fuelType = vehicle?.fuelType || 'PETROL';
-                
+
                 const savings = carbonCalculator.calculateCarbonSaved(
                     distance,
                     vehicleType,
@@ -936,7 +1012,7 @@ exports.showTripHistory = asyncHandler(async (req, res) => {
                 );
                 carbonSaved = savings.totalSaved;
             }
-            
+
             return {
                 ...rideObj,
                 // Map route.start to from for template compatibility
@@ -957,48 +1033,75 @@ exports.showTripHistory = asyncHandler(async (req, res) => {
             };
         });
     } else {
-        // For passengers, fetch completed bookings
-        totalTrips = await Booking.countDocuments({
-            passenger: user._id,
-            status: 'COMPLETED'
-        });
+        // For passengers, fetch bookings
+        const bookingQuery = { passenger: user._id };
+        if (statusFilter) {
+            const statusUpper = String(statusFilter).toUpperCase();
 
-        trips = await Booking.find({
-            passenger: user._id,
-            status: 'COMPLETED'
-        })
-        .populate({
-            path: 'ride',
-            populate: { path: 'rider', select: 'name profilePhoto rating vehicles' }
-        })
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit);
+            if (statusUpper === 'COMPLETED') {
+                bookingQuery.$or = [
+                    { status: 'COMPLETED' },
+                    {
+                        status: 'DROPPED_OFF',
+                        'payment.status': { $in: ['PAID', 'PAYMENT_CONFIRMED'] }
+                    }
+                ];
+            } else if (statusUpper === 'IN_PROGRESS') {
+                bookingQuery.status = { $in: ['PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DROPOFF_PENDING', 'DROPPED_OFF'] };
+            } else if (statusUpper === 'CANCELLED') {
+                bookingQuery.status = { $in: ['CANCELLED', 'REJECTED', 'EXPIRED'] };
+            } else {
+                bookingQuery.status = statusUpper;
+            }
+        } else {
+            bookingQuery.status = 'COMPLETED';
+        }
+
+        // Date range filter
+        if (dateFrom || dateTo) {
+            bookingQuery.createdAt = {};
+            if (dateFrom) bookingQuery.createdAt.$gte = new Date(dateFrom);
+            if (dateTo) bookingQuery.createdAt.$lte = new Date(dateTo + 'T23:59:59.999Z');
+        }
+
+        totalTrips = await Booking.countDocuments(bookingQuery);
+
+        trips = await Booking.find(bookingQuery)
+            .populate({
+                path: 'ride',
+                populate: [
+                    { path: 'rider', select: 'name profile profilePhoto rating vehicles' },
+                    { path: 'bookings', select: 'status seatsBooked' }
+                ]
+            })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
 
         // Transform bookings to include expected properties from ride and carbon calculations
         trips = trips.map(booking => {
             const bookingObj = booking.toObject();
-            
+
             // Ensure totalAmount is available at top level
             if (!bookingObj.totalAmount && bookingObj.payment?.totalAmount) {
                 bookingObj.totalAmount = bookingObj.payment.totalAmount;
             }
-            
+
             // Add completion date
             bookingObj.completedAt = bookingObj.journey?.completedAt || bookingObj.updatedAt;
-            
+
             // Calculate carbon savings for passenger
             let carbonSaved = 0;
             if (bookingObj.ride) {
                 const distance = bookingObj.ride.route?.distance || 0;
                 const totalPassengers = (bookingObj.ride.bookings || []).filter(b => b.status === 'COMPLETED').length;
-                
+
                 if (distance > 0 && totalPassengers > 0) {
                     const rider = bookingObj.ride.rider;
                     const vehicle = rider?.vehicles?.find(v => v._id.toString() === bookingObj.ride.vehicle?.toString());
-                    const vehicleType = vehicle?.type || 'SEDAN';
+                    const vehicleType = vehicle?.vehicleType || vehicle?.type || 'SEDAN';
                     const fuelType = vehicle?.fuelType || 'PETROL';
-                    
+
                     const savings = carbonCalculator.calculateCarbonSaved(
                         distance,
                         vehicleType,
@@ -1008,7 +1111,7 @@ exports.showTripHistory = asyncHandler(async (req, res) => {
                     // Passenger's share of savings
                     carbonSaved = savings.savedPerPerson;
                 }
-                
+
                 // Add ride data at booking level for easier access
                 bookingObj.ride.from = {
                     address: bookingObj.ride.route?.start?.address || bookingObj.ride.route?.start?.name || 'Not available',
@@ -1022,7 +1125,7 @@ exports.showTripHistory = asyncHandler(async (req, res) => {
                 bookingObj.ride.departureTime = bookingObj.ride.schedule?.departureDateTime;
                 bookingObj.ride.vehicle = bookingObj.ride.vehicle || null;
             }
-            
+
             bookingObj.carbonSaved = parseFloat(carbonSaved.toFixed(2));
             return bookingObj;
         });
@@ -1066,9 +1169,9 @@ exports.showSettings = (req, res) => {
  */
 exports.updateSettings = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
-    const { 
+    const {
         // Notification Preferences
-        emailNotifications, 
+        emailNotifications,
         pushNotifications,
         rideAlerts,
         // Privacy Settings
@@ -1093,7 +1196,7 @@ exports.updateSettings = asyncHandler(async (req, res) => {
     // ✅ UPDATE NOTIFICATION PREFERENCES
     if (!user.preferences) user.preferences = {};
     if (!user.preferences.notifications) user.preferences.notifications = {};
-    
+
     if (emailNotifications !== undefined) {
         user.preferences.notifications.email = emailNotifications === 'true' || emailNotifications === true;
     }
@@ -1106,7 +1209,7 @@ exports.updateSettings = asyncHandler(async (req, res) => {
 
     // ✅ UPDATE PRIVACY SETTINGS
     if (!user.preferences.privacy) user.preferences.privacy = {};
-    
+
     if (shareLocation !== undefined) {
         user.preferences.privacy.shareLocation = shareLocation === 'true' || shareLocation === true;
     }
@@ -1125,14 +1228,14 @@ exports.updateSettings = asyncHandler(async (req, res) => {
 
     // ✅ UPDATE SECURITY SETTINGS
     if (!user.preferences.security) user.preferences.security = {};
-    
+
     if (twoFactorEnabled !== undefined) {
         user.preferences.security.twoFactorEnabled = twoFactorEnabled === 'true' || twoFactorEnabled === true;
     }
 
     // ✅ UPDATE RIDE COMFORT PREFERENCES
     if (!user.preferences.rideComfort) user.preferences.rideComfort = {};
-    
+
     if (musicPreference !== undefined) {
         const validMusic = ['NO_MUSIC', 'SOFT_MUSIC', 'ANY_MUSIC', 'OPEN_TO_REQUESTS'];
         if (validMusic.includes(musicPreference)) {
@@ -1154,7 +1257,7 @@ exports.updateSettings = asyncHandler(async (req, res) => {
 
     // ✅ UPDATE BOOKING PREFERENCES
     if (!user.preferences.booking) user.preferences.booking = {};
-    
+
     if (instantBooking !== undefined) {
         user.preferences.booking.instantBooking = instantBooking === 'true' || instantBooking === true;
     }
@@ -1227,21 +1330,24 @@ exports.deactivateAccount = asyncHandler(async (req, res) => {
         const activeBookings = await Booking.find({
             passenger: user._id,
             status: { $in: ['CONFIRMED', 'PENDING'] }
-        });
+        }).populate('ride', 'rider');
 
         for (const booking of activeBookings) {
             booking.status = 'CANCELLED';
             booking.cancellationReason = 'Passenger deactivated account';
             await booking.save();
 
-            // Notify rider
-            await Notification.create({
-                user: booking.ride.rider,
-                type: 'BOOKING_CANCELLED',
-                title: 'Booking Cancelled',
-                message: `A passenger cancelled their booking because they deactivated their account.`,
-                priority: 'MEDIUM'
-            });
+            // Notify rider (booking.ride is now populated)
+            const riderId = booking.ride?.rider;
+            if (riderId) {
+                await Notification.create({
+                    user: riderId,
+                    type: 'BOOKING_CANCELLED',
+                    title: 'Booking Cancelled',
+                    message: `A passenger cancelled their booking because they deactivated their account.`,
+                    priority: 'NORMAL'
+                });
+            }
         }
     }
 
@@ -1250,7 +1356,7 @@ exports.deactivateAccount = asyncHandler(async (req, res) => {
     user.accountStatus = 'INACTIVE';
     user.deactivatedAt = new Date();
     user.deactivationReason = reason || 'User requested';
-    
+
     await user.save();
 
     // Send confirmation email
@@ -1309,7 +1415,7 @@ exports.reactivateAccount = asyncHandler(async (req, res) => {
     user.isActive = true;
     user.accountStatus = 'ACTIVE';
     user.reactivatedAt = new Date();
-    
+
     await user.save();
 
     // Send confirmation email
@@ -1347,22 +1453,14 @@ exports.reactivateAccount = asyncHandler(async (req, res) => {
  * Update profile picture
  */
 exports.updateProfilePicture = asyncHandler(async (req, res) => {
-    console.log('📸 [Profile Picture] Upload request:', {
-        userId: req.user._id,
-        files: req.files,
-        hasProfilePhoto: req.files?.profilePhoto ? 'yes' : 'no'
-    });
-
     const user = await User.findById(req.user._id);
 
     if (!req.files || !req.files.profilePhoto) {
-        console.log('❌ [Profile Picture] No file received');
         throw new AppError('Please upload a profile photo', 400);
     }
 
     const photoPath = req.files.profilePhoto[0].path;
-    console.log('📸 [Profile Picture] File path:', photoPath);
-    
+
     // Save to profile.photo (correct field in User model)
     if (!user.profile) {
         user.profile = {};
@@ -1370,7 +1468,6 @@ exports.updateProfilePicture = asyncHandler(async (req, res) => {
     user.profile.photo = photoPath;
     await user.save();
 
-    console.log('✅ [Profile Picture] Saved successfully:', user.profile.photo);
 
     res.status(200).json({
         success: true,
@@ -1436,7 +1533,7 @@ exports.getCarbonReport = asyncHandler(async (req, res) => {
  */
 exports.getEmergencyContactsList = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
-    
+
     res.status(200).json({
         success: true,
         contacts: user.emergencyContacts || []
@@ -1468,7 +1565,7 @@ exports.addEmergencyContactNew = asyncHandler(async (req, res) => {
     const newContact = {
         name,
         phone,
-        relation: relationship,
+        relationship: relationship,
         email: email || '',
         isPrimary: isPrimary || false,
         verified: false
@@ -1504,15 +1601,23 @@ exports.sendContactVerification = asyncHandler(async (req, res) => {
     }
 
     // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Store OTP (in production, use Redis or similar with expiry)
-    contact.verificationOtp = otp;
-    contact.verificationOtpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    await user.save();
+    const otp = require('crypto').randomInt(100000, 1000000).toString();
+
+    // Store OTP in Redis (auto-expires in 10 minutes) or fall back to in-memory
+    const { getRedisClient } = require('../config/redis');
+    const redis = getRedisClient();
+    const redisKey = `ec-otp:${req.user._id}:${contactId}`;
+
+    if (redis) {
+        await redis.set(redisKey, otp, 'EX', 600); // 10 min TTL
+    } else {
+        // Fallback: store on subdocument (development / no Redis)
+        contact.verificationOtp = otp;
+        contact.verificationOtpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+        await user.save();
+    }
 
     // Send OTP via SMS (mock for now)
-    console.log(`[DEBUG] Verification OTP for ${contact.phone}: ${otp}`);
 
     // In production, use SMS service
     // await smsService.send(contact.phone, `Your LANE verification code: ${otp}`);
@@ -1536,12 +1641,26 @@ exports.verifyEmergencyContact = asyncHandler(async (req, res) => {
         throw new AppError('Contact not found', 404);
     }
 
-    // Check OTP (in development, accept any 6-digit code)
-    if (process.env.NODE_ENV === 'development' || otp === contact.verificationOtp) {
+    // Check OTP — try Redis first, fall back to subdocument field
+    const { getRedisClient } = require('../config/redis');
+    const redis = getRedisClient();
+    const redisKey = `ec-otp:${req.user._id}:${contactId}`;
+    let storedOtp = null;
+
+    if (redis) {
+        storedOtp = await redis.get(redisKey);
+    } else {
+        storedOtp = contact.verificationOtp;
+    }
+
+    if (process.env.NODE_ENV === 'development' || otp === storedOtp) {
         contact.verified = true;
         contact.verificationOtp = undefined;
         contact.verificationOtpExpiry = undefined;
         await user.save();
+
+        // Clean up Redis key
+        if (redis) await redis.del(redisKey);
 
         res.status(200).json({
             success: true,
@@ -1582,6 +1701,7 @@ exports.setPrimaryContact = asyncHandler(async (req, res) => {
  */
 exports.uploadLicense = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id);
+    const { licenseNumber, licenseExpiry } = req.body;
 
     if (!req.files || (!req.files.licenseFront && !req.files.licenseBack)) {
         throw new AppError('Please upload license images', 400);
@@ -1599,6 +1719,12 @@ exports.uploadLicense = asyncHandler(async (req, res) => {
     }
     if (req.files.licenseBack) {
         user.documents.driverLicense.backImage = req.files.licenseBack[0].path;
+    }
+    if (licenseNumber) {
+        user.documents.driverLicense.number = String(licenseNumber).trim().toUpperCase();
+    }
+    if (licenseExpiry) {
+        user.documents.driverLicense.expiryDate = new Date(licenseExpiry);
     }
 
     user.documents.driverLicense.status = 'PENDING';
@@ -1653,15 +1779,26 @@ exports.updateVehicle = asyncHandler(async (req, res) => {
         throw new AppError('Vehicle not found', 404);
     }
 
-    const { type, make, model, year, registrationNumber, color, seatingCapacity } = req.body;
+    const normalizedVehicle = normalizeVehiclePayload(req.body);
 
-    if (type) vehicle.type = type.trim();
-    if (make) vehicle.make = make.trim();
-    if (model) vehicle.model = model.trim();
-    if (year) vehicle.year = parseInt(year);
-    if (registrationNumber) vehicle.registrationNumber = registrationNumber.trim().toUpperCase();
-    if (color) vehicle.color = color.trim();
-    if (seatingCapacity) vehicle.seatingCapacity = parseInt(seatingCapacity);
+    if (normalizedVehicle.licensePlate && normalizedVehicle.licensePlate !== vehicle.licensePlate) {
+        const existingVehicle = await User.findOne({
+            _id: { $ne: user._id },
+            'vehicles.licensePlate': normalizedVehicle.licensePlate
+        });
+
+        if (existingVehicle) {
+            throw new AppError('A vehicle with this registration number already exists', 400);
+        }
+    }
+
+    if (normalizedVehicle.vehicleType) vehicle.vehicleType = normalizedVehicle.vehicleType;
+    if (normalizedVehicle.make) vehicle.make = normalizedVehicle.make;
+    if (normalizedVehicle.model) vehicle.model = normalizedVehicle.model;
+    if (normalizedVehicle.year) vehicle.year = normalizedVehicle.year;
+    if (normalizedVehicle.licensePlate) vehicle.licensePlate = normalizedVehicle.licensePlate;
+    if (normalizedVehicle.color) vehicle.color = normalizedVehicle.color;
+    if (normalizedVehicle.seats) vehicle.seats = normalizedVehicle.seats;
 
     if (req.files && req.files.vehiclePhoto && req.files.vehiclePhoto.length > 0) {
         vehicle.photos = req.files.vehiclePhoto.map(file => file.path);
@@ -1723,12 +1860,12 @@ exports.deleteAccount = asyncHandler(async (req, res) => {
     user.isActive = false;
     user.deletedAt = new Date();
     user.deletionReason = reason || 'User requested';
-    
+
     // Anonymize sensitive data
     user.email = `deleted_${user._id}@deleted.com`;
     user.phone = `DELETED_${Date.now()}`;
-    user.password = Math.random().toString(36); // Invalidate password
-    
+    user.password = require('crypto').randomBytes(32).toString('hex'); // Cryptographically invalidate password
+
     await user.save();
 
     // Send farewell email before anonymization
@@ -1775,13 +1912,13 @@ exports.deleteAccount = asyncHandler(async (req, res) => {
  */
 exports.getTrustScore = asyncHandler(async (req, res) => {
     const userId = req.params.userId || req.user._id;
-    
+
     const trustScore = await trustScoreCalculator.calculateTrustScore(userId);
-    
+
     if (!trustScore) {
         throw new AppError('User not found', 404);
     }
-    
+
     res.status(200).json({
         success: true,
         trustScore
@@ -1794,57 +1931,57 @@ exports.getTrustScore = asyncHandler(async (req, res) => {
  */
 exports.getUserBadges = asyncHandler(async (req, res) => {
     const userId = req.params.userId || req.user._id;
-    
+
     const user = await User.findById(userId).select('badges verificationStatus createdAt role rating statistics');
-    
+
     if (!user) {
         throw new AppError('User not found', 404);
     }
-    
+
     // Calculate earned badges based on current user state
     const earnedBadges = [];
-    
+
     // Add verification badges
     if (user.verificationStatus === 'VERIFIED') {
         earnedBadges.push('ID_VERIFIED');
     }
-    
+
     // Email/Phone verified (we'll assume verified if they registered)
     earnedBadges.push('EMAIL_VERIFIED');
     earnedBadges.push('PHONE_VERIFIED');
-    
+
     // Profile badges
     if (user.statistics?.completedRides >= 1) earnedBadges.push('FIRST_RIDE');
     if (user.statistics?.completedRides >= 10) earnedBadges.push('FREQUENT_RIDER');
     if (user.statistics?.carbonSaved >= 50) earnedBadges.push('ECO_WARRIOR');
     if (user.rating?.overall >= 4.8 && user.rating?.totalRatings >= 10) earnedBadges.push('FIVE_STAR_DRIVER');
     if (user.statistics?.completedRides >= 50 && user.rating?.overall >= 4.5) earnedBadges.push('SUPER_HOST');
-    
+
     // Check if early adopter (within first year of platform launch)
     const launchDate = new Date('2024-01-01'); // Adjust this
     if (user.createdAt < new Date(launchDate.getTime() + 365 * 24 * 60 * 60 * 1000)) {
         earnedBadges.push('EARLY_ADOPTER');
     }
-    
+
     // Get trust level
     const trustScore = await trustScoreCalculator.calculateTrustScore(userId);
     const trustLevel = trustScore?.level || 'NEWCOMER';
-    
+
     // Available badges user can still earn
     const allBadges = [
         'EMAIL_VERIFIED', 'PHONE_VERIFIED', 'ID_VERIFIED', 'LICENSE_VERIFIED',
         'PROFILE_COMPLETE', 'FIRST_RIDE', 'FIVE_STAR_DRIVER', 'FREQUENT_RIDER',
         'ECO_WARRIOR', 'SUPER_HOST', 'EARLY_ADOPTER', 'COMMUNITY_HELPER'
     ];
-    
+
     const availableBadges = allBadges.filter(b => !earnedBadges.includes(b));
-    
+
     // Format member since
-    const memberSince = user.createdAt.toLocaleDateString('en-IN', { 
-        year: 'numeric', 
-        month: 'long' 
+    const memberSince = user.createdAt.toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'long'
     });
-    
+
     res.status(200).json({
         success: true,
         badges: {
@@ -1863,37 +2000,37 @@ exports.getUserBadges = asyncHandler(async (req, res) => {
  */
 exports.getContributionCalculator = asyncHandler(async (req, res) => {
     const { distanceKm, passengers = 1 } = req.query;
-    
+
     if (!distanceKm) {
         throw new AppError('Distance is required', 400);
     }
-    
+
     const distance = parseFloat(distanceKm);
     const numPassengers = Math.max(1, parseInt(passengers) || 1);
-    
+
     // Fair Cost calculation parameters (BlaBlaCar-style)
     // Based on: Petrol ₹105/L ÷ 15 km/L mileage = ₹7/km fuel + ₹1/km maintenance = ₹8/km
     const PETROL_PRICE = 105;           // ₹ per litre (current average in India)
     const AVERAGE_MILEAGE = 15;         // km per litre (average car)
     const MAINTENANCE_PER_KM = 1;       // ₹ for wear & tear
     const RUNNING_COST_PER_KM = Math.round(PETROL_PRICE / AVERAGE_MILEAGE) + MAINTENANCE_PER_KM; // ≈ ₹8/km
-    
+
     const totalTripCost = Math.round(distance * RUNNING_COST_PER_KM);
     const fuelCostOnly = Math.round(distance * (PETROL_PRICE / AVERAGE_MILEAGE));
     const maintenanceCost = Math.round(distance * MAINTENANCE_PER_KM);
-    
+
     // Split between driver and passengers (BlaBlaCar model - driver shares the cost)
     const totalPeople = numPassengers + 1; // passengers + driver
     const suggestedPrice = Math.round(totalTripCost / totalPeople);
-    
+
     // Calculate price range: Min 70%, Max 140% of suggested price
     const minPrice = Math.round(suggestedPrice * 0.7);
     const maxPrice = Math.round(suggestedPrice * 1.4);
-    
+
     // Carbon savings calculation
     const CO2_PER_KM_CAR = 0.12; // kg CO2 per km for average car
     const carbonSaved = (distance * CO2_PER_KM_CAR * numPassengers).toFixed(2);
-    
+
     res.status(200).json({
         success: true,
         calculation: {
@@ -1929,12 +2066,12 @@ exports.getContributionCalculator = asyncHandler(async (req, res) => {
  */
 exports.checkBadges = asyncHandler(async (req, res) => {
     const awardedBadges = await trustScoreCalculator.checkAndAwardBadges(req.user._id);
-    
+
     res.status(200).json({
         success: true,
         awardedBadges,
-        message: awardedBadges.length > 0 
-            ? `Congratulations! You earned ${awardedBadges.length} new badge(s)!` 
+        message: awardedBadges.length > 0
+            ? `Congratulations! You earned ${awardedBadges.length} new badge(s)!`
             : 'No new badges at this time. Keep riding!'
     });
 });
@@ -1945,16 +2082,16 @@ exports.checkBadges = asyncHandler(async (req, res) => {
  */
 exports.getRecommendedPrice = asyncHandler(async (req, res) => {
     const { distanceKm, vehicleType } = req.query;
-    
+
     if (!distanceKm) {
         throw new AppError('Distance is required', 400);
     }
-    
+
     const pricing = trustScoreCalculator.calculateRecommendedPrice(
         parseFloat(distanceKm),
         vehicleType || 'SEDAN'
     );
-    
+
     res.status(200).json({
         success: true,
         pricing
@@ -1967,23 +2104,23 @@ exports.getRecommendedPrice = asyncHandler(async (req, res) => {
  */
 exports.getUserStats = asyncHandler(async (req, res) => {
     const userId = req.params.userId || req.user._id;
-    
+
     const user = await User.findById(userId).select(
         'statistics rating trustScore badges cancellationRate responseMetrics createdAt'
     );
-    
+
     if (!user) {
         throw new AppError('User not found', 404);
     }
-    
+
     // Calculate trust score if needed
     let trustScore = user.trustScore;
-    if (!trustScore?.score || 
+    if (!trustScore?.score ||
         (Date.now() - new Date(trustScore?.lastCalculated).getTime()) > 24 * 60 * 60 * 1000) {
         // Recalculate if older than 24 hours
         trustScore = await trustScoreCalculator.calculateTrustScore(userId);
     }
-    
+
     res.status(200).json({
         success: true,
         stats: {
@@ -2004,29 +2141,29 @@ exports.getUserStats = asyncHandler(async (req, res) => {
  * Add vehicle, preferences, and license info for riders
  */
 exports.completeRiderProfile = asyncHandler(async (req, res) => {
-    const user = req.user;
-    
+    const user = await User.findById(req.user._id);
+
     if (user.role !== 'RIDER') {
         throw new AppError('Only riders can complete this profile', 403);
     }
-    
+
     const { vehicle, preferences, license, bio } = req.body;
-    
+
     // Validate required vehicle fields
     if (!vehicle || !vehicle.make || !vehicle.model || !vehicle.licensePlate) {
         throw new AppError('Vehicle make, model, and license plate are required', 400);
     }
-    
+
     // Check if license plate already exists for another user
     const existingVehicle = await User.findOne({
         _id: { $ne: user._id },
         'vehicles.licensePlate': vehicle.licensePlate.toUpperCase()
     });
-    
+
     if (existingVehicle) {
         throw new AppError('This license plate is already registered to another user', 400);
     }
-    
+
     // Create vehicle object
     const vehicleData = {
         vehicleType: vehicle.vehicleType || 'SEDAN',
@@ -2040,50 +2177,65 @@ exports.completeRiderProfile = asyncHandler(async (req, res) => {
         isDefault: true,
         status: 'PENDING'
     };
-    
+
     // Update user
-    const updateData = {
-        $push: { vehicles: vehicleData }
-    };
-    
-    // Update preferences if provided
-    if (preferences) {
-        updateData['preferences.booking.preferredCoRiderGender'] = preferences.preferredCoRiderGender || 'ANY';
-        if (preferences.rideComfort) {
-            updateData['preferences.rideComfort'] = {
-                musicPreference: preferences.rideComfort.musicPreference || 'OPEN_TO_REQUESTS',
-                smokingAllowed: preferences.rideComfort.smokingAllowed || false,
-                petsAllowed: preferences.rideComfort.petsAllowed || false
-            };
-        }
+    if (!user.vehicles) {
+        user.vehicles = [];
     }
-    
-    // Update license info if provided
+
+    const defaultVehicleIndex = user.vehicles.findIndex((existingVehicle) => existingVehicle.isDefault);
+    if (defaultVehicleIndex >= 0) {
+        user.vehicles[defaultVehicleIndex] = {
+            ...toPlainObject(user.vehicles[defaultVehicleIndex]),
+            ...vehicleData,
+            isDefault: true
+        };
+    } else if (user.vehicles.length > 0) {
+        user.vehicles[0] = {
+            ...toPlainObject(user.vehicles[0]),
+            ...vehicleData,
+            isDefault: true
+        };
+    } else {
+        user.vehicles.push(vehicleData);
+    }
+
+    user.preferences = mergeObjects(user.preferences, {});
+    user.preferences.booking = mergeObjects(user.preferences.booking, {
+        preferredCoRiderGender: preferences?.preferredCoRiderGender || 'ANY'
+    });
+
+    if (preferences?.rideComfort) {
+        user.preferences.rideComfort = mergeObjects(user.preferences.rideComfort, {
+            musicPreference: preferences.rideComfort.musicPreference || 'OPEN_TO_REQUESTS',
+            smokingAllowed: preferences.rideComfort.smokingAllowed || false,
+            petsAllowed: preferences.rideComfort.petsAllowed || false
+        });
+    }
+
+    user.documents = mergeObjects(user.documents, {});
+    user.documents.driverLicense = mergeObjects(user.documents.driverLicense, {});
     if (license && license.number) {
-        updateData['documents.driverLicense.number'] = license.number;
-        updateData['documents.driverLicense.expiryDate'] = license.expiryDate;
-        updateData['documents.driverLicense.status'] = 'PENDING';
+        user.documents.driverLicense.number = license.number;
+        user.documents.driverLicense.expiryDate = license.expiryDate;
+        user.documents.driverLicense.status = 'PENDING';
     }
-    
-    // Update bio if provided
+
     if (bio) {
-        updateData['profile.bio'] = bio;
+        user.profile = mergeObjects(user.profile, { bio });
     }
-    
-    const updatedUser = await User.findByIdAndUpdate(
-        user._id,
-        updateData,
-        { new: true, runValidators: true }
-    );
-    
+
+    user.verificationStatus = 'PENDING';
+    await user.save();
+
     res.status(200).json({
         success: true,
         message: 'Profile completed successfully. Please upload your documents.',
         redirectUrl: '/user/documents',
         user: {
-            id: updatedUser._id,
-            vehicles: updatedUser.vehicles,
-            preferences: updatedUser.preferences
+            id: user._id,
+            vehicles: user.vehicles,
+            preferences: user.preferences
         }
     });
 });
@@ -2093,73 +2245,78 @@ exports.completeRiderProfile = asyncHandler(async (req, res) => {
  * Upload driver license, aadhar, RC, insurance, vehicle photos
  */
 exports.uploadDocuments = asyncHandler(async (req, res) => {
-    const user = req.user;
-    
+    const user = await User.findById(req.user._id);
+
     if (user.role !== 'RIDER') {
         throw new AppError('Only riders can upload documents', 403);
     }
-    
+
     if (!req.files || Object.keys(req.files).length === 0) {
         throw new AppError('No files uploaded', 400);
     }
-    
-    const updateData = {};
-    
+
+    const documents = mergeObjects(user.documents, {});
+    const defaultVehicleIndex = user.vehicles?.findIndex((vehicle) => vehicle.isDefault) ?? -1;
+    const targetVehicleIndex = defaultVehicleIndex >= 0 ? defaultVehicleIndex : ((user.vehicles?.length || 0) - 1);
+    const targetVehicle = targetVehicleIndex >= 0 ? user.vehicles[targetVehicleIndex] : null;
+
     // Handle driver license front
     if (req.files.driverLicenseFront) {
         const file = req.files.driverLicenseFront[0];
-        updateData['documents.driverLicense.frontImage'] = file.path || file.filename;
-        updateData['documents.driverLicense.status'] = 'PENDING';
+        documents.driverLicense = mergeObjects(documents.driverLicense, {
+            frontImage: file.path || file.filename,
+            status: 'PENDING'
+        });
     }
-    
+
     // Handle driver license back
     if (req.files.driverLicenseBack) {
         const file = req.files.driverLicenseBack[0];
-        updateData['documents.driverLicense.backImage'] = file.path || file.filename;
+        documents.driverLicense = mergeObjects(documents.driverLicense, {
+            backImage: file.path || file.filename
+        });
     }
-    
+
     // Handle Aadhar card
     if (req.files.aadharCard) {
         const file = req.files.aadharCard[0];
-        updateData['documents.governmentId.type'] = 'AADHAAR';
-        updateData['documents.governmentId.frontImage'] = file.path || file.filename;
-        updateData['documents.governmentId.status'] = 'PENDING';
+        documents.governmentId = mergeObjects(documents.governmentId, {
+            type: 'AADHAAR',
+            frontImage: file.path || file.filename,
+            status: 'PENDING'
+        });
     }
-    
+
     // Handle RC Book (registration certificate)
     if (req.files.rcBook) {
         const file = req.files.rcBook[0];
-        // Store RC in first vehicle's registration document
-        if (user.vehicles && user.vehicles.length > 0) {
-            updateData['vehicles.0.registrationDocument'] = file.path || file.filename;
-            updateData['vehicles.0.status'] = 'PENDING';
+        if (targetVehicle) {
+            targetVehicle.registrationDocument = file.path || file.filename;
+            targetVehicle.status = 'PENDING';
         }
     }
-    
+
     // Handle Insurance
     if (req.files.insurance) {
         const file = req.files.insurance[0];
-        updateData['documents.insurance.document'] = file.path || file.filename;
-        updateData['documents.insurance.status'] = 'PENDING';
+        documents.insurance = mergeObjects(documents.insurance, {
+            document: file.path || file.filename,
+            status: 'PENDING'
+        });
     }
-    
+
     // Handle vehicle photos (multiple)
     if (req.files.vehiclePhotos) {
         const photoPaths = req.files.vehiclePhotos.map(f => f.path || f.filename);
-        if (user.vehicles && user.vehicles.length > 0) {
-            updateData['vehicles.0.photos'] = photoPaths;
+        if (targetVehicle) {
+            targetVehicle.photos = photoPaths;
         }
     }
-    
-    // Update verification status to PENDING
-    updateData['verificationStatus'] = 'PENDING';
-    
-    const updatedUser = await User.findByIdAndUpdate(
-        user._id,
-        updateData,
-        { new: true }
-    );
-    
+
+    user.documents = documents;
+    user.verificationStatus = 'PENDING';
+    await user.save();
+
     res.status(200).json({
         success: true,
         message: 'Documents uploaded successfully. Verification in progress.',
@@ -2176,13 +2333,13 @@ exports.getDocumentStatus = asyncHandler(async (req, res) => {
     const user = await User.findById(req.user._id).select(
         'documents vehicles verificationStatus'
     );
-    
+
     if (!user) {
         throw new AppError('User not found', 404);
     }
-    
+
     const defaultVehicle = user.vehicles?.find(v => v.isDefault) || user.vehicles?.[0];
-    
+
     res.status(200).json({
         success: true,
         overallStatus: user.verificationStatus,
@@ -2229,3 +2386,306 @@ exports.getNotifications = exports.showNotifications;
 
 // Alias for getSettings
 exports.getSettings = exports.showSettings;
+
+// ============================================
+// WALLET & EARNINGS
+// ============================================
+
+/**
+ * Get wallet data (simulated)
+ */
+exports.getWallet = asyncHandler(async (req, res) => {
+    const Transaction = require('../models/Transaction');
+
+    // Get wallet transactions for this user (both as passenger spending and rider receiving)
+    const walletTransactions = await Transaction.find({
+        $or: [
+            { passenger: req.user._id },
+            { rider: req.user._id }
+        ]
+    })
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean();
+
+    const mapped = walletTransactions.map(t => ({
+        _id: t._id,
+        type: t.passenger?.toString() === req.user._id.toString() ? 'DEBIT' : 'CREDIT',
+        amount: t.amounts?.passengerPaid || t.amounts?.total || 0,
+        description: t.description || (t.type === 'BOOKING_PAYMENT' ? 'Ride payment' : t.type),
+        method: t.payment?.method || 'CASH',
+        createdAt: t.createdAt
+    }));
+
+    const stats = req.user.statistics || {};
+
+    res.json({
+        success: true,
+        wallet: {
+            balance: 500, // Simulated starting balance
+            totalAdded: 500,
+            totalSpent: stats.totalSpent || 0
+        },
+        transactions: mapped
+    });
+});
+
+/**
+ * Add funds to wallet (simulated)
+ */
+exports.addWalletFunds = asyncHandler(async (req, res) => {
+    const { amount } = req.body;
+    if (!amount || amount < 100 || amount > 10000) {
+        throw new AppError('Amount must be between ₹100 and ₹10,000', 400);
+    }
+
+    // In simulation mode, just acknowledge the addition
+    res.json({
+        success: true,
+        message: `₹${amount} added to wallet (simulated)`,
+        wallet: {
+            balance: 500 + amount,
+            totalAdded: 500 + amount
+        }
+    });
+});
+
+/**
+ * Get rider earnings
+ */
+exports.getEarnings = asyncHandler(async (req, res) => {
+    const Transaction = require('../models/Transaction');
+    const { period } = req.query;
+
+    let startDate = new Date();
+    if (period === 'week') startDate.setDate(startDate.getDate() - 7);
+    else if (period === 'year') startDate.setFullYear(startDate.getFullYear() - 1);
+    else startDate.setMonth(startDate.getMonth() - 1); // default month
+
+    const riderTransactions = await Transaction.find({
+        rider: req.user._id,
+        createdAt: { $gte: startDate }
+    })
+        .sort({ createdAt: -1 })
+        .populate('booking', 'seatsBooked')
+        .lean();
+
+    const totalEarnings = riderTransactions.reduce((sum, t) => sum + (t.amounts?.rideFare || 0), 0);
+    const totalCommission = riderTransactions.reduce((sum, t) => sum + (t.amounts?.platformCommission || 0), 0);
+    const pendingPayout = riderTransactions
+        .filter(t => !t.riderPayout?.settled)
+        .reduce((sum, t) => sum + (t.amounts?.rideFare || 0), 0);
+
+    const mapped = riderTransactions.map(t => ({
+        _id: t._id,
+        amount: t.amounts?.rideFare || 0,
+        commission: t.amounts?.platformCommission || 0,
+        passengers: t.booking?.seatsBooked || 1,
+        description: t.description || 'Ride earnings',
+        createdAt: t.createdAt
+    }));
+
+    res.json({
+        success: true,
+        earnings: {
+            totalEarnings,
+            netEarnings: totalEarnings - totalCommission,
+            commission: totalCommission,
+            pendingPayout,
+            totalRides: riderTransactions.length,
+            avgPerRide: riderTransactions.length > 0 ? Math.round(totalEarnings / riderTransactions.length) : 0
+        },
+        transactions: mapped
+    });
+});
+
+/**
+ * Get personalized route suggestions for drivers
+ * Uses demand analysis to suggest high-demand routes
+ */
+exports.getRouteSuggestions = asyncHandler(async (req, res) => {
+    if (req.user.role !== 'RIDER') {
+        return res.json({ success: true, suggestions: [], message: 'Route suggestions are for drivers only' });
+    }
+
+    const { generateDriverSuggestions } = require('../utils/routeSuggestionEngine');
+    const suggestions = await generateDriverSuggestions(req.user._id);
+
+    res.json({
+        success: true,
+        suggestions,
+        message: suggestions.length > 0
+            ? `Found ${suggestions.length} high-demand routes for you`
+            : 'No route suggestions available right now. Check back later!'
+    });
+});
+
+// ============================================
+// ROUTE ALERTS — "Notify me when a ride is posted"
+// ============================================
+
+/**
+ * Get user's route alerts
+ */
+exports.getRouteAlerts = asyncHandler(async (req, res) => {
+    const RouteAlert = require('../models/RouteAlert');
+
+    const alerts = await RouteAlert.find({
+        user: req.user._id,
+        active: true,
+        expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+
+    res.json({
+        success: true,
+        alerts,
+        count: alerts.length
+    });
+});
+
+/**
+ * Create a new route alert
+ */
+exports.createRouteAlert = asyncHandler(async (req, res) => {
+    const RouteAlert = require('../models/RouteAlert');
+
+    const { origin, destination, radiusKm, schedule, minSeats, maxPricePerSeat } = req.body;
+
+    if (!origin?.address || !origin?.coordinates || !destination?.address || !destination?.coordinates) {
+        throw new AppError('Origin and destination with coordinates are required', 400);
+    }
+
+    // Check if a similar alert already exists
+    const existing = await RouteAlert.findOne({
+        user: req.user._id,
+        active: true,
+        'origin.address': origin.address,
+        'destination.address': destination.address
+    });
+
+    if (existing) {
+        return res.status(200).json({
+            success: true,
+            message: 'You already have an alert for this route',
+            alert: existing,
+            duplicate: true
+        });
+    }
+
+    // Limit to 10 active alerts per user
+    const activeCount = await RouteAlert.countDocuments({
+        user: req.user._id,
+        active: true,
+        expiresAt: { $gt: new Date() }
+    });
+
+    if (activeCount >= 10) {
+        throw new AppError('Maximum 10 active route alerts allowed. Delete an old one first.', 400);
+    }
+
+    const alert = await RouteAlert.create({
+        user: req.user._id,
+        origin: {
+            address: origin.address,
+            coordinates: {
+                type: 'Point',
+                coordinates: origin.coordinates
+            }
+        },
+        destination: {
+            address: destination.address,
+            coordinates: {
+                type: 'Point',
+                coordinates: destination.coordinates
+            }
+        },
+        radiusKm: radiusKm || 5,
+        schedule: schedule || {},
+        minSeats: minSeats || 1,
+        maxPricePerSeat: maxPricePerSeat || null
+    });
+
+    res.status(201).json({
+        success: true,
+        message: 'Route alert created! We\'ll notify you when a matching ride is posted.',
+        alert
+    });
+});
+
+/**
+ * Delete a route alert
+ */
+exports.deleteRouteAlert = asyncHandler(async (req, res) => {
+    const RouteAlert = require('../models/RouteAlert');
+
+    const alert = await RouteAlert.findOneAndDelete({
+        _id: req.params.alertId,
+        user: req.user._id
+    });
+
+    if (!alert) {
+        throw new AppError('Route alert not found', 404);
+    }
+
+    res.json({
+        success: true,
+        message: 'Route alert deleted'
+    });
+});
+
+// ============================================================
+// Promo Code Validation (User-Facing) — uses standalone PromoCode collection
+// ============================================================
+exports.validatePromoCode = asyncHandler(async (req, res) => {
+    const PromoCode = require('../models/PromoCode');
+    const { code, bookingAmount } = req.body;
+
+    if (!code) {
+        throw new AppError('Promo code is required', 400);
+    }
+
+    const promo = await PromoCode.findOne({ code: code.toUpperCase(), isActive: true }).lean();
+
+    if (!promo) {
+        return res.status(404).json({ success: false, message: 'Invalid promo code' });
+    }
+
+    // Check expiry
+    if (promo.expiresAt && new Date(promo.expiresAt) < new Date()) {
+        return res.status(400).json({ success: false, message: 'This promo code has expired' });
+    }
+
+    // Check usage limit
+    if (promo.maxUses && promo.currentUses >= promo.maxUses) {
+        return res.status(400).json({ success: false, message: 'This promo code has reached its usage limit' });
+    }
+
+    // Check minimum booking amount
+    const amount = bookingAmount || 0;
+    if (promo.minBookingAmount && amount < promo.minBookingAmount) {
+        return res.status(400).json({
+            success: false,
+            message: `Minimum booking amount of ₹${promo.minBookingAmount} required`
+        });
+    }
+
+    // Calculate discount
+    let discountAmount = 0;
+    if (promo.discountType === 'PERCENTAGE') {
+        discountAmount = Math.round(amount * (promo.discountValue / 100));
+    } else {
+        discountAmount = promo.discountValue;
+    }
+
+    // NOTE: Usage is NOT incremented here — only during actual booking creation.
+    // This endpoint only validates whether the code can be applied.
+
+    res.json({
+        success: true,
+        message: `Promo code applied! ₹${discountAmount} discount`,
+        discount: discountAmount,
+        discountType: promo.discountType,
+        discountValue: promo.discountValue,
+        code: promo.code
+    });
+});

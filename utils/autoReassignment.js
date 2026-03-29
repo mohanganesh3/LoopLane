@@ -28,9 +28,6 @@ class AutoReassignment {
      * @returns {Object} Reassignment results
      */
     async findAlternativeRides(cancelledRide, affectedBookings, io) {
-        console.log('🔄 [Auto-Reassignment] Starting reassignment process...');
-        console.log(`   Cancelled Ride: ${cancelledRide._id}`);
-        console.log(`   Affected Bookings: ${affectedBookings.length}`);
 
         const results = {
             totalBookings: affectedBookings.length,
@@ -50,9 +47,6 @@ class AutoReassignment {
             : now;
         const searchEndTime = new Date(originalDeparture.getTime() + (48 * 60 * 60 * 1000)); // +48 hours from original departure
 
-        console.log(`   Original departure: ${originalDeparture.toLocaleString()}`);
-        console.log(`   Time window: ${searchStartTime.toLocaleString()} to ${searchEndTime.toLocaleString()}`);
-        console.log(`   (Searching +48 hours to cover today and next day)`);
 
         // Process each affected booking - search for alternatives based on BOOKING's pickup/dropoff
         for (const booking of affectedBookings) {
@@ -61,9 +55,6 @@ class AutoReassignment {
                 const bookingPickup = booking.pickupPoint?.coordinates || cancelledRide.route.start.coordinates;
                 const bookingDropoff = booking.dropoffPoint?.coordinates || cancelledRide.route.destination.coordinates;
 
-                console.log(`\n   📍 Booking ${booking._id}:`);
-                console.log(`      Pickup: ${JSON.stringify(bookingPickup)}`);
-                console.log(`      Dropoff: ${JSON.stringify(bookingDropoff)}`);
 
                 // Find alternative rides for THIS booking's route
                 const alternativeRides = await this.searchAlternativeRides(
@@ -74,7 +65,6 @@ class AutoReassignment {
                     cancelledRide.rider
                 );
 
-                console.log(`      Found ${alternativeRides.length} potential alternative rides`);
 
                 const reassignmentResult = await this.reassignBooking(
                     booking,
@@ -106,10 +96,6 @@ class AutoReassignment {
             }
         }
 
-        console.log('\n🔄 [Auto-Reassignment] Process complete:');
-        console.log(`   ✅ Reassigned: ${results.reassigned.length}`);
-        console.log(`   ❌ No Alternative: ${results.noAlternative.length}`);
-        console.log(`   ⚠️ Errors: ${results.errors.length}`);
 
         return results;
     }
@@ -124,19 +110,12 @@ class AutoReassignment {
      * @returns {Array} Alternative rides sorted by match score
      */
     async searchAlternativeRides(bookingRoute, startTime, endTime, excludeRideId, excludeRiderId) {
-        console.log(`\n   🔍 [searchAlternativeRides] Starting search...`);
-        console.log(`      Time window: ${startTime.toISOString()} to ${endTime.toISOString()}`);
-        console.log(`      Excluding ride: ${excludeRideId}`);
-        console.log(`      Excluding rider: ${excludeRiderId}`);
-        console.log(`      Booking Pickup: [${bookingRoute.pickup}]`);
-        console.log(`      Booking Dropoff: [${bookingRoute.dropoff}]`);
         
         // Convert excludeRiderId to string for comparison
         const excludeRiderIdStr = excludeRiderId?.toString ? excludeRiderId.toString() : excludeRiderId;
         
         // First, let's find ALL active rides to debug
         const allActiveRides = await Ride.find({ status: 'ACTIVE' }).lean();
-        console.log(`\n      📊 Total ACTIVE rides in database: ${allActiveRides.length}`);
         
         // Log all active rides for debugging
         allActiveRides.forEach((ride, idx) => {
@@ -147,16 +126,6 @@ class AutoReassignment {
             const isSameRide = ride._id.toString() === excludeRideId?.toString();
             const hasSeats = ride.pricing?.availableSeats >= 1;
             
-            console.log(`      Ride ${idx + 1}: ${ride._id}`);
-            console.log(`        Route: ${ride.route?.start?.name} → ${ride.route?.destination?.name}`);
-            console.log(`        Departure: ${depTime.toISOString()}`);
-            console.log(`        Seats: ${ride.pricing?.availableSeats}`);
-            console.log(`        Rider: ${rideRiderId}`);
-            console.log(`        ✓ In time window: ${isInTimeWindow}`);
-            console.log(`        ✓ Not same ride: ${!isSameRide}`);
-            console.log(`        ✓ Not same rider: ${!isSameRider}`);
-            console.log(`        ✓ Has seats: ${hasSeats}`);
-            console.log(`        → Would qualify: ${isInTimeWindow && !isSameRide && !isSameRider && hasSeats}`);
         });
 
         // Build search query - be more lenient
@@ -170,7 +139,6 @@ class AutoReassignment {
             .populate('rider', 'name profile rating verificationStatus preferences')
             .lean();
 
-        console.log(`\n      Found ${allRides.length} active rides with seats`);
 
         // Manually filter by time window and exclusions
         const candidateRides = allRides.filter(ride => {
@@ -180,30 +148,24 @@ class AutoReassignment {
             
             // Exclude the cancelled ride
             if (rideId === excludeRideId?.toString()) {
-                console.log(`        ❌ Excluding ${rideId}: Same ride`);
                 return false;
             }
             
             // Exclude same rider
             if (riderId === excludeRiderIdStr) {
-                console.log(`        ❌ Excluding ${rideId}: Same rider (${riderId})`);
                 return false;
             }
             
             // Check time window
             if (depTime < startTime || depTime > endTime) {
-                console.log(`        ❌ Excluding ${rideId}: Outside time window (${depTime.toISOString()})`);
                 return false;
             }
             
-            console.log(`        ✅ Including ${rideId}: ${ride.route?.start?.name} → ${ride.route?.destination?.name}`);
             return true;
         });
 
-        console.log(`\n      ${candidateRides.length} rides in time window after filtering`);
 
         if (candidateRides.length === 0) {
-            console.log(`      ⚠️ No rides found in time window`);
             return [];
         }
 
@@ -211,15 +173,12 @@ class AutoReassignment {
         const ridesWithGeometry = candidateRides.filter(ride => {
             const hasGeometry = ride.route?.geometry?.coordinates?.length >= 2;
             if (!hasGeometry) {
-                console.log(`        ⚠️ Ride ${ride._id}: No geometry`);
             }
             return hasGeometry;
         });
 
-        console.log(`      ${ridesWithGeometry.length} rides have valid geometry`);
 
         if (ridesWithGeometry.length === 0) {
-            console.log(`      ⚠️ No rides with geometry found`);
             return [];
         }
 
@@ -230,8 +189,6 @@ class AutoReassignment {
             dropoff: Array.isArray(bookingRoute.dropoff) ? bookingRoute.dropoff : [bookingRoute.dropoff.lng || bookingRoute.dropoff[0], bookingRoute.dropoff.lat || bookingRoute.dropoff[1]]
         };
 
-        console.log(`\n      Normalized pickup: [${passengerRoute.pickup}]`);
-        console.log(`      Normalized dropoff: [${passengerRoute.dropoff}]`);
 
         // Match routes using routeMatching utility
         const matchedRides = routeMatching.findMatchingRides(
@@ -240,12 +197,10 @@ class AutoReassignment {
             10 // Get top 10 matches
         );
 
-        console.log(`\n      ${matchedRides.length} rides matched via polyline`);
 
         // Filter by minimum match score
         const qualifiedMatches = matchedRides.filter(match => match.matchDetails.matchScore >= this.MIN_MATCH_SCORE);
         
-        console.log(`      ${qualifiedMatches.length} rides meet minimum score (${this.MIN_MATCH_SCORE})`);
 
         return qualifiedMatches;
     }
@@ -297,7 +252,6 @@ class AutoReassignment {
                 );
                 return result;
             } catch (error) {
-                console.log(`   ⚠️ Failed to reassign to ride ${alternativeRide._id}: ${error.message}`);
                 continue; // Try next alternative
             }
         }
@@ -326,10 +280,6 @@ class AutoReassignment {
         const passengerId = originalBooking.passenger?._id?.toString() || originalBooking.passenger?.toString();
         const newRiderId = newRide.rider?._id?.toString() || newRide.rider?.toString();
         
-        console.log(`   📝 Executing reassignment:`);
-        console.log(`      Passenger ID: ${passengerId}`);
-        console.log(`      New Rider ID: ${newRiderId}`);
-        console.log(`      New Ride ID: ${newRide._id}`);
         
         // Update original booking with reassignment info
         originalBooking.status = 'CANCELLED';
@@ -463,9 +413,6 @@ class AutoReassignment {
         const passengerId = originalBooking.passenger?._id?.toString() || originalBooking.passenger?.toString();
         const newRiderId = newRide.rider?._id?.toString() || newRide.rider?.toString();
 
-        console.log(`   📧 Creating notifications:`);
-        console.log(`      Passenger ID: ${passengerId}`);
-        console.log(`      New Rider ID: ${newRiderId}`);
 
         // Get passenger and new rider details
         const [passenger, newRider] = await Promise.all([
@@ -551,7 +498,6 @@ class AutoReassignment {
             });
         }
 
-        console.log(`   📧 Notifications sent to passenger ${passengerId} and rider ${newRiderId}`);
     }
 
     /**
@@ -564,7 +510,6 @@ class AutoReassignment {
         // Extract ID properly (handle both populated and non-populated cases)
         const passengerId = booking.passenger?._id?.toString() || booking.passenger?.toString();
 
-        console.log(`   📧 Notifying no alternative found for passenger: ${passengerId}`);
 
         // Update booking status
         booking.status = 'CANCELLED';
@@ -617,7 +562,6 @@ class AutoReassignment {
             });
         }
 
-        console.log(`   📧 No-alternative notification sent to passenger ${passengerId}`);
     }
 
     /**
