@@ -9,42 +9,23 @@ const Ride = require('../models/Ride');
 const Booking = require('../models/Booking');
 const Notification = require('../models/Notification');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
+const emailService = require('../utils/emailService');
 
-/**
- * Show report page
- */
-exports.showReportPage = asyncHandler(async (req, res) => {
-    const { userId, rideId, bookingId } = req.query;
+const ADMIN_PANEL_ROLES = ['ADMIN', 'SUPER_ADMIN', 'SUPPORT_AGENT', 'FINANCE_MANAGER', 'OPERATIONS_MANAGER', 'CONTENT_MODERATOR', 'FLEET_MANAGER'];
+const CLOSED_BOOKING_STATUSES = ['REJECTED', 'EXPIRED', 'CANCELLED'];
 
-    let reportedUser = null;
-    let ride = null;
-    let booking = null;
+const hasReportAdminAccess = (user) => {
+    if (!user) return false;
+    return ADMIN_PANEL_ROLES.includes(user.role) || user.employeeDetails?.permissions?.includes('manage_reports');
+};
 
-    if (userId) {
-        reportedUser = await User.findById(userId, 'profile profilePhoto');
+const toBoolean = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+        return ['true', '1', 'yes', 'on'].includes(value.toLowerCase());
     }
-
-    if (rideId) {
-        ride = await Ride.findById(rideId).populate('rider', 'profile profilePhoto');
-    }
-
-    if (bookingId) {
-        booking = await Booking.findById(bookingId)
-            .populate('passenger', 'profile profilePhoto')
-            .populate({
-                path: 'ride',
-                populate: { path: 'rider', select: 'profile profilePhoto' }
-            });
-    }
-
-    res.render('reports/create', {
-        title: 'Report User - LANE Carpool',
-        user: req.user,
-        reportedUser,
-        ride,
-        booking
-    });
-});
+    return Boolean(value);
+};
 
 /**
  * Submit report
@@ -71,21 +52,59 @@ exports.submitReport = asyncHandler(async (req, res) => {
         throw new AppError('Cannot report yourself', 400);
     }
 
-    // Verify relationship (must have booking/ride together)
-    let hasRelationship = false;
-    if (rideId) {
-        const ride = await Ride.findById(rideId);
-        if (ride) {
-            hasRelationship = ride.rider.toString() === req.user._id.toString() ||
-                              ride.rider.toString() === reportedUserId;
-        }
+    if (!rideId && !bookingId) {
+        throw new AppError('Ride or booking reference is required', 400);
     }
 
+    const currentUserId = req.user._id.toString();
+    let resolvedRideId = rideId || undefined;
+
+    // Verify relationship (must have booking/ride together)
+    let hasRelationship = false;
+
     if (bookingId) {
-        const booking = await Booking.findById(bookingId).populate('ride');
-        if (booking) {
-            hasRelationship = booking.passenger.toString() === req.user._id.toString() ||
-                             booking.ride.rider.toString() === req.user._id.toString();
+        const booking = await Booking.findById(bookingId).select('passenger rider ride status');
+        if (!booking) {
+            throw new AppError('Booking not found', 404);
+        }
+
+        if (rideId && booking.ride?.toString() !== rideId) {
+            throw new AppError('Ride and booking reference do not match', 400);
+        }
+
+        const participantIds = [booking.passenger?.toString(), booking.rider?.toString()];
+        hasRelationship = participantIds.includes(currentUserId) && participantIds.includes(reportedUserId);
+
+        if (!hasRelationship || currentUserId === reportedUserId) {
+            throw new AppError('You can only report the other party from this booking', 403);
+        }
+
+        if (CLOSED_BOOKING_STATUSES.includes(booking.status)) {
+            throw new AppError('This booking is no longer eligible for reporting', 403);
+        }
+
+        resolvedRideId = booking.ride?.toString() || resolvedRideId;
+    } else if (rideId) {
+        const ride = await Ride.findById(rideId).select('rider');
+        if (!ride) {
+            throw new AppError('Ride not found', 404);
+        }
+
+        const riderId = ride.rider?.toString();
+        if (reportedUserId === riderId && currentUserId !== riderId) {
+            hasRelationship = Boolean(await Booking.exists({
+                ride: rideId,
+                passenger: req.user._id,
+                rider: ride.rider,
+                status: { $nin: CLOSED_BOOKING_STATUSES }
+            }));
+        } else if (currentUserId === riderId && reportedUserId !== riderId) {
+            hasRelationship = Boolean(await Booking.exists({
+                ride: rideId,
+                passenger: reportedUserId,
+                rider: req.user._id,
+                status: { $nin: CLOSED_BOOKING_STATUSES }
+            }));
         }
     }
 
@@ -97,12 +116,12 @@ exports.submitReport = asyncHandler(async (req, res) => {
     const report = await Report.create({
         reporter: req.user._id,
         reportedUser: reportedUserId,
-        ride: rideId || undefined,
+        ride: resolvedRideId || undefined,
         booking: bookingId || undefined,
         category,
         description,
         severity: severity || 'MEDIUM',
-        refundRequested: requestRefund === 'true'
+        refundRequested: toBoolean(requestRefund)
     });
 
     // Get reporter and reported user names safely
@@ -110,14 +129,19 @@ exports.submitReport = asyncHandler(async (req, res) => {
     const reportedName = User.getUserName(reportedUser);
 
     // Notify admins
-    const admins = await User.find({ role: 'ADMIN' });
+    const admins = await User.find({
+        $or: [
+            { role: { $in: ['ADMIN', 'SUPER_ADMIN'] } },
+            { 'employeeDetails.permissions': 'manage_reports' }
+        ]
+    }).select('_id');
     for (const admin of admins) {
         await Notification.create({
             user: admin._id,
             type: 'NEW_REPORT',
             title: 'New Report Filed',
             message: `${reporterName} reported ${reportedName}`,
-            priority: severity === 'HIGH' ? 'HIGH' : 'MEDIUM',
+            priority: severity === 'HIGH' ? 'HIGH' : 'NORMAL',
             data: {
                 reportId: report._id,
                 category
@@ -125,11 +149,23 @@ exports.submitReport = asyncHandler(async (req, res) => {
         });
     }
 
+    // Send confirmation email to reporter
+    const slaHoursMap = { HIGH: 2, MEDIUM: 8, LOW: 24 };
+    const reporterEmail = req.user.email;
+    const reporterFirstName = req.user.profile?.firstName || 'User';
+    if (reporterEmail) {
+        emailService.sendReportSubmittedEmail(reporterEmail, reporterFirstName, {
+            category: report.category,
+            severity: report.severity || 'MEDIUM',
+            reportId: report._id
+        }).catch(err => console.error('Failed to send report submission email:', err.message));
+    }
+
     res.status(201).json({
         success: true,
-        message: 'Report submitted successfully. Admin will review within 24 hours.',
+        message: `Report submitted successfully. We'll investigate within ${slaHoursMap[report.severity] || 24} hours.`,
         report,
-        redirectUrl: '/user/dashboard'
+        redirectUrl: '/my-reports'
     });
 });
 
@@ -140,31 +176,13 @@ exports.getMyReports = asyncHandler(async (req, res) => {
     const reports = await Report.find({
         reporter: req.user._id
     })
-    .populate('reportedUser', 'profile profilePhoto')
-    .populate('ride', 'route')
+    .populate('reportedUser', 'profile email')
+    .populate('ride', 'route.start route.destination')
     .sort({ createdAt: -1 });
 
     res.status(200).json({
         success: true,
         count: reports.length,
-        reports
-    });
-});
-
-/**
- * Show my reports page
- */
-exports.showMyReports = asyncHandler(async (req, res) => {
-    const reports = await Report.find({
-        reporter: req.user._id
-    })
-    .populate('reportedUser', 'profile profilePhoto')
-    .populate('ride', 'route')
-    .sort({ createdAt: -1 });
-
-    res.render('reports/my-reports', {
-        title: 'My Reports - LANE Carpool',
-        user: req.user,
         reports
     });
 });
@@ -176,8 +194,8 @@ exports.getReportDetails = asyncHandler(async (req, res) => {
     const { reportId } = req.params;
 
     const report = await Report.findById(reportId)
-        .populate('reporter', 'profile email phone profilePhoto')
-        .populate('reportedUser', 'profile email phone profilePhoto')
+        .populate('reporter', 'profile email phone')
+        .populate('reportedUser', 'profile email phone')
         .populate('ride')
         .populate('booking')
         .populate('adminReview.reviewedBy', 'profile');
@@ -188,7 +206,7 @@ exports.getReportDetails = asyncHandler(async (req, res) => {
 
     // Check authorization
     const isReporter = report.reporter._id.toString() === req.user._id.toString();
-    const isAdmin = req.user.role === 'ADMIN';
+    const isAdmin = hasReportAdminAccess(req.user);
 
     if (!isReporter && !isAdmin) {
         throw new AppError('Not authorized', 403);
@@ -196,6 +214,58 @@ exports.getReportDetails = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         success: true,
+        report
+    });
+});
+
+/**
+ * Add follow-up message to a report
+ */
+exports.addMessage = asyncHandler(async (req, res) => {
+    const { reportId } = req.params;
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+        throw new AppError('Message is required', 400);
+    }
+
+    const report = await Report.findById(reportId);
+    if (!report) {
+        throw new AppError('Report not found', 404);
+    }
+
+    const isReporter = report.reporter.toString() === req.user._id.toString();
+    const isAdmin = hasReportAdminAccess(req.user);
+
+    if (!isReporter && !isAdmin) {
+        throw new AppError('Not authorized', 403);
+    }
+
+    const from = isAdmin ? 'ADMIN' : 'REPORTER';
+
+    report.messages.push({
+        from,
+        message: message.trim(),
+        timestamp: new Date()
+    });
+
+    await report.save();
+
+    // If admin sends a message, notify the reporter
+    if (from === 'ADMIN') {
+        await Notification.create({
+            user: report.reporter,
+            type: 'REPORT_UPDATE',
+            title: 'New message on your report',
+            message: `An admin responded to your report: "${message.trim().substring(0, 80)}${message.length > 80 ? '...' : ''}"`,
+            priority: 'NORMAL',
+            data: { reportId: report._id }
+        });
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Message added',
         report
     });
 });

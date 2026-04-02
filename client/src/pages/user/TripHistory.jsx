@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { Alert } from '../../components/common';
@@ -11,6 +12,10 @@ const TripHistory = () => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  // B18: Date range filter
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [stats, setStats] = useState({
     totalTrips: 0,
     totalAmount: 0,
@@ -23,25 +28,28 @@ const TripHistory = () => {
   });
 
   const isRider = user?.role === 'RIDER';
+  const statusOptions = isRider
+    ? ['ALL', 'COMPLETED', 'CANCELLED', 'IN_PROGRESS', 'ACTIVE']
+    : ['ALL', 'COMPLETED', 'CANCELLED', 'IN_PROGRESS', 'CONFIRMED'];
 
   useEffect(() => {
     fetchTripHistory();
-  }, [searchParams]);
+  }, [searchParams, statusFilter, dateFrom, dateTo]);
 
   const fetchTripHistory = async () => {
     setLoading(true);
     try {
       const page = searchParams.get('page') || 1;
-      const response = await userService.getTripHistory(page);
+      const response = await userService.getTripHistory(page, statusFilter !== 'ALL' ? statusFilter : undefined, dateFrom, dateTo);
       if (response.success) {
         setTrips(response.trips || []);
         setPagination(response.pagination || { page: 1, pages: 1, total: 0 });
-        
+
         // Calculate stats
         const totalAmount = (response.trips || []).reduce((sum, trip) => {
           return sum + (isRider ? (trip.totalEarnings || 0) : (trip.totalAmount || 0));
         }, 0);
-        
+
         setStats({
           totalTrips: response.pagination?.total || response.trips?.length || 0,
           totalAmount,
@@ -65,24 +73,24 @@ const TripHistory = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-5xl mx-auto px-4">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-500 to-green-600 rounded-2xl shadow-lg p-8 mb-8 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold mb-2 flex items-center">
-                <span className="mr-3">📜</span> Trip History
+              <h1 className="text-3xl font-bold mb-2 flex items-center" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
+                <span className="mr-3"><i className="fas fa-scroll text-emerald-600"></i></span> Trip History
               </h1>
               <p className="opacity-90">
-                {isRider 
+                {isRider
                   ? 'Review your completed rides and passenger feedback'
                   : 'Review your completed bookings and travel history'
                 }
@@ -106,7 +114,7 @@ const TripHistory = () => {
                 <p className="text-3xl font-bold text-gray-800">{stats.totalTrips}</p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl">🛣️</span>
+                <span className="text-2xl text-blue-500"><i className="fas fa-road"></i></span>
               </div>
             </div>
           </div>
@@ -122,7 +130,7 @@ const TripHistory = () => {
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl">💰</span>
+                <span className="text-2xl text-amber-500"><i className="fas fa-coins"></i></span>
               </div>
             </div>
           </div>
@@ -139,28 +147,67 @@ const TripHistory = () => {
                 </div>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl">⭐</span>
+                <span className="text-2xl text-yellow-500"><i className="fas fa-star"></i></span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <span className="text-sm text-gray-500 font-medium">Filter:</span>
+          {statusOptions.map((status) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${statusFilter === status
+                ? 'bg-emerald-500 text-white'
+                : 'bg-white text-gray-600 border border-gray-200 hover:border-emerald-300'
+                }`}
+            >
+              {status === 'ALL' ? 'All' : status === 'IN_PROGRESS' ? 'In Progress' : status.charAt(0) + status.slice(1).toLowerCase()}
+            </button>
+          ))}
+
+          {/* B18: Date Range Filter */}
+          <span className="text-sm text-gray-500 font-medium ml-2">Date:</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 bg-white focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
+            placeholder="From"
+          />
+          <span className="text-gray-400 text-xs">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-xs border border-gray-200 bg-white focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 outline-none"
+          />
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="px-2 py-1 text-xs text-red-500 hover:text-red-700">
+              <i className="fas fa-times mr-1"></i>Clear
+            </button>
+          )}
+        </div>
+
         {/* Trip List */}
         {trips.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <div className="text-6xl text-gray-300 mb-4">📋</div>
+            <div className="text-6xl text-gray-300 mb-4"><i className="fas fa-clipboard-list"></i></div>
             <h3 className="text-xl font-semibold text-gray-600 mb-2">No completed trips yet</h3>
             <p className="text-gray-500 mb-6">
-              {isRider 
+              {isRider
                 ? 'Post your first ride to start earning'
                 : 'Book your first ride to start traveling'
               }
             </p>
             <Link
-              to={isRider ? '/rides/post' : '/rides/search'}
+              to={isRider ? '/post-ride' : '/find-ride'}
               className="inline-block bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold transition"
             >
-              {isRider ? '➕ Post a Ride' : '🔍 Find Rides'}
+              {isRider ? 'Post a Ride' : 'Find Rides'}
             </Link>
           </div>
         ) : (
@@ -173,7 +220,7 @@ const TripHistory = () => {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xl">
-                          🚗
+                          <i className="fas fa-car text-lg"></i>
                         </div>
                         <div>
                           <h3 className="font-semibold text-gray-800">Your Ride</h3>
@@ -192,7 +239,7 @@ const TripHistory = () => {
                           ₹{trip.totalEarnings || 0}
                         </div>
                         <p className="text-sm text-gray-600">
-                          {trip.bookings?.filter(b => b.status === 'COMPLETED').length || 0} passengers
+                          {trip.bookings?.filter(b => b.status === 'COMPLETED').reduce((sum, booking) => sum + (booking.seatsBooked || 1), 0) || 0} passengers
                         </p>
                       </div>
                     </div>
@@ -209,7 +256,7 @@ const TripHistory = () => {
                         />
                         <div>
                           <h3 className="font-semibold text-gray-800">
-                            {trip.ride?.rider?.profile?.firstName 
+                            {trip.ride?.rider?.profile?.firstName
                               ? `${trip.ride.rider.profile.firstName} ${trip.ride.rider.profile.lastName || ''}`
                               : trip.ride?.rider?.name || 'Unknown'}
                           </h3>
@@ -235,10 +282,10 @@ const TripHistory = () => {
                 <div className="border-t border-b py-4 mb-4">
                   <div className="space-y-2">
                     <div className="flex items-center text-gray-700">
-                      <span className="text-green-600 w-6">📍</span>
+                      <span className="text-green-600 w-6"><i className="fas fa-map-marker-alt"></i></span>
                       <span className="ml-2 font-medium">
-                        {isRider 
-                          ? (trip.route?.start?.address || trip.from?.address) 
+                        {isRider
+                          ? (trip.route?.start?.address || trip.from?.address)
                           : (trip.ride?.route?.start?.address || trip.ride?.from?.address || 'Not available')}
                       </span>
                     </div>
@@ -251,10 +298,10 @@ const TripHistory = () => {
                       </span>
                     </div>
                     <div className="flex items-center text-gray-700">
-                      <span className="text-red-600 w-6">📍</span>
+                      <span className="text-red-600 w-6"><i className="fas fa-map-marker-alt"></i></span>
                       <span className="ml-2 font-medium">
-                        {isRider 
-                          ? (trip.route?.destination?.address || trip.to?.address) 
+                        {isRider
+                          ? (trip.route?.destination?.address || trip.to?.address)
                           : (trip.ride?.route?.destination?.address || trip.ride?.to?.address || 'Not available')}
                       </span>
                     </div>
@@ -276,7 +323,7 @@ const TripHistory = () => {
                         <div className="text-right">
                           <p className="text-xs text-gray-600">Equivalent to</p>
                           <p className="text-sm font-semibold text-green-700">
-                            🌳 {((trip.carbonSaved || 0) / 21).toFixed(1)} trees
+                            <i className="fas fa-tree mr-1"></i> {((trip.carbonSaved || 0) / 21).toFixed(1)} trees
                           </p>
                         </div>
                       </div>
@@ -290,21 +337,21 @@ const TripHistory = () => {
                     to={isRider ? `/rides/${trip._id}` : `/bookings/${trip._id}`}
                     className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold transition text-sm"
                   >
-                    👁️ View Details
+                    <i className="fas fa-eye mr-1"></i> View Details
                   </Link>
 
-                  {!isRider && !trip.reviews?.passengerReviewed && (
+                  {!isRider && ['COMPLETED', 'DROPPED_OFF'].includes(trip.status) && !trip.reviews?.passengerReviewed && (
                     <Link
                       to={`/bookings/${trip._id}/rate`}
                       className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold transition text-sm"
                     >
-                      ⭐ Rate Rider
+                      <i className="fas fa-star mr-1"></i> Rate Rider
                     </Link>
                   )}
                 </div>
 
                 <p className="text-gray-400 text-xs mt-4">
-                  ⏰ Completed on {new Date(trip.completedAt || trip.createdAt).toLocaleString()}
+                  <i className="fas fa-clock mr-1"></i> Completed on {new Date(trip.completedAt || trip.createdAt).toLocaleString()}
                 </p>
               </div>
             ))}
@@ -325,11 +372,10 @@ const TripHistory = () => {
                   <button
                     key={page}
                     onClick={() => setSearchParams({ page: page.toString() })}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      page === pagination.page
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-white border border-gray-300 hover:bg-gray-50'
-                    }`}
+                    className={`px-4 py-2 rounded-lg font-semibold transition ${page === pagination.page
+                      ? 'bg-emerald-500 text-white'
+                      : 'bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
                   >
                     {page}
                   </button>
@@ -348,7 +394,7 @@ const TripHistory = () => {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 

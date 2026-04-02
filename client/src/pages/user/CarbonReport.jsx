@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import userService from '../../services/userService';
 import { Alert } from '../../components/common';
@@ -36,7 +37,7 @@ const CarbonReport = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
@@ -47,13 +48,13 @@ const CarbonReport = () => {
   const carsOffRoad = ((report?.totalSaved || 0) / 4600).toFixed(2);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen py-8" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <div className={`bg-gradient-to-r ${badge.color} rounded-2xl shadow-lg p-8 mb-8 text-white`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold mb-2 flex items-center">
+              <h1 className="text-3xl font-bold mb-2 flex items-center" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>
                 <i className="fas fa-globe-americas mr-2"></i> Carbon Impact Report
               </h1>
               <p className="opacity-90">Your contribution to a greener planet</p>
@@ -102,7 +103,7 @@ const CarbonReport = () => {
         {/* Trip Stats */}
         <div className="bg-white rounded-2xl shadow-lg p-8 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center">
-            📊 Your Green Journey
+            <i className="fas fa-chart-bar mr-2"></i> Your Green Journey
           </h2>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -136,35 +137,55 @@ const CarbonReport = () => {
           </h2>
           <div className="space-y-4 text-gray-700">
             <p>
-              <strong>Carbon savings</strong> are calculated based on the difference between driving alone 
-              and carpooling. When you share a ride, each passenger saves approximately 
+              <strong>Carbon savings</strong> are calculated based on the difference between driving alone
+              and carpooling. When you share a ride, each passenger saves approximately
               <strong className="text-emerald-600"> 0.21 kg CO₂ per km</strong>.
             </p>
             <div className="bg-white rounded-lg p-4 space-y-2">
-              <p><span className="font-semibold">🌳 1 Tree</span> = Absorbs ~21 kg CO₂ per year</p>
-              <p><span className="font-semibold">🚗 1 Car</span> = Emits ~4,600 kg CO₂ per year</p>
-              <p><span className="font-semibold">📏 Formula</span> = Distance × Passengers × 0.21 kg CO₂/km</p>
+              <p><span className="font-semibold"><i className="fas fa-tree text-green-600 mr-1"></i> 1 Tree</span> = Absorbs ~21 kg CO₂ per year</p>
+              <p><span className="font-semibold"><i className="fas fa-car text-gray-600 mr-1"></i> 1 Car</span> = Emits ~4,600 kg CO₂ per year</p>
+              <p><span className="font-semibold"><i className="fas fa-ruler mr-1"></i> Formula</span> = Distance × Passengers × 0.21 kg CO₂/km</p>
             </div>
           </div>
         </div>
 
         {/* Share Card */}
         <div className="mt-8 bg-white rounded-2xl shadow-lg p-6 text-center">
-          <h3 className="font-semibold text-gray-800 mb-4">Share your impact! 🎉</h3>
+          <h3 className="font-semibold text-gray-800 mb-4">Share your impact</h3>
           <div className="flex justify-center space-x-4">
-            <button className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+            <button
+              onClick={() => {
+                const text = encodeURIComponent(`I've saved ${(report?.totalSaved || 0).toFixed(1)} kg CO₂ by carpooling on LoopLane! That's like planting ${equivalentTrees} trees. #GreenTransport #LoopLane`);
+                window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+              }}
+              className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+            >
               🐦 Twitter
             </button>
-            <button className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
-              📱 WhatsApp
+            <button
+              onClick={() => {
+                const text = encodeURIComponent(`I've saved ${(report?.totalSaved || 0).toFixed(1)} kg CO₂ by carpooling on LoopLane! That's like planting ${equivalentTrees} trees.`);
+                window.open(`https://wa.me/?text=${text}`, '_blank');
+              }}
+              className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+            >
+              <i className="fab fa-whatsapp mr-1"></i> WhatsApp
             </button>
-            <button className="px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition">
+            <button
+              onClick={() => {
+                const url = encodeURIComponent(window.location.origin);
+                const title = encodeURIComponent('My Green Impact on LoopLane');
+                const summary = encodeURIComponent(`I've saved ${(report?.totalSaved || 0).toFixed(1)} kg CO₂ by carpooling - equivalent to planting ${equivalentTrees} trees!`);
+                window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${url}&title=${title}&summary=${summary}`, '_blank');
+              }}
+              className="px-6 py-2 bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition"
+            >
               💼 LinkedIn
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

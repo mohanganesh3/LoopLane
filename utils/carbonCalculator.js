@@ -245,7 +245,9 @@ class CarbonCalculator {
             totalPassengers: totalPassengers,
             totalCarbonSaved: parseFloat(totalSaved.toFixed(2)),
             equivalentTrees: parseFloat(equivalentTrees.toFixed(1)),
-            averageSavingPerRide: parseFloat((totalSaved / completedRides.length).toFixed(2)),
+            averageSavingPerRide: completedRides.length > 0
+                ? parseFloat((totalSaved / completedRides.length).toFixed(2))
+                : 0,
             message: `You've saved ${totalSaved.toFixed(1)} kg CO₂ - equivalent to ${equivalentTrees.toFixed(1)} trees!`
         };
     }
@@ -329,7 +331,7 @@ class CarbonCalculator {
                         const vehicle = user.vehicles?.find(
                             v => v._id.toString() === ride.vehicle?.toString()
                         );
-                        const vehicleType = vehicle?.type || 'SEDAN';
+                        const vehicleType = vehicle?.vehicleType || vehicle?.type || 'SEDAN';
                         const fuelType = vehicle?.fuelType || 'PETROL';
 
                         const savings = this.calculateCarbonSaved(
@@ -378,7 +380,7 @@ class CarbonCalculator {
                         const vehicle = rider?.vehicles?.find(
                             v => v._id.toString() === ride.vehicle?.toString()
                         );
-                        const vehicleType = vehicle?.type || 'SEDAN';
+                        const vehicleType = vehicle?.vehicleType || vehicle?.type || 'SEDAN';
                         const fuelType = vehicle?.fuelType || 'PETROL';
 
                         const savings = this.calculateCarbonSaved(
@@ -430,7 +432,7 @@ class CarbonCalculator {
                 equivalentTrees: 0,
                 badge: {
                     level: 'STARTER',
-                    emoji: '�',
+                    emoji: '🌍',
                     name: 'Getting Started',
                     color: '#3498DB'
                 },
