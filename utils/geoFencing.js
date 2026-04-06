@@ -292,11 +292,33 @@ class GeoFencing {
 
         try {
             const currentPoint = turf.point([currentLocation.lng, currentLocation.lat]);
-            const destPoint = turf.point([destination.lng, destination.lat]);
-            
-            // Calculate remaining distance
-            const remainingDistance = turf.distance(currentPoint, destPoint, { units: 'kilometers' });
-            
+            let remainingDistance;
+
+            if (routeGeometry && routeGeometry.length >= 2) {
+                // Use actual route geometry for accurate road-distance ETA
+                const line = turf.lineString(routeGeometry);
+                const totalRouteLength = turf.length(line, { units: 'kilometers' });
+
+                // Snap current position onto the route line
+                const snapped = turf.nearestPointOnLine(line, currentPoint, { units: 'kilometers' });
+
+                // Slice the route from start → snapped position to get traveled distance
+                const traveledSlice = turf.lineSlice(
+                    turf.point(routeGeometry[0]),
+                    snapped,
+                    line
+                );
+                const traveledDistance = turf.length(traveledSlice, { units: 'kilometers' });
+                remainingDistance = totalRouteLength - traveledDistance;
+
+                // Guard against negative values from GPS jitter
+                if (remainingDistance < 0) remainingDistance = 0;
+            } else {
+                // Fallback to straight-line distance when no route geometry available
+                const destPoint = turf.point([destination.lng, destination.lat]);
+                remainingDistance = turf.distance(currentPoint, destPoint, { units: 'kilometers' });
+            }
+
             // Calculate ETA in minutes
             const etaMinutes = (remainingDistance / averageSpeed) * 60;
             const etaDate = new Date(Date.now() + (etaMinutes * 60 * 1000));
