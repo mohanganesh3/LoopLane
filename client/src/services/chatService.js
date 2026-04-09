@@ -74,17 +74,11 @@ const chatService = {
     return response.data;
   },
 
-  // Get chats for a specific ride (rider's view - may have multiple bookings)
+  // Get chats for a specific ride (server-side query)
   getChatByRide: async (rideId) => {
-    // Get all user chats and filter by ride
-    const response = await api.get('/api/chat/my-chats');
-    const chats = response.data.chats || [];
-    // Find chats that belong to this ride
-    const rideChats = chats.filter(chat => 
-      chat.booking?.ride === rideId || chat.booking?.ride?._id === rideId
-    );
+    const response = await api.get(`/api/chat/by-ride/${encodeURIComponent(rideId)}`);
     return {
-      chats: rideChats
+      chats: response.data.chats || []
     };
   }
 };

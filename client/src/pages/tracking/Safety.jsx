@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import api from '../../services/api';
 
 const Safety = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { bookingId, driverLocation } = location.state || {};
+  const { bookingId: routeBookingId } = useParams();
+  const bookingId = location.state?.bookingId || routeBookingId;
+  const driverLocation = location.state?.driverLocation || null;
   
   const [countdown, setCountdown] = useState(10);
   const [activated, setActivated] = useState(false);
@@ -91,7 +94,7 @@ const Safety = () => {
 
   if (calling) {
     return (
-      <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-4">
         <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center mb-8 animate-pulse">
           <svg className="w-16 h-16 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -138,12 +141,12 @@ const Safety = () => {
             Go Back
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
       {/* Header */}
       <button
         onClick={() => navigate(-1)}
@@ -157,7 +160,7 @@ const Safety = () => {
       {!activated ? (
         <>
           <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold text-white mb-4">Safety Alert</h1>
+            <h1 className="text-3xl font-bold text-white mb-4" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Safety Alert</h1>
             <p className="text-gray-400">Press the button below if you need help</p>
           </div>
 
@@ -260,7 +263,7 @@ const Safety = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

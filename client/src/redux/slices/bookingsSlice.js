@@ -56,9 +56,9 @@ export const getBookingById = createAsyncThunk(
 // Create booking
 export const createBooking = createAsyncThunk(
   'bookings/create',
-  async (bookingData, { rejectWithValue }) => {
+  async ({ rideId, bookingData }, { rejectWithValue }) => {
     try {
-      const response = await api.post('/api/bookings/create', bookingData);
+      const response = await api.post(`/api/bookings/create/${rideId}`, bookingData);
       if (response.data?.success) {
         return response.data.booking;
       }
@@ -90,7 +90,7 @@ export const confirmBooking = createAsyncThunk(
   'bookings/confirm',
   async (bookingId, { rejectWithValue }) => {
     try {
-      const response = await api.post(`/api/bookings/${bookingId}/confirm`);
+      const response = await api.post(`/api/bookings/${bookingId}/accept`);
       if (response.data?.success) {
         return { bookingId, status: 'CONFIRMED' };
       }

@@ -37,7 +37,7 @@ export const searchRides = createAsyncThunk(
   'rides/search',
   async (searchParams, { rejectWithValue }) => {
     try {
-      const response = await api.get('/api/rides/search', { params: searchParams });
+      const response = await api.get('/api/rides/search/results', { params: searchParams });
       if (response.data?.success) {
         return {
           rides: response.data.rides || [],
@@ -88,7 +88,7 @@ export const createRide = createAsyncThunk(
   'rides/create',
   async (rideData, { rejectWithValue }) => {
     try {
-      const response = await api.post('/api/rides/create', rideData);
+      const response = await api.post('/api/rides/post', rideData);
       if (response.data?.success) {
         return response.data.ride;
       }

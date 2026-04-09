@@ -37,9 +37,9 @@ export const getUnreadCount = createAsyncThunk(
   'notifications/getUnreadCount',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/api/notifications/unread-count');
+      const response = await api.get('/api/notifications/count');
       if (response.data?.success) {
-        return response.data.count || 0;
+        return response.data.unreadCount || response.data.count || 0;
       }
       return 0;
     } catch (error) {

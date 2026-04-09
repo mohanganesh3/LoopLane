@@ -6,14 +6,10 @@
 // Store
 export { store, persistor } from './store';
 
-// Auth slice
+// Auth slice (sync reducers only — AuthContext is the source of truth)
 export {
-  checkAuth,
-  loginUser,
-  registerUser,
-  logoutUser,
-  updateProfile,
-  updateProfilePicture,
+  setUser,
+  clearUser,
   clearError as clearAuthError,
   updateUserLocal,
   resetTwoFactor,
@@ -47,17 +43,6 @@ export {
   clearCurrentBooking,
   updateBookingStatus
 } from './slices/bookingsSlice';
-
-// Notifications slice
-export {
-  getNotifications,
-  getUnreadCount,
-  markAsRead,
-  markAllAsRead,
-  clearError as clearNotificationsError,
-  addNotification,
-  clearNotifications
-} from './slices/notificationsSlice';
 
 // UI slice
 export {

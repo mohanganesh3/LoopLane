@@ -93,7 +93,7 @@ export const useDriverTracking = (rideId) => {
 
     socketRef.current.on('connect', () => {
       // Join the ride room for broadcasting
-      socketRef.current.emit('join-ride', rideId);
+      socketRef.current.emit('join-ride', { rideId });
       setIsSharing(true);
 
       watchIdRef.current = navigator.geolocation.watchPosition(

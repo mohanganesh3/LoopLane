@@ -11,7 +11,6 @@ import storage from 'redux-persist/lib/storage'; // Uses localStorage
 import authReducer from './slices/authSlice';
 import ridesReducer from './slices/ridesSlice';
 import bookingsReducer from './slices/bookingsSlice';
-import notificationsReducer from './slices/notificationsSlice';
 import uiReducer from './slices/uiSlice';
 
 // Persist configuration
@@ -19,8 +18,7 @@ const persistConfig = {
   key: 'root',
   version: 1,
   storage,
-  whitelist: ['auth', 'ui'], // Only persist auth and ui state
-  blacklist: ['rides', 'bookings', 'notifications'] // Don't persist these (always fetch fresh)
+  whitelist: ['auth', 'ui'] // Only persist auth and ui state
 };
 
 // Combine reducers
@@ -28,7 +26,6 @@ const rootReducer = combineReducers({
   auth: authReducer,
   rides: ridesReducer,
   bookings: bookingsReducer,
-  notifications: notificationsReducer,
   ui: uiReducer
 });
 
@@ -44,7 +41,7 @@ export const store = configureStore({
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER]
       }
     }),
-  devTools: process.env.NODE_ENV !== 'production'
+  devTools: import.meta.env.MODE !== 'production'
 });
 
 // Create persistor

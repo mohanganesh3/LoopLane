@@ -33,6 +33,7 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const { user, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [hasUnread, setHasUnread] = useState(false);
@@ -48,11 +49,12 @@ export const SocketProvider = ({ children }) => {
   // Initialize socket connection
   useEffect(() => {
     if (isAuthenticated && user) {
+      const abortCtrl = new AbortController();
       // Fetch initial unread status
       chatService.getUnreadCount().then(data => {
-        setHasUnread(data.hasUnread || false);
+        if (!abortCtrl.signal.aborted) setHasUnread(data.hasUnread || false);
       }).catch(err => {
-        console.error('Failed to fetch unread status:', err);
+        if (!abortCtrl.signal.aborted) console.error('Failed to fetch unread status:', err);
       });
 
       const socketBaseUrl = import.meta.env.VITE_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : '');
@@ -69,27 +71,19 @@ export const SocketProvider = ({ children }) => {
       });
 
       newSocket.on('connect', () => {
-        console.log('Socket connected:', newSocket.id);
         setIsConnected(true);
         // Join user's personal room for notifications
+        // This also handles reconnections — Socket.IO v4 fires 'connect' on reconnect
         newSocket.emit('join-user', user._id);
-        console.log('Joining user room:', user._id);
       });
 
       newSocket.on('disconnect', () => {
-        console.log('Socket disconnected');
         setIsConnected(false);
       });
 
       newSocket.on('connect_error', (error) => {
         console.error('Socket connection error:', error);
         setIsConnected(false);
-      });
-
-      // Reconnect handler - rejoin rooms
-      newSocket.on('reconnect', () => {
-        console.log('Socket reconnected, rejoining user room');
-        newSocket.emit('join-user', user._id);
       });
 
       // Online users list
@@ -109,7 +103,6 @@ export const SocketProvider = ({ children }) => {
 
       // Chat notification - ONLY set hasUnread if NOT viewing that chat
       newSocket.on('chat-notification', (data) => {
-        console.log('🔴 Chat notification received:', data, 'Current chat:', currentChatIdRef.current);
         // Only show unread dot if we're NOT currently viewing this chat
         if (currentChatIdRef.current !== data.chatId) {
           setHasUnread(true);
@@ -117,13 +110,18 @@ export const SocketProvider = ({ children }) => {
       });
 
       setSocket(newSocket);
+      socketRef.current = newSocket;
 
       return () => {
+        abortCtrl.abort();
         newSocket.close();
+        socketRef.current = null;
       };
     } else {
-      if (socket) {
-        socket.close();
+      // Use ref to avoid stale closure over old socket state
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
         setSocket(null);
         setIsConnected(false);
       }
@@ -221,7 +219,9 @@ export const SocketProvider = ({ children }) => {
     isUserOnline,
     refreshUnreadCount,
     clearUnread,
-    currentChatId
+    setHasUnread,
+    currentChatId,
+    setCurrentChatId
   ]);
 
   return (

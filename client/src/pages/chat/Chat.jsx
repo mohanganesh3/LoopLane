@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import chatService from '../../services/chatService';
 import { LoadingSpinner, Alert } from '../../components/common';
+import { ClayButton } from '../../components/clay';
 import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
 
 const Chat = () => {
@@ -91,7 +93,7 @@ const Chat = () => {
         }).catch(err => console.error('Failed to mark as read:', err));
       }
       // Update conversations list
-      updateConversationLastMessage(message);
+      updateConversationLastMessage(message, data.chatId);
     });
 
     // Chat notification - update conversation unread indicator
@@ -259,10 +261,12 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const updateConversationLastMessage = (message) => {
+  const updateConversationLastMessage = (message, conversationId = message?.conversationId || message?.chatId) => {
+    if (!conversationId) return;
+
     setConversations(prev => prev.map(conv => 
-      conv._id === message.conversationId
-        ? { ...conv, lastMessage: message, updatedAt: new Date() }
+      conv._id === conversationId
+        ? { ...conv, lastMessage: message, updatedAt: message?.timestamp || message?.createdAt || new Date() }
         : conv
     ).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
   };
@@ -278,8 +282,7 @@ const Chat = () => {
     try {
       const data = await chatService.sendMessage(activeConversation._id, messageContent);
       setMessages(prev => [...prev, data.message]);
-      sendMessage(activeConversation._id, data.message);
-      updateConversationLastMessage(data.message);
+      updateConversationLastMessage(data.message, activeConversation._id);
     } catch (err) {
       setError('Failed to send message');
       setNewMessage(messageContent);
@@ -340,7 +343,12 @@ const Chat = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex bg-gray-100 overflow-hidden">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="h-[calc(100vh-4rem)] flex overflow-hidden"
+      style={{ background: 'var(--ll-cream, #f5f0e8)' }}
+    >
       {/* Conversations Sidebar */}
       <ConversationsList
         conversations={conversations}
@@ -405,7 +413,7 @@ const Chat = () => {
           <Alert type="error" message={error} onClose={() => setError('')} />
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
@@ -472,7 +480,10 @@ const ConversationsList = ({ conversations, activeConversation, onSelectConversa
     <div className="w-80 bg-white border-r flex flex-col">
       {/* Header */}
       <div className="p-4 border-b">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center">
+        <h2
+          className="text-xl font-bold text-gray-800 flex items-center"
+          style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}
+        >
           <i className="fas fa-comments text-emerald-500 mr-2"></i>
           Messages
         </h2>
@@ -525,7 +536,7 @@ const ConversationsList = ({ conversations, activeConversation, onSelectConversa
                       {getDisplayName(participant)}
                     </h3>
                     <span className="text-xs text-gray-500">
-                      {formatTime(conversation.lastMessage?.createdAt)}
+                      {formatTime(conversation.lastMessage?.timestamp || conversation.lastMessage?.createdAt)}
                     </span>
                   </div>
                   <p className="text-sm text-gray-500 truncate">
@@ -629,13 +640,15 @@ const MessageInput = ({ value, onChange, onSubmit, disabled }) => {
           placeholder="Type a message..."
           className="flex-1 px-4 py-2 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
-        <button
+        <ClayButton
           type="submit"
+          variant="primary"
+          size="icon"
+          rounded
           disabled={disabled || !value.trim()}
-          className="p-2 bg-emerald-500 text-white rounded-full hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <i className="fas fa-paper-plane"></i>
-        </button>
+        </ClayButton>
       </div>
     </form>
   );

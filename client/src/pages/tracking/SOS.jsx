@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import api from '../../services/api';
 
 const SOS = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { bookingId, driverLocation } = location.state || {};
+  const { bookingId: routeBookingId } = useParams();
+  const bookingId = location.state?.bookingId || routeBookingId;
+  const driverLocation = location.state?.driverLocation || null;
   
   const [countdown, setCountdown] = useState(10);
   const [activated, setActivated] = useState(false);
@@ -91,7 +94,7 @@ const SOS = () => {
 
   if (calling) {
     return (
-      <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-4">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-4">
         <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center mb-8 animate-pulse">
           <svg className="w-16 h-16 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -138,12 +141,12 @@ const SOS = () => {
             Go Back
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-screen bg-gray-900 flex flex-col items-center justify-center px-4">
       {/* Header */}
       <button
         onClick={() => navigate(-1)}
@@ -157,7 +160,7 @@ const SOS = () => {
       {!activated ? (
         <>
           <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold text-white mb-4">Emergency SOS</h1>
+            <h1 className="text-3xl font-bold text-white mb-4" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Emergency SOS</h1>
             <p className="text-gray-400">Press the button below if you need help</p>
           </div>
 
@@ -258,7 +261,7 @@ const SOS = () => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

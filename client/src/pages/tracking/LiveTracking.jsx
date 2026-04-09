@@ -8,6 +8,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { getUserDisplayName, getInitials, getAvatarColor, getUserPhoto } from '../../utils/imageHelpers';
 import { getRating } from '../../utils/helpers';
+import { motion } from 'framer-motion';
 
 // Fix for default markers
 delete L.Icon.Default.prototype._getIconUrl;
@@ -104,6 +105,7 @@ const LiveTracking = () => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpType, setOtpType] = useState(null); // 'pickup' or 'dropoff'
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [liveRideStatus, setLiveRideStatus] = useState(null);
 
   // Derived state
   const isPassenger = user?._id === booking?.passenger?._id;
@@ -210,22 +212,30 @@ const LiveTracking = () => {
 
     const handlePickupConfirmed = (data) => {
       if (data.bookingId === bookingId) {
-        showNotification('✅ Pickup verified! You are now on board.', 'success');
+        showNotification('Pickup verified! You are now on board.', 'success');
         fetchBooking();
       }
     };
 
     const handleDropoffConfirmed = (data) => {
       if (data.bookingId === bookingId) {
-        showNotification('🎉 Journey completed! Please rate your experience.', 'success');
+        showNotification('Journey completed! Please rate your experience.', 'success');
         fetchBooking();
       }
     };
 
     const handleRideStarted = (data) => {
       if (data.rideId === booking?.ride?._id || data.bookingId === bookingId) {
-        showNotification('🚗 Ride has started! Driver is on the way.', 'info');
+        setLiveRideStatus('ride_started');
+        showNotification('Ride has started! Driver is on the way.', 'info');
         fetchBooking();
+      }
+    };
+
+    const handleRideStatusUpdate = (data) => {
+      if (data.rideId === booking?.ride?._id) {
+        setLiveRideStatus(data.status);
+        showNotification(`Driver update: ${formatDriverTrackingStatus(data.status)}`, 'info');
       }
     };
 
@@ -235,6 +245,7 @@ const LiveTracking = () => {
     socket.on('pickup-confirmed', handlePickupConfirmed);
     socket.on('dropoff-confirmed', handleDropoffConfirmed);
     socket.on('ride-started', handleRideStarted);
+    socket.on('ride-status-update', handleRideStatusUpdate);
 
     return () => {
       socket.emit('leave-tracking', { bookingId });
@@ -244,6 +255,7 @@ const LiveTracking = () => {
       socket.off('pickup-confirmed', handlePickupConfirmed);
       socket.off('dropoff-confirmed', handleDropoffConfirmed);
       socket.off('ride-started', handleRideStarted);
+      socket.off('ride-status-update', handleRideStatusUpdate);
     };
   }, [socket, isConnected, booking, bookingId, fetchBooking]);
 
@@ -278,10 +290,10 @@ const LiveTracking = () => {
     try {
       if (otpType === 'pickup') {
         await bookingService.confirmPickup(bookingId, otpInput);
-        showNotification('✅ Pickup verified successfully!', 'success');
+        showNotification('Pickup verified successfully!', 'success');
       } else {
         await bookingService.confirmDropoff(bookingId, otpInput);
-        showNotification('🎉 Dropoff verified! Journey complete.', 'success');
+        showNotification('Dropoff verified! Journey complete.', 'success');
       }
       setShowOtpModal(false);
       setOtpInput('');
@@ -295,7 +307,7 @@ const LiveTracking = () => {
 
   const handleSafety = () => {
     navigate(`/tracking/${bookingId}/safety`, {
-      state: { booking, driverLocation, userLocation }
+      state: { booking, bookingId, driverLocation, userLocation }
     });
   };
 
@@ -312,6 +324,18 @@ const LiveTracking = () => {
       'COMPLETED': 'Completed',
       'CANCELLED': 'Cancelled'
     };
+    return statusMap[status] || status;
+  };
+
+  const formatDriverTrackingStatus = (status) => {
+    const statusMap = {
+      'not_started': 'Driver has not started yet',
+      'on_way_to_pickup': 'Driver is on the way to pickup',
+      'arrived_at_pickup': 'Driver has arrived at pickup',
+      'ride_started': 'Ride has started',
+      'completed': 'Driver marked the ride as completed'
+    };
+
     return statusMap[status] || status;
   };
 
@@ -338,7 +362,7 @@ const LiveTracking = () => {
   // ============ RENDER ============
   if (loading) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex items-center justify-center bg-gray-50">
+      <div className="h-[calc(100vh-4rem)] flex items-center justify-center" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-500 border-t-transparent mx-auto mb-4"></div>
           <p className="text-gray-600 font-medium">Loading your journey...</p>
@@ -349,7 +373,7 @@ const LiveTracking = () => {
 
   if (error || !booking) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
+      <div className="min-h-screen py-12" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
         <div className="max-w-lg mx-auto px-4 text-center">
           <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -379,12 +403,12 @@ const LiveTracking = () => {
   const mapPoints = [pickupLatLng, dropoffLatLng, driverLocation && [driverLocation.lat, driverLocation.lng]].filter(Boolean);
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col lg:flex-row bg-gray-100">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-[calc(100vh-4rem)] flex flex-col lg:flex-row" style={{ background: 'var(--ll-cream, #f5f0e8)' }}>
       {/* Notification Toast */}
       {notification && (
         <div className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-[2000] px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-slide-down ${notification.type === 'success' ? 'bg-green-500 text-white' :
-            notification.type === 'error' ? 'bg-red-500 text-white' :
-              'bg-blue-500 text-white'
+          notification.type === 'error' ? 'bg-red-500 text-white' :
+            'bg-blue-500 text-white'
           }`}>
           <i className={`fas ${notification.type === 'success' ? 'fa-check-circle' : notification.type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}`}></i>
           <span className="font-medium">{notification.message}</span>
@@ -483,7 +507,7 @@ const LiveTracking = () => {
         <div className="sticky top-0 bg-white border-b z-10">
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
-              <h1 className="text-lg font-bold text-gray-800">Live Tracking</h1>
+              <h1 className="text-lg font-bold text-gray-800" style={{ fontFamily: 'var(--ll-font-display, "Instrument Serif", serif)' }}>Live Tracking</h1>
               <button onClick={handleSafety} className="hidden lg:flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition text-sm font-semibold">
                 <i className="fas fa-exclamation-triangle"></i>Safety
               </button>
@@ -491,6 +515,12 @@ const LiveTracking = () => {
 
             {/* Status Badge */}
             <StatusBadge status={booking.status} formatStatus={formatStatus} getStatusColor={getStatusColor} />
+            {liveRideStatus && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                {formatDriverTrackingStatus(liveRideStatus)}
+              </div>
+            )}
           </div>
 
           {/* Progress Steps */}
@@ -579,7 +609,7 @@ const LiveTracking = () => {
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -763,12 +793,12 @@ const JourneyStatusMessage = ({ booking, isPassenger }) => {
   const messages = {
     PENDING: { icon: 'fa-clock', bg: 'amber', text: 'Waiting for driver to accept your booking...' },
     CONFIRMED: { icon: 'fa-check-circle', bg: 'blue', text: isPassenger ? 'Booking confirmed! Driver will start the ride soon.' : 'Booking confirmed. Start the ride when ready.' },
-    PICKUP_PENDING: { icon: 'fa-car', bg: 'blue', text: isPassenger ? '🚗 Driver is on the way! Get ready with your pickup OTP.' : 'Navigate to pickup location and verify OTP.' },
-    PICKED_UP: { icon: 'fa-route', bg: 'purple', text: '🛣️ Journey in progress. Sit back and enjoy the ride!' },
-    IN_TRANSIT: { icon: 'fa-route', bg: 'purple', text: '🛣️ On the way to destination.' },
-    DROPOFF_PENDING: { icon: 'fa-location-arrow', bg: 'orange', text: '📍 Almost there! Get ready to exit.' },
-    DROPPED_OFF: { icon: 'fa-check-double', bg: 'green', text: '🎉 You have arrived! Please rate your experience.' },
-    COMPLETED: { icon: 'fa-trophy', bg: 'green', text: '✨ Journey completed successfully!' },
+    PICKUP_PENDING: { icon: 'fa-car', bg: 'blue', text: isPassenger ? 'Driver is on the way! Get ready with your pickup OTP.' : 'Navigate to pickup location and verify OTP.' },
+    PICKED_UP: { icon: 'fa-route', bg: 'purple', text: 'Journey in progress. Sit back and enjoy the ride!' },
+    IN_TRANSIT: { icon: 'fa-route', bg: 'purple', text: 'On the way to destination.' },
+    DROPOFF_PENDING: { icon: 'fa-location-arrow', bg: 'orange', text: 'Almost there! Get ready to exit.' },
+    DROPPED_OFF: { icon: 'fa-check-double', bg: 'green', text: 'You have arrived! Please rate your experience.' },
+    COMPLETED: { icon: 'fa-trophy', bg: 'green', text: 'Journey completed successfully!' },
     CANCELLED: { icon: 'fa-times-circle', bg: 'red', text: 'This booking has been cancelled.' }
   };
 
