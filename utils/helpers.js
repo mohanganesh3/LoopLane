@@ -7,15 +7,14 @@ const crypto = require('crypto');
 const moment = require('moment');
 
 /**
- * Generate random OTP
+ * Generate cryptographically secure random OTP
  * @param {number} length - Length of OTP (default: 6)
  * @returns {string} OTP
  */
 exports.generateOTP = (length = 6) => {
-    const digits = '0123456789';
     let OTP = '';
     for (let i = 0; i < length; i++) {
-        OTP += digits[Math.floor(Math.random() * 10)];
+        OTP += crypto.randomInt(0, 10).toString();
     }
     return OTP;
 };
@@ -87,7 +86,8 @@ exports.calculateDistance = (lat1, lon1, lat2, lon2) => {
  * @returns {string} Formatted currency
  */
 exports.formatCurrency = (amount, currency = '₹') => {
-    return `${currency}${amount.toFixed(2)}`;
+    const numericAmount = Number(amount);
+    return `${currency}${(Number.isFinite(numericAmount) ? numericAmount : 0).toFixed(2)}`;
 };
 
 /**
@@ -96,7 +96,7 @@ exports.formatCurrency = (amount, currency = '₹') => {
  */
 exports.generateBookingRef = () => {
     const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const random = crypto.randomBytes(4).toString('hex').toUpperCase();
     return `BK-${timestamp}-${random}`;
 };
 
@@ -106,7 +106,7 @@ exports.generateBookingRef = () => {
  */
 exports.generateRideRef = () => {
     const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const random = crypto.randomBytes(4).toString('hex').toUpperCase();
     return `RD-${timestamp}-${random}`;
 };
 
@@ -196,7 +196,7 @@ exports.paginate = (arrayOrCount, page = 1, limit = 10) => {
  * @returns {string} Hex color code
  */
 exports.generateRandomColor = () => {
-    return '#' + Math.floor(Math.random()*16777215).toString(16);
+    return `#${crypto.randomBytes(3).toString('hex')}`;
 };
 
 /**
@@ -262,6 +262,7 @@ exports.maskEmail = (email) => {
  * @returns {string} Masked phone
  */
 exports.maskPhone = (phone) => {
+    if (!phone) return phone;
     const cleaned = phone.replace(/\D/g, '');
     if (cleaned.length >= 10) {
         return '*'.repeat(cleaned.length - 4) + cleaned.slice(-4);
@@ -297,7 +298,7 @@ exports.sleep = (ms) => {
 exports.shuffleArray = (array) => {
     const arr = [...array];
     for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = crypto.randomInt(0, i + 1);
         [arr[i], arr[j]] = [arr[j], arr[i]];
     }
     return arr;
@@ -384,8 +385,9 @@ exports.canViewProfile = (profileOwner, viewer, hasConfirmedBooking = false) => 
         return { canView: true, reason: 'Own profile' };
     }
     
-    // Admins can view any profile
-    if (viewer.role === 'ADMIN') {
+    // Admin-panel roles can view any profile
+    const { ADMIN_ROLES } = require('../config/roles');
+    if (ADMIN_ROLES.includes(viewer.role)) {
         return { canView: true, reason: 'Admin access' };
     }
     

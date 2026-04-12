@@ -103,16 +103,18 @@ const emergencySchema = new Schema({
         type: String,
         default: ''
     },
+    escalation: {
+        level: { type: Number, default: 0 },          // 0 = not escalated, 1 = supervisory, 2 = critical/external
+        escalatedAt: { type: Date },
+        escalatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+        reason: { type: String, default: '' },
+        notifiedTo: [{ type: String }],              // e.g. 'admin:email@x.com', 'contact:name'
+    },
     contacts: [contactSchema],
     notifications: [notificationSchema]
 }, {
     timestamps: true
 });
-
-// Indexes
-emergencySchema.index({ 'location.coordinates': '2dsphere' });
-emergencySchema.index({ status: 1, triggeredAt: -1 });
-emergencySchema.index({ user: 1, status: 1 });
 
 // Virtuals
 emergencySchema.virtual('isOpen').get(function isOpen() {
@@ -196,5 +198,10 @@ emergencySchema.statics.getStats = async function getStats({ start, end } = {}) 
     summary.total = stats.reduce((total, item) => total + item.count, 0);
     return summary;
 };
+
+// 2dsphere index for geospatial queries ($near in trackingControllerEnhanced)
+emergencySchema.index({ 'location.coordinates': '2dsphere' });
+emergencySchema.index({ user: 1, status: 1 });
+emergencySchema.index({ status: 1, triggeredAt: -1 });
 
 module.exports = mongoose.model('Emergency', emergencySchema);

@@ -20,12 +20,17 @@ const morgan = require('morgan');
 const http = require('http');
 const socketIO = require('socket.io');
 
+// Swagger setup
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
+
 // Security middleware
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
+const rateLimit = require('express-rate-limit');
 // Note: csurf removed - deprecated and unnecessary for JWT-authenticated SPA APIs
 
 // Logger configuration
@@ -33,6 +38,9 @@ const { accessLogStream, errorLogStream, shouldSkipLogging } = require('./utils/
 
 // User utilities (kept for API enrichment)
 const { enrichUsers } = require('./utils/userUtils');
+
+// Epic 3: Telematics Engine
+const telematicsEngine = require('./utils/telematicsEngine');
 
 // Import database configuration
 const connectDB = require('./config/database');
@@ -68,8 +76,52 @@ app.set('trust proxy', 1);
 app.set('io', io);
 
 // Connect to MongoDB
-connectDB();
+// Note: actual connection is awaited in the startup sequence at the bottom of this file
 
+
+// Import authentication middleware for Swagger protection
+const { isAuthenticated } = require('./middleware/auth');
+
+// NOTE: Swagger routes are mounted before the global cookieParser() middleware below.
+// If we don't parse cookies here, authenticated browser sessions will still look unauthenticated.
+const swaggerCookieParser = cookieParser(process.env.COOKIE_SECRET || process.env.SESSION_SECRET);
+
+// ─── Swagger UI — disable helmet CSP only for /api/docs ─────────────────────
+app.use('/api/docs', swaggerCookieParser, isAuthenticated, (req, res, next) => {
+    res.setHeader('Content-Security-Policy', [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
+        "img-src 'self' data: https://cdn.jsdelivr.net https://unpkg.com",
+        "connect-src 'self'"
+    ].join('; '));
+    next();
+});
+app.use('/api/docs', swaggerCookieParser, isAuthenticated, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    explorer: false,
+    customSiteTitle: 'LoopLane API Docs',
+    customCss: `.swagger-ui .topbar { background: #1a1a2e; } .swagger-ui .topbar-wrapper img { content: url('https://cdn.jsdelivr.net/npm/simple-icons@v10/icons/googlemaps.svg'); height:40px; } .swagger-ui .info .title { color: #4f46e5; }`,
+    swaggerOptions: {
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        docExpansion: 'none',
+        filter: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+
+        // Hide the global "Schemas" panel at the bottom of Swagger UI
+        // (keep schemas in the spec so $ref still resolves inside operations)
+        defaultModelsExpandDepth: -1,
+        defaultModelExpandDepth: -1
+    }
+}));
+
+// Raw OpenAPI spec as JSON
+app.get('/api/swagger.json', swaggerCookieParser, isAuthenticated, (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
@@ -99,12 +151,33 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false
 }));
 
+// Rate limiting - 100 requests per 15 minutes
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // limit each IP to 1000 requests per windowMs (increased for local testing)
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+// Apply to all /api routes
+app.use('/api/', apiLimiter);
+
+// Specific stricter rate limiter for auth routes
+const authLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 200, // limit each IP to 200 requests per hour for auth (increased for local testing)
+    message: 'Too many authentication attempts, please try again after an hour',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/auth/', authLimiter);
+
 // CORS configuration - allow credentials for session/JWT
 app.use(cors({
-    origin: function(origin, callback) {
+    origin: function (origin, callback) {
         // Allow requests with no origin (mobile apps, Postman, etc.)
         if (!origin) return callback(null, true);
-        
+
         // Check if origin is allowed
         if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
             return callback(null, true);
@@ -129,7 +202,7 @@ app.use(cookieParser(process.env.COOKIE_SECRET || process.env.SESSION_SECRET));
 // Logging middleware with file rotation
 if (process.env.NODE_ENV === 'production') {
     // Production: log to rotating files
-    app.use(morgan('combined', { 
+    app.use(morgan('combined', {
         stream: accessLogStream,
         skip: shouldSkipLogging
     }));
@@ -172,14 +245,14 @@ app.get('/api/debug/build-info', (req, res) => {
     const fs = require('fs');
     const distPath = path.join(__dirname, 'client/dist');
     const assetsPath = path.join(__dirname, 'client/dist/assets');
-    
+
     const info = {
         distExists: fs.existsSync(distPath),
         assetsExists: fs.existsSync(assetsPath),
         assets: [],
         indexHtmlExists: fs.existsSync(path.join(distPath, 'index.html'))
     };
-    
+
     if (info.assetsExists) {
         try {
             info.assets = fs.readdirSync(assetsPath);
@@ -187,7 +260,7 @@ app.get('/api/debug/build-info', (req, res) => {
             info.assetsError = e.message;
         }
     }
-    
+
     res.json(info);
 });
 
@@ -195,77 +268,129 @@ app.get('/api/debug/build-info', (req, res) => {
 
 // Socket.IO JWT Authentication Middleware
 const { verifyAccessToken } = require('./middleware/jwt');
+const User = require('./models/User');
+const { ADMIN_ROLES } = require('./config/roles');
+
+const parseCookieHeader = (cookieHeader) => {
+    if (!cookieHeader || typeof cookieHeader !== 'string') return {};
+
+    return cookieHeader.split(';').reduce((acc, part) => {
+        const trimmed = part.trim();
+        if (!trimmed) return acc;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx === -1) return acc;
+        const key = trimmed.slice(0, eqIdx).trim();
+        const value = trimmed.slice(eqIdx + 1).trim();
+        if (!key) return acc;
+        try {
+            acc[key] = decodeURIComponent(value);
+        } catch {
+            acc[key] = value;
+        }
+        return acc;
+    }, {});
+};
+
+const extractSocketToken = (socket) => {
+    const authToken = socket?.handshake?.auth?.token;
+    const queryToken = socket?.handshake?.query?.token;
+    if (authToken || queryToken) return authToken || queryToken;
+
+    const cookies = parseCookieHeader(socket?.handshake?.headers?.cookie);
+    return cookies.accessToken;
+};
 
 io.use(async (socket, next) => {
     try {
-        // Extract token from auth object or query params
-        const token = socket.handshake.auth.token || socket.handshake.query.token;
-        
-        if (token) {
-            // Verify JWT token
-            const decoded = verifyAccessToken(token);
-            socket.userId = decoded.userId;
-            console.log('✅ [Socket.IO] JWT authenticated user:', socket.userId);
+        const token = extractSocketToken(socket);
+
+        // Allow connection without auth, but DO NOT trust userId from client.
+        // Private rooms (user/admin) are guarded in the event handlers below.
+        if (!token) {
+            socket.userId = null;
+            socket.user = null;
             return next();
         }
-        
-        // Fallback: allow connection without auth (for backward compatibility)
-        // User can authenticate later via join-user event
-        if (socket.handshake.auth && socket.handshake.auth.userId) {
-            socket.userId = socket.handshake.auth.userId;
-            console.log('✅ [Socket.IO] Session authenticated user:', socket.userId);
-            return next();
-        }
-        
-        console.log('⚠️ [Socket.IO] Unauthenticated connection allowed:', socket.id);
-        next();
+
+        const decoded = verifyAccessToken(token);
+        socket.userId = decoded.userId;
+
+        // Attach minimal user context for downstream checks (e.g. admin room join)
+        const user = await User.findById(decoded.userId)
+            .select('role accountStatus isActive isSuspended employeeDetails')
+            .lean();
+        socket.user = user || null;
+
+        return next();
     } catch (error) {
         console.error('❌ [Socket.IO] Authentication error:', error.message);
-        // Allow connection but log the error (backward compatibility)
-        next();
+        // Backward compatibility: allow connection, but treat as unauthenticated.
+        socket.userId = null;
+        socket.user = null;
+        return next();
     }
 });
 
 // Socket.IO setup for real-time features
 io.on('connection', (socket) => {
-    console.log('👤 New client connected:', socket.id);
-
-    // Store userId from auth (if not already set by middleware)
-    if (!socket.userId && socket.handshake.auth && socket.handshake.auth.userId) {
-        socket.userId = socket.handshake.auth.userId;
-        console.log('✅ User ID set for socket:', socket.userId);
-    }
+    // socket.userId is set only when a verified JWT is present (see io.use middleware above)
 
     // Join user's personal notification room
     socket.on('join-user', (userId) => {
-        socket.userId = userId; // Also set here as fallback
-        socket.join(`user-${userId}`);
-        console.log(`✅ [Socket.IO] User joined personal room: user-${userId}`);
+        if (!socket.userId) return;
+        // Prevent joining other users' rooms via spoofed payloads
+        if (userId && userId.toString() !== socket.userId.toString()) return;
+        socket.join(`user-${socket.userId}`);
     });
 
     // Join admin room
-    socket.on('join-admin', () => {
-        socket.join('admin-room');
-        console.log(`🛡️ [Socket.IO] Admin joined admin room: ${socket.id}`);
-        socket.emit('admin-joined', { success: true });
+    socket.on('join-admin', async () => {
+        try {
+            if (!socket.userId) {
+                return socket.emit('admin-joined', { success: false, message: 'Authentication required' });
+            }
+
+            const role = socket.user?.role;
+            if (!role || !ADMIN_ROLES.includes(role)) {
+                return socket.emit('admin-joined', { success: false, message: 'Admin or employee access required' });
+            }
+
+            // Employee account active check (mirrors HTTP middleware behavior)
+            if (socket.user?.employeeDetails && socket.user.employeeDetails.isActive === false) {
+                return socket.emit('admin-joined', { success: false, message: 'Employee account deactivated' });
+            }
+
+            socket.join('admin-room');
+            return socket.emit('admin-joined', { success: true });
+        } catch (err) {
+            console.error('❌ [Socket.IO] join-admin error:', err.message);
+            return socket.emit('admin-joined', { success: false, message: 'Failed to join admin room' });
+        }
     });
 
     // Generic join handler (for backward compatibility)
     socket.on('join', (roomName) => {
         socket.join(roomName);
-        console.log(`✅ [Socket.IO] User joined room: ${roomName}`);
     });
 
     // Join room for specific ride/booking
-    socket.on('join-ride', (rideId) => {
-        socket.join(`ride-${rideId}`);
-        console.log(`User joined ride room: ride-${rideId}`);
+    socket.on('join-ride', (payload) => {
+        const rideId = typeof payload === 'object' ? payload?.rideId : payload;
+        if (rideId) {
+            socket.join(`ride-${rideId}`);
+        }
+    });
+
+    socket.on('leave-ride', (payload) => {
+        const rideId = typeof payload === 'object' ? payload?.rideId : payload;
+        if (rideId) {
+            socket.leave(`ride-${rideId}`);
+        }
     });
 
     // Join booking room
     socket.on('join-booking', (bookingId) => {
         socket.join(`booking-${bookingId}`);
-        console.log(`User joined booking room: booking-${bookingId}`);
     });
 
     // Join tracking room for real-time location updates
@@ -273,11 +398,9 @@ io.on('connection', (socket) => {
         const { bookingId, rideId } = data;
         if (bookingId) {
             socket.join(`tracking-${bookingId}`);
-            console.log(`🗺️ [Tracking] User joined tracking room: tracking-${bookingId}`);
         }
         if (rideId) {
             socket.join(`ride-${rideId}`);
-            console.log(`🗺️ [Tracking] User joined ride room: ride-${rideId}`);
         }
         socket.emit('tracking-joined', { bookingId, rideId });
     });
@@ -287,7 +410,6 @@ io.on('connection', (socket) => {
         const { bookingId, rideId } = data;
         if (bookingId) {
             socket.leave(`tracking-${bookingId}`);
-            console.log(`👋 [Tracking] User left tracking room: tracking-${bookingId}`);
         }
         if (rideId) {
             socket.leave(`ride-${rideId}`);
@@ -326,12 +448,6 @@ io.on('connection', (socket) => {
     socket.on('location-update', (data) => {
         const { rideId, bookingId, location, userId } = data;
 
-        console.log(`📍 [Location Update] Ride: ${rideId}, User: ${userId}`, {
-            lat: location?.latitude,
-            lng: location?.longitude,
-            speed: location?.speed
-        });
-
         // Broadcast to all tracking this ride
         if (rideId) {
             io.to(`ride-${rideId}`).emit('location-update', {
@@ -361,7 +477,6 @@ io.on('connection', (socket) => {
     // Rider/Driver broadcasts location (alternative naming)
     socket.on('rider-location', (data) => {
         const { rideId, bookingId, location, userId } = data;
-        console.log(`🚗 [Rider Location] Broadcasting for ride: ${rideId}`);
 
         // Broadcast to all passengers tracking this ride
         if (rideId) {
@@ -381,10 +496,17 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Epic 3: Telematics & Hyper-Safety (Accelerometer/Gyroscope stream)
+    socket.on('telematics-update', async (data) => {
+        // data expects: { rideId, driverId, readings: [{x, y, z, timestamp}, ...] }
+        if (data && data.rideId && data.readings) {
+            await telematicsEngine.processSensorBatch(data, io);
+        }
+    });
+
     // Ride status update (driver updating ride status)
     socket.on('ride-status-update', (data) => {
         const { rideId, status } = data;
-        console.log(`📊 [Ride Status] Updating ride ${rideId} to status: ${status}`);
 
         // Broadcast to all passengers tracking this ride
         if (rideId) {
@@ -412,13 +534,8 @@ io.on('connection', (socket) => {
         socket.to(`booking-${bookingId}`).emit('user-typing', { userId });
     });
 
-    socket.on('disconnect', () => {
-        console.log('👤 Client disconnected:', socket.id);
-    });
+    socket.on('disconnect', () => { });
 });
-
-// Make io available in routes
-app.set('io', io);
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -433,39 +550,47 @@ const apiRoutes = require('./routes/api');
 const reviewRoutes = require('./routes/reviews');
 const reportRoutes = require('./routes/reports');
 const sosRoutes = require('./routes/sos');
+const socialRoutes = require('./routes/social'); // Epic 2: Social Graph
+const corporateRoutes = require('./routes/corporate'); // Epic 4: B2B Enterprise
 
 // Import middleware
 const { attachUser } = require('./middleware/auth');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const { apiLimiter, loginLimiter } = require('./middleware/rateLimiter');
+const { loginLimiter } = require('./middleware/rateLimiter');
 const requestLogger = require('./middleware/requestLogger');
+const { settingsEnforcer } = require('./middleware/settingsEnforcer');
 
 // Attach user to req for all routes
 app.use(attachUser);
+
+// Attach platform settings + enforce maintenance mode
+app.use(settingsEnforcer);
 
 // Apply request logger to all requests
 app.use(requestLogger);
 
 // API health check / status endpoint
 app.get('/api/health', (req, res) => {
+    const mongoose = require('mongoose');
+    const memUsage = process.memoryUsage();
+
     res.json({
         success: true,
         message: 'LANE Carpool API is running',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(process.uptime()),
+        environment: process.env.NODE_ENV || 'development',
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        memory: {
+            rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
+            heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+            heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB'
+        },
+        version: require('./package.json').version || '1.0.0'
     });
 });
 
 // Use routes - ALL APIs under /api prefix for clean separation from SPA routes
-// Debug logging for all API requests
-app.use('/api', (req, res, next) => {
-    if (req.method === 'PUT' || req.method === 'POST') {
-        console.log(`\n📥 [${req.method}] ${req.originalUrl}`);
-        console.log('   Body:', JSON.stringify(req.body, null, 2).substring(0, 500));
-    }
-    next();
-});
-
-app.use('/api', apiLimiter);
 app.use('/api/auth/login', loginLimiter);
 
 app.use('/api/auth', authRoutes);
@@ -476,6 +601,8 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin', geoFencingRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/corporate', corporateRoutes);
 app.use('/api', apiRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/reports', reportRoutes);
@@ -500,10 +627,11 @@ app.use(express.static(path.join(__dirname, 'client/dist'), {
 app.get('*', (req, res, next) => {
     // Skip SPA fallback for API, uploads, socket.io, and static assets
     // Also skip CSRF-exempt paths to allow them to 404 naturally if missing
-    if (req.path.startsWith('/api/') || 
-        req.path.startsWith('/uploads/') || 
+    if (req.path.startsWith('/api/') ||
+        req.path.startsWith('/uploads/') ||
         req.path.startsWith('/socket.io/') ||
-        req.path.startsWith('/assets/')) {
+        req.path.startsWith('/assets/') ||
+        path.extname(req.path)) {
         return next();
     }
 
@@ -528,43 +656,103 @@ app.use(notFound);
 // Global error handler
 app.use(errorHandler);
 
-// Start server
+// Start server — connect to DB first, then listen, then start cron
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`
-    ╔═══════════════════════════════════════════════════════╗
-    ║                                                       ║
-    ║   🚗  CARPOOL PLATFORM - SERVER RUNNING  🚗          ║
-    ║                                                       ║
-    ║   Port:        ${PORT}                                   ║
-    ║   Environment: ${process.env.NODE_ENV || 'development'}                          ║
-    ║   URL:         ${process.env.BASE_URL}      ║
-    ║                                                       ║
-    ║   Ready to accept connections! 🎉                    ║
-    ║                                                       ║
-    ╚═══════════════════════════════════════════════════════╝
-    `);
 
-    // ✅ EDGE CASE FIX: Run scheduled jobs to handle expired rides/bookings
+(async () => {
+    // 1. Connect to MongoDB (must succeed before accepting requests)
+    await connectDB();
+
+    // 2. Start HTTP server (wrapped in a promise so we wait for success/failure)
+    await new Promise((resolve, reject) => {
+        server.once('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error(`❌ Port ${PORT} is already in use. Kill the other process or use a different port.`);
+                process.exit(1);
+            }
+            reject(err);
+        });
+
+        server.listen(PORT, () => {
+            const env = process.env.NODE_ENV || 'development';
+            const url = process.env.BASE_URL || `http://localhost:${PORT}`;
+            const pad = (str, len) => str + ' '.repeat(Math.max(0, len - str.length));
+            const W = 49; // inner width between ║ borders
+            const line = (text) => `  ║  ${pad(text, W - 2)}║`;
+            const empty = line('');
+            console.log([
+                '',
+                `  ╔${'═'.repeat(W)}╗`,
+                empty,
+                line(`  🚗  LOOPLANE — SERVER RUNNING  🚗`),
+                empty,
+                line(`  Port:         ${PORT}`),
+                line(`  Environment:  ${env}`),
+                line(`  URL:          ${url}`),
+                empty,
+                line(`  Ready to accept connections! 🎉`),
+                empty,
+                `  ╚${'═'.repeat(W)}╝`,
+                ''
+            ].join('\n'));
+            resolve();
+        });
+    });
+
+    // 3. Scheduled jobs — only start after DB connected AND server listening
+    const cron = require('node-cron');
     const scheduledJobs = require('./utils/scheduledJobs');
 
-    // Run immediately on startup
+    // Run immediately on startup (DB is guaranteed connected, server is listening)
     scheduledJobs.runAllJobs();
 
-    // Run every 5 minutes
-    setInterval(() => {
+    // Run every 5 minutes via cron
+    cron.schedule('*/5 * * * *', () => {
         scheduledJobs.runAllJobs();
-    }, 5 * 60 * 1000); // 5 minutes
-
-    console.log('✅ [Scheduled Jobs] Started - running every 5 minutes');
-});
+    });
+    console.log('✅ [Scheduled Jobs] Started with node-cron — running every 5 minutes');
+})();
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('👋 SIGTERM signal received: closing HTTP server');
-    server.close(() => {
+const gracefulShutdown = async (signal) => {
+    console.log(`\n${signal} received. Shutting down gracefully...`);
+
+    // Close HTTP server (stop accepting new connections)
+    server.close(async () => {
         console.log('HTTP server closed');
+
+        // Close database connection
+        try {
+            const mongoose = require('mongoose');
+            await mongoose.connection.close();
+            console.log('MongoDB connection closed');
+        } catch (err) {
+            console.error('Error closing MongoDB connection:', err);
+        }
+
+        process.exit(0);
     });
+
+    // Force shutdown after 3 seconds (fast enough for nodemon restarts)
+    setTimeout(() => {
+        console.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 3000).unref();
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Process-level error handlers
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Promise Rejection:', reason);
+    // Don't crash — log and continue
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    // Exit immediately — don't attempt graceful shutdown for fatal errors
+    process.exit(1);
 });
 
 module.exports = { app, io };

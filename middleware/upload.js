@@ -15,12 +15,6 @@ const createUpload = (storage) => {
             fileSize: 10 * 1024 * 1024 // 10MB limit
         },
         fileFilter: (req, file, cb) => {
-            console.log('📁 [Upload] File received:', {
-                fieldname: file.fieldname,
-                originalname: file.originalname,
-                mimetype: file.mimetype
-            });
-            
             // For images, check image mimetypes
             if (file.fieldname === 'profilePhoto') {
                 const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
@@ -103,7 +97,7 @@ module.exports = {
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.status(400).json({
                     success: false,
-                    message: 'File size too large. Maximum size is 5MB.'
+                    message: 'File size too large. Maximum size is 10MB.'
                 });
             }
             return res.status(400).json({

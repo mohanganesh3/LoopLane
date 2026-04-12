@@ -8,11 +8,23 @@ const Ride = require('../models/Ride');
 const Emergency = require('../models/Emergency');
 const RouteDeviation = require('../models/RouteDeviation');
 const GeoFencing = require('../utils/geoFencing');
-const EmergencyResponseSystem = require('../utils/emergencyResponseSystem');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 
 // Store for tracking last alerts to prevent spam
+// Uses Map with timestamps; entries auto-expire after 2 hours
 const lastAlerts = new Map();
+const ALERT_MAP_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+// Periodic cleanup to prevent memory leak from rides that never call stopTracking
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, alerts] of lastAlerts.entries()) {
+        const lastActivity = Math.max(0, ...Object.values(alerts));
+        if (now - lastActivity > ALERT_MAP_TTL_MS) {
+            lastAlerts.delete(key);
+        }
+    }
+}, 30 * 60 * 1000); // Clean up every 30 minutes
 
 /**
  * Show live tracking page
@@ -22,7 +34,6 @@ exports.showTrackingPage = asyncHandler(async (req, res) => {
     const { bookingId } = req.params;
     const userId = req.user._id;
 
-    console.log('🔵 [Tracking] Loading tracking page for ID:', bookingId);
 
     let booking;
 
@@ -60,8 +71,7 @@ exports.showTrackingPage = asyncHandler(async (req, res) => {
     }
 
     if (!booking) {
-        req.flash('error', 'Booking not found or you do not have access');
-        return res.redirect('/bookings/my-bookings');
+        throw new AppError('Booking not found or you do not have access', 404);
     }
 
     // Authorization check
@@ -136,10 +146,11 @@ exports.showTrackingPage = asyncHandler(async (req, res) => {
         }
     };
 
-    res.render('tracking/live-tracking', {
+    // G6: Changed from res.render to res.json (React SPA — no server-side templates)
+    res.json({
+        success: true,
         title: `Track Ride - ${trackingData.ride.fromLocation} to ${trackingData.ride.toLocation}`,
-        ...trackingData,
-        user: req.user
+        ...trackingData
     });
 });
 
@@ -177,13 +188,17 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     }
     const rideAlerts = lastAlerts.get(alertKey);
 
-    // 1. Check route corridor deviation
+    // 1. Check route corridor deviation (uses safety.routeDeviation from Settings)
+    const safetySettings = req.platformSettings?.safety || {};
+    const corridorWidth = safetySettings.routeDeviation || 500; // meters from Settings
+    const maxSpeedLimit = safetySettings.maxSpeed || 100; // km/h from Settings
+
     let deviationCheck = { withinCorridor: true, deviation: 'NONE' };
     if (ride.route?.geometry?.coordinates) {
         deviationCheck = GeoFencing.isWithinRouteCorridor(
             currentLocation,
             ride.route.geometry.coordinates,
-            500 // 500m corridor width
+            corridorWidth
         );
 
         // Send alerts for major/critical deviations
@@ -206,7 +221,7 @@ exports.updateLocation = asyncHandler(async (req, res) => {
         accuracy: accuracy || 0
     });
 
-    const speedAnalysis = GeoFencing.analyzeSpeedPatterns(locationHistory);
+    const speedAnalysis = GeoFencing.analyzeSpeedPatterns(locationHistory, maxSpeedLimit);
     if (speedAnalysis.abnormalSpeed && speedAnalysis.severity === 'CRITICAL') {
         if (GeoFencing.shouldSendAlert('SPEED_ALERT', rideAlerts)) {
             console.warn(`🚨 Speed alert: ${speedAnalysis.message}`);
@@ -355,7 +370,6 @@ exports.sendDeviationAlert = async function(booking, deviationCheck, io) {
                 status: 'ACTIVE'
             });
 
-            console.log(`📝 Created RouteDeviation record: ${deviation._id}`);
         } else {
             // Update existing deviation
             deviation.deviationDistance = parseFloat(deviationDistanceKm);
@@ -434,7 +448,6 @@ exports.sendDeviationAlert = async function(booking, deviationCheck, io) {
 
         await deviation.save();
 
-        console.log(`📢 Route deviation alert sent for ride ${ride._id} - Severity: ${severity}, Distance: ${deviationDistanceKm}km`);
     } catch (error) {
         console.error('Error sending deviation alert:', error);
     }
@@ -456,7 +469,6 @@ exports.sendSpeedAlert = async function(booking, speedAnalysis, io) {
             });
         }
 
-        console.log(`🚨 Speed alert sent for ride ${ride._id}`);
     } catch (error) {
         console.error('Error sending speed alert:', error);
     }
@@ -482,7 +494,6 @@ exports.sendStopAlert = async function(booking, stopAnalysis, io) {
                 });
             }
 
-            console.log(`🚨 Critical stop alert for ride ${ride._id}`);
         }
     } catch (error) {
         console.error('Error sending stop alert:', error);

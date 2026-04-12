@@ -28,6 +28,23 @@ const settingsSchema = new mongoose.Schema({
             type: Number,
             default: 1,
             min: 0
+        },
+        surgeMultiplierMax: {
+            type: Number,
+            default: 2.5,
+            min: 1,
+            max: 5
+        },
+        surgeThreshold: {
+            type: Number,
+            default: 0.7,
+            min: 0.1,
+            max: 2
+        },
+        minimumFare: {
+            type: Number,
+            default: 30,
+            min: 0
         }
     },
 
@@ -177,6 +194,22 @@ const settingsSchema = new mongoose.Schema({
             max: 50
         }
     },
+
+    // H7: Promo Codes — DEPRECATED: Use models/PromoCode.js collection instead.
+    // Kept for backward compat / one-time migration.
+    promoCodes: [{
+        code: { type: String, uppercase: true },
+        discountType: { type: String, enum: ['PERCENTAGE', 'FLAT'], default: 'PERCENTAGE' },
+        discountValue: { type: Number, default: 10 },
+        maxUses: { type: Number, default: 100 },
+        currentUses: { type: Number, default: 0 },
+        minBookingAmount: { type: Number, default: 0 },
+        expiresAt: Date,
+        description: String,
+        isActive: { type: Boolean, default: true },
+        createdAt: { type: Date, default: Date.now },
+        createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    }],
 
     // Last updated
     updatedBy: {

@@ -9,14 +9,14 @@ const Booking = require('../models/Booking');
 const Ride = require('../models/Ride');
 const { AppError, asyncHandler } = require('../middleware/errorHandler');
 
+const getUserPhoto = (user) => user?.profile?.photo || user?.profilePhoto || null;
+
 /**
  * Get or create chat for a booking
  */
 exports.getOrCreateChat = asyncHandler(async (req, res) => {
     const { bookingId } = req.params;
     
-    console.log('🔵 [Chat] Get/Create chat for booking:', bookingId);
-    console.log('🔵 [Chat] User:', req.user._id, req.user.name);
 
     // Get booking and validate
     const booking = await Booking.findById(bookingId)
@@ -30,16 +30,8 @@ exports.getOrCreateChat = asyncHandler(async (req, res) => {
         });
 
     if (!booking) {
-        console.error('❌ [Chat] Booking not found:', bookingId);
         throw new AppError('Booking not found', 404);
     }
-    
-    console.log('✅ [Chat] Booking found:', {
-        id: booking._id,
-        passenger: booking.passenger?.profile?.firstName,
-        rider: booking.rider?.profile?.firstName,
-        status: booking.status
-    });
 
     // Check if user is part of this booking
     const isParticipant = 
@@ -51,7 +43,6 @@ exports.getOrCreateChat = asyncHandler(async (req, res) => {
         throw new AppError('Not authorized', 403);
     }
     
-    console.log('✅ [Chat] User is participant');
 
     // Find existing chat or create new one
     let chat = await Chat.findOne({ booking: bookingId })
@@ -66,13 +57,11 @@ exports.getOrCreateChat = asyncHandler(async (req, res) => {
         });
 
     if (!chat) {
-        console.log('🔵 [Chat] Chat not found, creating new chat');
         chat = await Chat.create({
             booking: bookingId,
             participants: [booking.passenger._id, booking.rider._id]
         });
         
-        console.log('✅ [Chat] Chat created:', chat._id);
         
         chat = await Chat.findById(chat._id)
             .populate({
@@ -85,10 +74,8 @@ exports.getOrCreateChat = asyncHandler(async (req, res) => {
                 select: 'profile'
             });
     } else {
-        console.log('✅ [Chat] Existing chat found:', chat._id);
     }
 
-    console.log('✅ [Chat] Returning chat to client');
     res.status(200).json({
         success: true,
         chat
@@ -173,8 +160,6 @@ exports.getUserChats = asyncHandler(async (req, res) => {
 exports.getChatMessages = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
     
-    console.log('🔵 [Messages] Get messages for chat:', chatId);
-    console.log('🔵 [Messages] User:', req.user._id);
 
     const chat = await Chat.findById(chatId)
         .populate({
@@ -191,7 +176,6 @@ exports.getChatMessages = asyncHandler(async (req, res) => {
         throw new AppError('Chat not found', 404);
     }
     
-    console.log('✅ [Messages] Chat found with', chat.messages.length, 'messages');
 
     // Check if user is participant
     const isParticipant = chat.participants.some(
@@ -208,7 +192,6 @@ exports.getChatMessages = asyncHandler(async (req, res) => {
         !msg.deleted || !msg.deletedBy.some(u => u.toString() === req.user._id.toString())
     );
     
-    console.log('✅ [Messages] Returning', messages.length, 'messages');
 
     res.status(200).json({
         success: true,
@@ -223,9 +206,6 @@ exports.sendMessage = asyncHandler(async (req, res) => {
     const { chatId } = req.params;
     const { content, type = 'TEXT', location } = req.body;
     
-    console.log('🔵 [Send Message] Chat:', chatId);
-    console.log('🔵 [Send Message] User:', req.user._id, req.user.name);
-    console.log('🔵 [Send Message] Content preview:', content?.substring(0, 50));
 
     // Validate content type
     if (!content || typeof content !== 'string') {
@@ -233,8 +213,8 @@ exports.sendMessage = asyncHandler(async (req, res) => {
         throw new AppError('Message content is required', 400);
     }
 
-    // Trim and validate content
-    const trimmedContent = content.trim();
+    // Trim, validate, and sanitize content
+    const trimmedContent = content.trim().replace(/<[^>]*>/g, ''); // Strip HTML tags
     if (trimmedContent.length === 0) {
         console.error('❌ [Send Message] Empty content after trim');
         throw new AppError('Message content is required', 400);
@@ -259,7 +239,6 @@ exports.sendMessage = asyncHandler(async (req, res) => {
         throw new AppError('Chat not found', 404);
     }
     
-    console.log('✅ [Send Message] Chat found');
 
     // Check if user is participant
     const isParticipant = chat.participants.some(
@@ -273,20 +252,16 @@ exports.sendMessage = asyncHandler(async (req, res) => {
 
     // Add message with trimmed content
     await chat.addMessage(req.user._id, trimmedContent, type, location);
-    console.log('✅ [Send Message] Message added to chat');
 
     // Reload with populated data
     await chat.populate('messages.sender', 'profile email phone');
 
     const newMessage = chat.messages[chat.messages.length - 1];
-    console.log('✅ [Send Message] New message ID:', newMessage._id);
 
     // Emit socket event to chat room
     const io = req.app.get('io');
     if (io) {
         const chatIdStr = chat._id.toString();
-        console.log('🔵 [Send Message] Emitting to chat room: chat-' + chatIdStr);
-        console.log('🔵 [Send Message] Message content:', content.trim().substring(0, 50));
         
         // Get sender name safely
         const senderName = User.getUserName(newMessage.sender) || User.getUserName(req.user);
@@ -300,30 +275,27 @@ exports.sendMessage = asyncHandler(async (req, res) => {
                 sender: {
                     _id: newMessage.sender._id || req.user._id,
                     name: senderName,
-                    profilePhoto: newMessage.sender.profilePhoto || req.user.profilePhoto
+                    profilePhoto: getUserPhoto(newMessage.sender) || getUserPhoto(req.user)
                 },
                 timestamp: newMessage.timestamp,
                 type: newMessage.type
             }
         });
         
-        console.log('✅ [Send Message] Emitted to chat room successfully');
 
         // Notify other participants (for notifications)
         const otherParticipants = chat.participants.filter(
             p => p._id.toString() !== req.user._id.toString()
         );
 
-        console.log('🔵 [Send Message] Notifying', otherParticipants.length, 'other participants');
         otherParticipants.forEach(participant => {
-            console.log('🔵 [Send Message] Sending notification to user-' + participant._id);
             io.to(`user-${participant._id}`).emit('chat-notification', {
                 chatId: chatIdStr,
                 message: newMessage,
                 sender: {
                     _id: req.user._id,
                     name: User.getUserName(req.user),
-                    profilePhoto: req.user.profilePhoto
+                    profilePhoto: getUserPhoto(req.user)
                 }
             });
         });
@@ -331,7 +303,6 @@ exports.sendMessage = asyncHandler(async (req, res) => {
         console.error('❌ [Send Message] Socket.IO not available!');
     }
 
-    console.log('✅ [Send Message] Message sent successfully');
     res.status(200).json({
         success: true,
         message: newMessage
@@ -391,187 +362,6 @@ exports.markChatAsRead = asyncHandler(async (req, res) => {
 });
 
 /**
- * Show chat page
- * GET /chat/:idOrChatId
- * Accepts chatId, bookingId, or rideId
- */
-exports.showChatPage = asyncHandler(async (req, res) => {
-    const { chatId } = req.params;
-    
-    console.log('🔵 [Chat Page] Loading chat page for:', chatId);
-    console.log('🔵 [Chat Page] User:', req.user._id, req.user.name);
-
-    let currentChat = null;
-    
-    if (chatId && chatId !== 'new') {
-        // Try to find as chat ID first
-        currentChat = await Chat.findById(chatId)
-            .populate({
-                path: 'participants',
-                select: 'profile email phone'
-            })
-            .populate('booking')
-            .populate({
-                path: 'messages.sender',
-                select: 'profile'
-            });
-
-        // If not found as chat, try as booking ID
-        if (!currentChat) {
-            console.log('🔵 [Chat Page] Not a chat ID, trying as booking ID...');
-            const booking = await Booking.findById(chatId);
-            
-            if (booking) {
-                console.log('✅ [Chat Page] Found booking, looking for chat...');
-                currentChat = await Chat.findOne({ booking: booking._id })
-                    .populate({
-                        path: 'participants',
-                        select: 'profile email phone'
-                    })
-                    .populate('booking')
-                    .populate({
-                        path: 'messages.sender',
-                        select: 'profile'
-                    });
-                
-                // If no chat exists, create one
-                if (!currentChat) {
-                    console.log('🔵 [Chat Page] No chat for booking, creating...');
-                    const newChat = await Chat.create({
-                        booking: booking._id,
-                        participants: [booking.passenger, booking.rider]
-                    });
-                    
-                    currentChat = await Chat.findById(newChat._id)
-                        .populate({
-                            path: 'participants',
-                            select: 'profile email phone'
-                        })
-                        .populate('booking')
-                        .populate({
-                            path: 'messages.sender',
-                            select: 'profile'
-                        });
-                        
-                    console.log('✅ [Chat Page] Chat created:', currentChat._id);
-                }
-            }
-        }
-
-        // If still not found, try as ride ID
-        if (!currentChat) {
-            console.log('🔵 [Chat Page] Not a booking ID, trying as ride ID...');
-            const ride = await Ride.findById(chatId);
-            
-            if (ride) {
-                console.log('✅ [Chat Page] Found ride, looking for user booking...');
-                // Find user's booking for this ride
-                const booking = await Booking.findOne({
-                    ride: ride._id,
-                    $or: [
-                        { passenger: req.user._id },
-                        { rider: req.user._id }
-                    ],
-                    status: { $in: ['CONFIRMED', 'IN_PROGRESS', 'COMPLETED'] }
-                }).sort({ createdAt: -1 }); // Get most recent booking
-                
-                if (booking) {
-                    console.log('✅ [Chat Page] Found booking for ride:', booking._id);
-                    // Find or create chat for this booking
-                    currentChat = await Chat.findOne({ booking: booking._id })
-                        .populate({
-                            path: 'participants',
-                            select: 'profile email phone'
-                        })
-                        .populate('booking')
-                        .populate({
-                            path: 'messages.sender',
-                            select: 'profile'
-                        });
-                    
-                    if (!currentChat) {
-                        console.log('🔵 [Chat Page] Creating chat for booking...');
-                        const newChat = await Chat.create({
-                            booking: booking._id,
-                            participants: [booking.passenger, booking.rider]
-                        });
-                        
-                        currentChat = await Chat.findById(newChat._id)
-                            .populate({
-                                path: 'participants',
-                                select: 'profile email phone'
-                            })
-                            .populate('booking')
-                            .populate({
-                                path: 'messages.sender',
-                                select: 'profile'
-                            });
-                            
-                        console.log('✅ [Chat Page] Chat created:', currentChat._id);
-                    }
-                }
-            }
-        }
-
-        if (!currentChat) {
-            console.log('⚠️ [Chat Page] No chat found, redirecting to /chat/new');
-            return res.redirect('/chat/new');
-        }
-        
-        console.log('✅ [Chat Page] Chat found:', currentChat._id);
-
-        // Check authorization
-        const isParticipant = currentChat.participants.some(
-            p => p._id.toString() === req.user._id.toString()
-        );
-
-        if (!isParticipant) {
-            console.error('❌ [Chat Page] User not authorized');
-            if (req.flash) req.flash('error', 'You are not authorized to view this chat');
-            return res.redirect('/chat');
-        }
-
-        // Mark as read
-        await currentChat.markAsRead(req.user._id);
-        console.log('✅ [Chat Page] Messages marked as read');
-    }
-
-    // Get all user chats for sidebar
-    const allChats = await Chat.find({
-        participants: req.user._id,
-        isActive: true
-    })
-    .populate({
-        path: 'participants',
-        select: 'profile email phone'
-    })
-    .populate('booking')
-    .populate({
-        path: 'messages.sender',
-        select: 'profile'
-    })
-    .sort({ lastMessageAt: -1 });
-    
-    console.log('✅ [Chat Page] Found', allChats.length, 'chats for sidebar');
-
-    // Add unread count to each chat
-    const allChatsWithUnread = allChats.map(chat => {
-        const chatObj = chat.toObject({ virtuals: true });
-        chatObj.unreadCount = chat.getUnreadCount(req.user._id);
-        console.log(`🔵 [Chat ${chat._id}] Unread count:`, chatObj.unreadCount);
-        return chatObj;
-    });
-
-    console.log('✅ [Chat Page] Rendering chat page');
-    res.render('chat/index', {
-        title: 'Messages - LANE Carpool',
-        user: req.user,
-        currentChat,
-        allChats: allChatsWithUnread
-    });
-});
-
-/**
  * Delete message
  */
 exports.deleteMessage = asyncHandler(async (req, res) => {
@@ -595,7 +385,7 @@ exports.deleteMessage = asyncHandler(async (req, res) => {
     }
 
     // Soft delete (mark as deleted, don't remove)
-    message.isDeleted = true;
+    message.deleted = true;
     message.content = 'This message was deleted';
     await chat.save();
 
@@ -607,31 +397,76 @@ exports.deleteMessage = asyncHandler(async (req, res) => {
 
 // Check if user has any unread messages across all chats (returns boolean)
 exports.getTotalUnreadCount = asyncHandler(async (req, res) => {
-    console.log('🔵 [Unread Check] Checking for unread messages for user:', req.user._id);
+    const userId = req.user._id;
 
-    // Get all chats for user
-    const chats = await Chat.find({
-        participants: req.user._id,
-        isActive: true
-    });
+    // Use aggregation to efficiently check for unread messages
+    // Only checks if at least one qualifying message exists — no full doc loading
+    const result = await Chat.aggregate([
+        { $match: { participants: userId, isActive: true } },
+        { $project: {
+            hasUnread: {
+                $gt: [
+                    { $size: {
+                        $filter: {
+                            input: '$messages',
+                            as: 'msg',
+                            cond: {
+                                $and: [
+                                    { $ne: ['$$msg.sender', userId] },
+                                    { $not: { $in: [userId, { $ifNull: ['$$msg.readBy', []] }] } }
+                                ]
+                            }
+                        }
+                    }},
+                    0
+                ]
+            }
+        }},
+        { $match: { hasUnread: true } },
+        { $limit: 1 }
+    ]);
 
-    console.log('🔵 [Unread Check] Found', chats.length, 'active chats');
-
-    // Check if any chat has unread messages
-    let hasUnread = false;
-    for (const chat of chats) {
-        if (chat.hasUnreadMessages(req.user._id)) {
-            hasUnread = true;
-            console.log(`🔵 [Chat ${chat._id}] Has unread messages`);
-            break; // No need to check further
-        }
-    }
-
-    console.log('✅ [Unread Check] Has unread:', hasUnread);
+    const hasUnread = result.length > 0;
 
     res.status(200).json({
         success: true,
-        hasUnread: hasUnread,
-        unreadCount: hasUnread ? 1 : 0 // Keep for backward compatibility
+        hasUnread,
+        unreadCount: hasUnread ? 1 : 0
     });
+});
+
+/**
+ * Get chats for a specific ride (via bookings belonging to that ride)
+ */
+exports.getChatsByRide = asyncHandler(async (req, res) => {
+    const { rideId } = req.params;
+
+    // Find bookings for this ride that the user participates in
+    const bookingIds = await Booking.find({ ride: rideId })
+        .select('_id')
+        .lean()
+        .then(docs => docs.map(d => d._id));
+
+    if (!bookingIds.length) {
+        return res.status(200).json({ success: true, chats: [] });
+    }
+
+    const chats = await Chat.find({
+        booking: { $in: bookingIds },
+        participants: req.user._id,
+        isActive: true
+    })
+    .populate({ path: 'participants', select: 'profile email phone' })
+    .populate('booking')
+    .populate({ path: 'messages.sender', select: 'profile email phone' })
+    .sort({ lastMessageAt: -1 });
+
+    const chatsWithUnread = chats.map(chat => {
+        const chatObj = chat.toObject({ virtuals: true });
+        chatObj.hasUnread = chat.hasUnreadMessages(req.user._id);
+        chatObj.unreadCount = chatObj.hasUnread ? 1 : 0;
+        return chatObj;
+    });
+
+    res.status(200).json({ success: true, chats: chatsWithUnread });
 });

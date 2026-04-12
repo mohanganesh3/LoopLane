@@ -7,7 +7,15 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGODB_URI);
+        if (!process.env.MONGODB_URI) {
+            throw new Error('MONGODB_URI must be defined in environment variables');
+        }
+
+        const conn = await mongoose.connect(process.env.MONGODB_URI, {
+            maxPoolSize: 10,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        });
 
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
         
@@ -20,11 +28,8 @@ const connectDB = async () => {
             console.warn('⚠️  MongoDB disconnected');
         });
 
-        // Graceful shutdown
-        process.on('SIGINT', async () => {
-            await mongoose.connection.close();
-            console.log('MongoDB connection closed through app termination');
-            process.exit(0);
+        mongoose.connection.on('reconnected', () => {
+            console.log('✅ MongoDB reconnected');
         });
 
     } catch (error) {

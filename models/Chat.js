@@ -107,7 +107,7 @@ const chatSchema = new mongoose.Schema({
 });
 
 // Indexes
-chatSchema.index({ booking: 1 });
+// Note: booking already indexed via unique:true in field definition
 chatSchema.index({ participants: 1 });
 chatSchema.index({ lastMessageAt: -1 });
 chatSchema.index({ 'messages.timestamp': -1 });
@@ -137,8 +137,6 @@ chatSchema.methods.markAsRead = async function(userId) {
     const Chat = this.constructor;
     const userIdStr = userId.toString();
     
-    console.log(`📖 [markAsRead] Marking messages as read for user: ${userIdStr} in chat: ${this._id}`);
-    
     // Use updateOne with arrayFilters to update all unread messages atomically
     const result = await Chat.updateOne(
         { _id: this._id },
@@ -159,11 +157,6 @@ chatSchema.methods.markAsRead = async function(userId) {
             ]
         }
     );
-    
-    console.log(`📖 [markAsRead] Update result:`, {
-        matchedCount: result.matchedCount,
-        modifiedCount: result.modifiedCount
-    });
     
     // Reload the document to get fresh data
     const updatedChat = await Chat.findById(this._id);

@@ -137,7 +137,7 @@ const routeDeviationSchema = new mongoose.Schema({
         },
         action: {
             type: String,
-            enum: ['NO_ACTION', 'WARNING_ISSUED', 'DRIVER_SUSPENDED', 'ACCOUNT_FLAGGED']
+            enum: ['NO_ACTION', 'WARNING_ISSUED', 'DRIVER_SUSPENDED', 'ACCOUNT_FLAGGED', 'RESOLVED']
         }
     },
     
@@ -188,16 +188,16 @@ routeDeviationSchema.statics.getUnresolved = function() {
     return this.find({ 
         status: { $in: ['ACTIVE', 'ESCALATED'] } 
     })
-    .populate('ride', 'startLocation endLocation')
-    .populate('driver', 'name phone')
-    .populate('passengers', 'name phone')
+    .populate('ride', 'route.start route.destination status')
+    .populate('driver', 'profile.firstName profile.lastName phone')
+    .populate('passengers', 'profile.firstName profile.lastName phone')
     .sort({ deviatedAt: -1 });
 };
 
 // Static method: Get driver's deviation history
 routeDeviationSchema.statics.getDriverHistory = function(driverId, limit = 10) {
     return this.find({ driver: driverId })
-        .populate('ride', 'startLocation endLocation status')
+        .populate('ride', 'route.start route.destination status')
         .sort({ deviatedAt: -1 })
         .limit(limit);
 };
@@ -209,15 +209,15 @@ routeDeviationSchema.statics.getPendingReview = function() {
         severity: { $in: ['HIGH', 'CRITICAL'] }
     })
     .populate('ride')
-    .populate('driver', 'name phone email')
-    .populate('passengers', 'name phone')
+    .populate('driver', 'profile.firstName profile.lastName phone email')
+    .populate('passengers', 'profile.firstName profile.lastName phone')
     .sort({ deviatedAt: -1 });
 };
 
 // Static method: Get statistics for a ride
 routeDeviationSchema.statics.getRideStats = function(rideId) {
     return this.aggregate([
-        { $match: { ride: mongoose.Types.ObjectId(rideId) } },
+        { $match: { ride: new mongoose.Types.ObjectId(rideId) } },
         {
             $group: {
                 _id: '$severity',

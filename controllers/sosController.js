@@ -8,28 +8,9 @@ const User = require('../models/User');
 const emailService = require('../utils/emailService');
 
 /**
- * Show SOS Emergency Page
- */
-exports.showEmergencyPage = async (req, res) => {
-    try {
-        res.render('sos/emergency', {
-            title: 'Emergency SOS - LANE',
-            user: req.user
-        });
-    } catch (error) {
-        console.error('[SOS] Error showing emergency page:', error);
-        if (req.flash) req.flash('error', 'Unable to load emergency page');
-        res.redirect('/');
-    }
-};
-
-/**
  * Trigger Emergency Alert
  */
 exports.triggerEmergency = async (req, res) => {
-    console.log('🚨 [SOS] ===== EMERGENCY TRIGGER START =====');
-    console.log('🚨 [SOS] User:', req.user?._id);
-    console.log('🚨 [SOS] Body:', JSON.stringify(req.body, null, 2));
     
     try {
         const { location, type, description, deviceInfo } = req.body;
@@ -43,7 +24,6 @@ exports.triggerEmergency = async (req, res) => {
             });
         }
         
-        console.log('🚨 [SOS] ✅ Location valid:', location);
         
         // Check for existing open emergency using new model method
         const existingEmergency = await Emergency.getOpenEmergencyForUser(req.user._id);
@@ -57,23 +37,16 @@ exports.triggerEmergency = async (req, res) => {
             });
         }
         
-        console.log('🚨 [SOS] ✅ No existing emergency');
         
         // Get user with emergency contacts
         const user = await User.findById(req.user._id).select('emergencyContacts profile email phone');
         
         if (!user) {
-            console.error('🚨 [SOS] ❌ User not found');
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
-        
-        console.log('🚨 [SOS] ✅ User loaded:', {
-            email: user.email,
-            contactsCount: user.emergencyContacts?.length || 0
-        });
         
         // Build contacts array from user's emergency contacts
         const contacts = [];
@@ -91,13 +64,11 @@ exports.triggerEmergency = async (req, res) => {
                     guardianEmails.push(contact.email);
                 }
             }
-            console.log('🚨 [SOS] Guardian emails:', guardianEmails);
         } else {
             console.warn('🚨 [SOS] ⚠️ No emergency contacts');
         }
         
         // Create emergency with NEW schema
-        console.log('🚨 [SOS] Creating emergency document...');
         const emergency = new Emergency({
             user: req.user._id,
             type: type || 'SOS',
@@ -123,12 +94,10 @@ exports.triggerEmergency = async (req, res) => {
         });
         
         await emergency.save();
-        console.log('🚨 [SOS] ✅ Emergency saved:', emergency._id);
         
         // Send emails to guardians
         if (guardianEmails.length > 0) {
             try {
-                console.log('🚨 [SOS] Sending emails...');
                 const userName = ((user.profile?.firstName || '') + ' ' + (user.profile?.lastName || '')).trim() || 'User';
                 const locationUrl = 'https://www.google.com/maps?q=' + location.latitude + ',' + location.longitude;
                 
@@ -143,7 +112,6 @@ exports.triggerEmergency = async (req, res) => {
                     type: type || 'SOS'
                 });
                 
-                console.log('🚨 [SOS] ✅ Emails sent');
                 
                 // Track email notifications in new schema
                 guardianEmails.forEach(email => {
@@ -156,7 +124,6 @@ exports.triggerEmergency = async (req, res) => {
                 });
                 
                 await emergency.save();
-                console.log('🚨 [SOS] ✅ Notifications tracked');
                 
             } catch (emailError) {
                 console.error('🚨 [SOS] ❌ Email error:', emailError.message);
@@ -177,7 +144,6 @@ exports.triggerEmergency = async (req, res) => {
                     message: 'New ' + emergency.type + ' alert from ' + (user.profile?.firstName || 'User')
                 });
                 
-                console.log('🚨 [SOS] ✅ Socket.IO notification sent');
             } catch (socketError) {
                 console.error('🚨 [SOS] ⚠️ Socket error (non-critical):', socketError.message);
             }
@@ -200,10 +166,8 @@ exports.triggerEmergency = async (req, res) => {
             }
         };
         
-        console.log('🚨 [SOS] ✅ Sending response:', JSON.stringify(response, null, 2));
         res.status(200).json(response);
         
-        console.log('🚨 [SOS] ===== EMERGENCY TRIGGER COMPLETE =====');
         
     } catch (error) {
         console.error('🚨 [SOS] ❌❌❌ CRITICAL ERROR ❌❌❌');
@@ -288,6 +252,117 @@ exports.cancelEmergency = async (req, res) => {
 };
 
 /**
+ * Admin: Escalate Emergency
+ * Bumps severity to CRITICAL, records escalation level + who was notified.
+ * Notifies all other platform admins (email list) and re-records emergency contacts.
+ */
+exports.escalateEmergency = async (req, res) => {
+    try {
+        const { emergencyId } = req.params;
+        const { reason = '' } = req.body;
+
+        const emergency = await Emergency.findById(emergencyId)
+            .populate('user', 'email phone profile emergencyContacts');
+
+        if (!emergency) {
+            return res.status(404).json({ success: false, message: 'Emergency not found' });
+        }
+
+        if (['RESOLVED', 'CANCELLED'].includes(emergency.status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot escalate a resolved or cancelled emergency'
+            });
+        }
+
+        // Bump severity to CRITICAL
+        emergency.severity = 'CRITICAL';
+
+        // Ensure at least ACKNOWLEDGED
+        if (emergency.status === 'ACTIVE') {
+            emergency.status = 'ACKNOWLEDGED';
+            emergency.acknowledgedAt = new Date();
+        }
+        emergency.responder = req.user._id;
+
+        const newLevel = (emergency.escalation?.level || 0) + 1;
+        const notifiedTo = [];
+
+        // Collect all admin users (excluding the escalating admin)
+        try {
+            const admins = await User.find(
+                { role: { $in: ['admin', 'superadmin'] }, _id: { $ne: req.user._id } }
+            ).select('email profile').lean();
+
+            for (const admin of admins) {
+                if (admin.email) {
+                    notifiedTo.push(`admin:${admin.email}`);
+                }
+            }
+        } catch (e) {
+            console.warn('[SOS] Could not fetch admin list for escalation:', e.message);
+        }
+
+        // Re-record emergency contacts as notified
+        if (emergency.contacts?.length) {
+            for (const contact of emergency.contacts) {
+                const label = contact.name
+                    ? `contact:${contact.name}${contact.email ? ' <' + contact.email + '>' : ''}`
+                    : `contact:${contact.email || contact.phone}`;
+                notifiedTo.push(label);
+            }
+        }
+
+        // Save escalation record
+        emergency.escalation = {
+            level: newLevel,
+            escalatedAt: new Date(),
+            escalatedBy: req.user._id,
+            reason: reason || `Level ${newLevel} escalation — immediate response required`,
+            notifiedTo,
+        };
+
+        // Append to adminNotes for audit trail
+        const timestamp = new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const auditNote = `[ESCALATED L${newLevel} — ${timestamp} by ${req.user.email}] ${reason || 'Critical situation requiring immediate attention'}. ${notifiedTo.length} recipient(s) notified.`;
+        emergency.adminNotes = emergency.adminNotes
+            ? `${emergency.adminNotes}\n${auditNote}`
+            : auditNote;
+
+        await emergency.save();
+
+        // Broadcast to admin room via Socket.io
+        if (req.app.get('io')) {
+            req.app.get('io').to('admin-room').emit('emergency:escalated', {
+                emergencyId: emergency._id,
+                level: newLevel,
+                escalatedBy: req.user.email,
+                notifiedCount: notifiedTo.length,
+                severity: 'CRITICAL',
+            });
+        }
+
+        console.log(`[Admin SOS] Emergency ${emergencyId} escalated to L${newLevel} by ${req.user.email}. Notified: ${notifiedTo.length}`);
+
+        res.json({
+            success: true,
+            message: `Emergency escalated to Level ${newLevel} — ${notifiedTo.length} recipient(s) notified`,
+            emergency,
+            notifiedCount: notifiedTo.length,
+            notifiedTo,
+        });
+
+    } catch (error) {
+        console.error('[Admin SOS] Error escalating emergency:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to escalate emergency',
+            error: error.message
+        });
+    }
+};
+
+/**
  * Admin: Get All Emergencies
  */
 exports.getAllEmergencies = async (req, res) => {
@@ -313,7 +388,6 @@ exports.getAllEmergencies = async (req, res) => {
             .limit(100)
             .lean();
         
-        console.log('[Admin SOS] Found ' + emergencies.length + ' emergencies');
         
         res.json({
             success: true,
@@ -423,20 +497,23 @@ exports.getEmergencyStats = async (req, res) => {
         const { period } = req.query;
         
         let start, end;
-        const now = new Date();
         
         switch(period) {
             case 'today':
-                start = new Date(now.setHours(0, 0, 0, 0));
-                end = new Date(now.setHours(23, 59, 59, 999));
+                start = new Date();
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
                 break;
             case 'week':
-                start = new Date(now.setDate(now.getDate() - 7));
                 end = new Date();
+                start = new Date();
+                start.setDate(start.getDate() - 7);
                 break;
             case 'month':
-                start = new Date(now.setMonth(now.getMonth() - 1));
                 end = new Date();
+                start = new Date();
+                start.setMonth(start.getMonth() - 1);
                 break;
             default:
                 start = undefined;

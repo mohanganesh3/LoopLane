@@ -3,27 +3,51 @@
  * Logs details about incoming requests for debugging and monitoring
  */
 
-const requestLogger = (req, res, next) => {
-    const timestamp = new Date().toISOString();
-    const method = req.method;
-    const url = req.originalUrl;
-    const ip = req.ip || req.connection.remoteAddress;
-    const userId = req.userId || req.user?._id || 'Guest';
+const REDACT_FIELDS = ['password', 'confirmPassword', 'otp', 'token', 'refreshToken', 'imageBase64'];
 
-    console.log(`[${timestamp}] ${method} ${url} - IP: ${ip} - User: ${userId}`);
-
-    // Log body for POST/PUT requests (excluding sensitive data)
-    if (['POST', 'PUT', 'PATCH'].includes(method)) {
-        const bodyCopy = { ...req.body };
-        // Remove sensitive fields
-        ['password', 'confirmPassword', 'otp', 'token'].forEach(field => {
-            if (bodyCopy[field]) bodyCopy[field] = '********';
-        });
-
-        if (Object.keys(bodyCopy).length > 0) {
-            console.log('   Body:', JSON.stringify(bodyCopy, null, 2).substring(0, 500));
+const sanitizeBody = (body = {}) => {
+    const bodyCopy = { ...body };
+    REDACT_FIELDS.forEach((field) => {
+        if (field in bodyCopy) {
+            bodyCopy[field] = '********';
         }
-    }
+    });
+    return bodyCopy;
+};
+
+const requestLogger = (req, res, next) => {
+    const startedAt = process.hrtime.bigint();
+    const method = req.method.toUpperCase();
+    const url = req.originalUrl || req.url;
+    const ip = req.ip || req.connection.remoteAddress;
+    const bodySnapshot = ['POST', 'PUT', 'PATCH'].includes(method) ? sanitizeBody(req.body) : null;
+
+    res.on('finish', () => {
+        const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+        // Read userId here (after auth middleware has run) so it reflects the authenticated user
+        const userId = req.userId || req.user?._id || 'Guest';
+        const logEntry = {
+            timestamp: new Date().toISOString(),
+            method,
+            url,
+            statusCode: res.statusCode,
+            durationMs: Number(durationMs.toFixed(2)),
+            ip,
+            userId
+        };
+
+        if (bodySnapshot && Object.keys(bodySnapshot).length > 0) {
+            logEntry.body = bodySnapshot;
+        }
+
+        const logger = res.statusCode >= 500
+            ? console.error
+            : res.statusCode >= 400
+                ? console.warn
+                : console.info;
+
+        logger(`[REQUEST] ${JSON.stringify(logEntry)}`);
+    });
 
     next();
 };
