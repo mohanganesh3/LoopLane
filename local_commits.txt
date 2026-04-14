@@ -1,0 +1,312 @@
+ad314f6 feat: refresh admin UI and dashboards
+fe6c4cd docs: add Redis caching and Solr search reports
+1a1dc8c feat: backend enhancements and Swagger API documentation
+821e5fa test: add Jest unit tests for auth, errors, cache, and Solr
+0192dda feat: add optional Solr-backed admin user search
+7235ca9 perf: add Redis-backed caching and rate limiting
+d9f6b76 chore: add redis, solr, swagger, and jest dependencies
+f1acb82 ci: add GitHub Actions workflow
+9c409bd chore: ignore local dev data directory
+3757bf4 chore: add Docker dev stack and update run docs
+a14feaf refactor: complete admin UI/UX redesign — zinc palette, Lucide icons, dark mode
+2ff5873 docs: mark Sprints 5-6 complete in TASK_BOARD.md and PROGRESS.md
+a547232 feat: Sprint 6 — Production Hardening (6 tasks)
+5896c83 feat: Sprint 5 — dead-code cleanup, TTL indexes, business logic fixes (10 tasks)
+9c4fc52 docs: mark Sprint 4 complete, update progress log
+4687767 refactor: Sprint 4 — Frontend Cleanup (tasks 4.1-4.4)
+9c2fa58 docs: mark Sprint 3 complete, update progress log
+ff8599d perf: Sprint 3 — Performance & Scalability (tasks 3.1-3.6)
+6a3bef5 docs: mark Sprint 2 complete, update progress log
+9807cf6 fix: Sprint 2 — Data Integrity & Index Fixes (tasks 2.1-2.8)
+8ae9436 docs: update PROGRESS.md and TASK_BOARD.md — Sprint 1 complete
+1dcdb27 fix: Sprint 1 — Critical Security & Correctness Fixes (10 tasks)\n\n1.1 User toJSON/toObject transform strips sensitive fields (password, OTP,\n    2FA secrets, reset tokens, login attempts, lockout)\n1.2 2FA secret encryption infrastructure (AES-256-GCM via utils/crypto.js)\n    with pre-save hook on User model\n1.3 Hash all OTPs (registration, 2FA, password reset) with SHA-256 before\n    storing — raw OTP only sent via email\n1.4 Remove auto-verify on email failure — users stay UNVERIFIED, directed\n    to resend OTP\n1.5 JWT refresh secret hardening — explicit env var check with loud warning\n    on fallback to derived secret\n1.6 Remove rating corruption in telematicsEngine — telematics events no\n    longer increment oneStar rating; added telematicsFlags field instead\n1.7 Fix rejectVerification field names to match User model schema\n    (driverLicense, governmentId, insurance)\n1.8 Fix RouteDeviation populate to use correct Ride (route.start,\n    route.destination) and User (profile.firstName/lastName) field paths\n1.9 Auth middleware consolidation — ported auto-lift expired suspension\n    logic from jwt.js isAuthenticatedJWT to auth.js isAuthenticated\n1.10 Commission consistency — rideController now uses Settings.getSettings()\n     instead of hardcoded 0.10\n\nFiles changed: 9 (models/User.js, utils/crypto.js, middleware/jwt.js,\nmiddleware/auth.js, controllers/authController.js, controllers/adminController.js,\ncontrollers/rideController.js, utils/telematicsEngine.js, models/RouteDeviation.js)"
+37b56b4 Update README.md
+41745b1 chore: increase access token expiry to 2 hours
+49ceeb2 fix: auto-refresh expired tokens to prevent signouts
+4f16013 feat: change platform fee from flat ₹50 to 10% commission
+c9a1ee1 fix: remove session deps, fix chat route prefix, increase rate limits
+4e9bf0d Update configuration and middleware
+2f0e61b Skip OTP verification in production - auto-verify users
+8d81c42 Fix signup phone conflict handling and improve error logging
+b7e24f0 Fix CORS blocking production domain by adding explicit allowed origin
+d136c2f Fix asset 500s by excluding from CSRF; prevent index.html caching
+57b205c Fix production URLs and CSP for Render
+02cdfb8 Fix: Add explicit /assets handler and build diagnostic endpoint
+44397b6 Fix: exclude /assets/ from SPA fallback to serve static files properly
+7637570 Simplify: always use Gmail nodemailer, remove all dev/prod conditionals
+469264c Fix: use Gmail service for nodemailer, skip verify in production, fallback auto-verify
+f740277 Fix: include devDependencies in client build for vite
+1230908 Skip OTP entirely in production, auto-verify users instantly
+cf6f634 Fix: auto-verify users when email service unavailable (Render SMTP blocked)
+8bfa495 Fix: use SMTP port 465 SSL with timeout, registration continues if email fails
+20b9b8d Fix: add trust proxy for Render reverse proxy
+c45e18c Fix: use --legacy-peer-deps for client build
+24598c3 Add project description and update client packages
+e24565a Add Render deployment config
+32a24dc chore: misc fixes and cleanup
+53193cb feat(security): integrate security middleware and hybrid authentication
+ba8e0bf feat(error): enhance error handling and add 404 page
+a49af0d feat(logging): add request logger middleware with sensitive data sanitization
+706f6a0 feat(logging): add production logging with rotating file streams
+a050ddf feat(auth): implement JWT token system with rotation
+e4d0520 Polish landing page hero and add clay UI components
+8b04ae9 Update package-lock.json
+bd2d97b chore: add database utility scripts
+9bb8f50 chore: remove EJS views after React migration complete
+3c11ef2 fix(backend): update models and add utility services
+050d505 feat(app): integrate all routes and finalize app configuration
+e30fa0e feat(redux): integrate Redux for global state management
+56883d4 feat(components): add reusable UI components for consistent design
+677f9b3 feat(backend): implement tracking and SOS emergency system
+2782757 feat(chat): implement real-time chat between riders and passengers
+4dfd3a1 feat(tracking): add live tracking with map and Safety system
+fe6be94 feat(realtime): implement Socket.IO for real-time notifications
+86dab81 feat(admin): implement driver verification and safety alerts
+300a903 feat(admin): add rides and bookings management pages
+92cc27c feat(admin): implement user management with search and actions
+9d39c63 feat(admin): create admin dashboard with platform statistics
+e552520 feat(trips): add trip history and carbon footprint tracking
+1db8808 fix(backend): enhance booking controller with OTP verification
+c972f4b feat(reviews): implement rating system with star reviews
+4ae8316 feat(payment): add payment processing with multiple methods
+92e6fe3 feat(bookings): implement booking creation and management
+23f19d0 feat(geo): implement geo-fencing for location-based filtering
+ed01365 feat(reassignment): add automatic ride reassignment on cancellation
+79e870f feat(matching): implement polyline-based route matching algorithm
+b781ead feat(search): implement ride search with filters
+8972ea8 feat(user): add license upload for driver verification
+3ece556 fix(backend): enhance ride controller with pricing logic
+d1c6e53 feat(location): create LocationInput with autocomplete
+0b1bd89 feat(rides): add My Rides page with filtering and management
+b2e4a3f feat(rides): implement ride posting with location autocomplete
+a868736 feat(profile): add user profile and settings pages
+04d04ba feat(dashboard): create user dashboard with ride statistics
+13a7ab9 fix(backend): enhance auth controller with validation
+4f2b182 feat(layout): add protected routes and responsive navigation
+b8ef934 feat(home): create responsive home page with hero section
+1aca0da feat(auth): integrate auth service with Context API
+5c825b3 feat(auth): add OTP verification and password reset pages
+e4286c1 feat(auth): enhance login and register with form validation
+bcb2933 fix: critical frontend-backend integration issues
+27fcb38 Fix: Resolve merge conflict in AuthContext.jsx - proper API integration
+2436d98 Merge develop into main: complete React migration with all bug fixes (Nov 11-14)
+d0a4f46 Merge feature/bug-fixes-backend: add vite proxy and page route fixes
+60da6f9 Merge feature/bug-fixes-backend into develop
+622d469 Merge feature/bug-fixes-ui: update Footer, Navbar, Button with LOOPLANE branding
+024999e fix: update Login, Register, Home and Dashboard pages with correct routes and branding
+7e86800 Merge feature/bug-fixes-ui into develop
+0ff8bd5 Merge feature/bug-fixes-auth: add ProtectedRoute and AuthContext API integration
+7033b17 fix: update Footer, Navbar and Button with LOOPLANE branding and emerald theme
+0dec720 fix: add API and socket proxy configuration to vite
+e336354 Merge feature/bug-fixes-auth into develop
+a7dbe8a Merge feature/bug-fixes-routing: fix import paths and create AdminRoute
+ee79b4e fix: add isAuthenticated and API integration to AuthContext
+5c9578d fix: add Reviews export to user pages index
+fd1677b feat: integrate all routes with NotificationProvider and admin theme support
+3c46385 Merge feature/bug-fixes-routing into develop
+de9c080 fix: correct import paths in App.jsx to match actual file structure
+de40aca fix: create ProtectedRoute component for auth-guarded routes
+46fe6d2 Merge feature/socket-integration: add socket.io-client and NotificationContext
+7019d1b feat: create AdminRoute component for admin page protection
+54ea858 Merge feature/route-integration: add page index exports for user and admin
+fd6fd2c feat: create NotificationContext for real-time alerts
+dfaa239 Merge feature/admin-layout: add admin theme support to Layout and Navbar
+ae54bb0 feat: create admin pages barrel export
+18c2dc1 chore: add socket.io-client for real-time features
+f8f6b08 Merge feature/geo-services: add location service and geo-fencing hook
+b04b252 feat: add admin navigation and theme to Navbar
+0da7eb9 feat: export all user page components
+0dd5671 Merge feature/notifications: add notifications center and admin reports
+50922a0 Merge feature/reviews-system: add review service and Reviews page
+d54d0d1 feat: create useGeoFencing hook for location tracking
+496e0fb feat: add adminTheme prop to Layout component
+e458d65 Merge feature/trip-history: add trip history and carbon report pages
+160172f add admin reports page with moderation actions
+770ebc2 feat: create Reviews page with ratings display
+2a2f9d0 feat: create locationService with geo-fencing APIs
+f9a4e6b Merge feature/admin-verifications: add license verification and rides admin
+3f9a096 add carbon report page with stats and badges
+9c7f23e feat(user): Add notifications center with filtering
+4b4d02f feat: create reviewService for ratings API
+b29ab03 Merge feature/emergency-contacts: add emergency contacts and user settings
+3524065 add admin rides management page
+17efc05 feat(user): Add trip history page with carbon tracking
+41e040a Merge feature/live-tracking: add live tracking, SOS, and admin dashboard
+e2f3685 Merge feature/admin-users: add user management and bookings admin pages
+19d6039 add user settings page with privacy and delete account
+1956c23 feat: create admin verifications page with document viewer
+a6bf522 Merge feature/payment-flow: add complete payment flow with success/failure pages
+3bacdf9 feat: add admin service with API methods for user, ride, booking management
+ae08a46 feat(admin): Add bookings management page
+8fe271c feat: add emergency contact API methods to user service
+8e1fe19 Merge feature/auth-improvements: enhance auth pages with validation
+3c25c6f feat: integrate payment flow routes in App
+81bce7a feat: create admin dashboard with stats and quick actions
+283b680 feat: create admin users management page with filtering and actions
+3867f0f feat: create emergency contacts page with verification flow
+dc3eb37 Merge feature/search-filters: add search filters and ride card components
+c78f20a feat: integrate change password page with app router
+6676634 feat: export payment pages from bookings index
+cb4ea33 feat: integrate tracking and SOS routes in App
+391f28b Merge feature/profile-settings: add user profile page with settings
+f6981b1 feat: add search helper components for results display
+18e10b0 feat: add change password and account management to auth service
+2de8d91 feat: add payment failed page with error handling
+c3a4884 feat: export tracking pages and utilities from index
+97c45a9 Merge feature/rating: add booking rating system
+60af013 feat: integrate profile page with app router
+2ee396b feat: export rides components from index
+2b9d6fa feat: export change password from auth index
+2c67812 feat: add payment success page with receipt download
+335f26a feat: add driver tracking panel with status updates
+982fe23 Merge feature/chat: add real-time chat functionality
+fe2f997 feat: integrate rating page with router
+9a93d64 feat: export profile page from user index
+8bcf8a8 feat: create sort dropdown component for search results
+0934bb8 feat: create change password page with validation
+50bc816 feat: add UPI and card payment form inputs
+9d0105b feat: add SOS emergency page with countdown activation
+9eab0cc Merge feature/ride-details: add ride details page and service
+6630ec3 feat: integrate chat page with app router
+f6eb708 feat: create rating page with stars and review form
+f2eb13c feat: add preferences tab with ride comfort and booking options
+886ca86 feat: add preferences tags and vehicle info to ride card
+d76a7ee feat: add visual password strength UI and confirm password validation
+0dd2209 feat: add coupon input section to payment page
+ad1d21f feat: add tracking custom hooks and utility functions
+3fec587 Merge feature/home-page: add home page and license upload
+e498f23 feat: enhance ride service with booking and search methods
+8018fd7 feat: create chat page with conversations and messaging
+0903921 feat: add settings tab with notifications and security options
+987c898 feat: create ride card component with driver info and route
+7c573d2 feat: add password strength indicator to register form
+eabb4fc feat: add payment processing and coupon logic
+bac0bb8 feat: create live tracking page with socket.io integration
+97f319e Merge feature/booking-details: add booking details and actions
+bd59b1e feat: add license and vehicle management to user service
+b61bf80 feat: integrate ride details page with app router
+3de5502 feat: add chat service for conversations and messages
+8fad00b feat: add address section and save button to profile
+eeb05d3 feat: add ride preferences and action buttons to filters
+37a498f feat: add validation error display to login inputs
+806eec0 feat: create payment page with method selection
+8ce3e05 Merge feature/post-ride: add ride posting and my rides
+30bccc5 feat: add booking service methods for all booking actions
+f8bfb84 feat: integrate license upload with app router
+e8dbf58 feat: create ride details page with route visualization
+ad21c3b feat: add socket context for real-time communication
+f2c1904 feat: add profile info tab with avatar and personal info form
+c9f7d8a feat: add seats, vehicle type, and rating filters
+0d6b949 feat: add client-side validation to login form
+8cbffd3 Merge feature/bookings: add my bookings page
+74d0d34 feat: integrate my rides with router
+a6c2a03 feat: integrate booking details page with router
+1dfbb37 feat: add license upload page with multi-step form
+1cf6124 feat: add profile form state and avatar handling
+47e9cc5 feat: create search filters component skeleton
+afe025c Merge feature/ride-search: add ride search with location autocomplete
+d68ca66 add my bookings page with filters and pagination
+ccdc79d feat: create my rides page with filtering
+312e6d5 feat: add cancel booking modal and action buttons
+8b5b74d feat: integrate home page with app router
+e0418a7 feat: create profile page skeleton with tabs
+dc7b950 Merge feature/dashboard: add user dashboard page
+aed4955 add ride search page
+5cfe7db add booking service with API methods
+206e13a feat: integrate post ride page with router
+a426529 feat: add journey and payment details sections
+709093d feat: create home page with hero and quick search
+f31e65b Merge feature/auth-pages: add auth pages and layout
+602fcf6 add user dashboard page and service
+52db3a3 add ride service and location autocomplete
+01c7c0e feat: add form submission with validation
+c2e28d0 feat: add OTP display and journey status
+37438e0 Merge feature/common-components: add reusable UI components
+96fbb7a integrate auth pages with router and layout
+de0fbca feat: add preferences and submit button
+cd681de feat: create booking details page skeleton
+0c2ae54 Merge feature/footer: add footer component
+fbed1a5 add modal, card, badge and export index
+bc57863 add layout wrapper component
+9cbe823 feat: add pricing with distance calculation
+384e27c Merge feature/navbar: add navbar component
+d50cc02 create footer component
+71e1c7e add alert and loading spinner components
+5552cbe add verify otp page
+d755ae1 feat: add date time and vehicle selection
+136b07c Merge feature/routing: setup react router
+8a4394e create navbar component
+e68fa76 add input component with validation
+b90425e add OTP verification and password reset pages
+ecfc99e feat: add route section with location inputs
+797484c Merge feature/auth-context: add auth context provider
+dbcd9f8 setup react router with all routes
+a5fd1da create button component
+1f67523 add login and register pages
+2499314 feat: create post ride page skeleton
+e13e424 Merge feature/api-service: add axios and auth services
+ed73082 create auth context
+6ffd3b7 Merge feature/react-setup: initial React project setup
+c94c861 add axios and react-router dependencies
+3e07dbc bug fixes
+1f1570e add helper functions
+b15c13e add auth service
+315adf3 fixed a small bug
+e936443 add constants file
+c8e6e66 add axios api service
+d374582 Delete
+3fcc856 add env example
+fcd7892 Delete
+0e654b1 create folder structure
+acc2980 Delete
+6bc43f4 import css in main.jsx
+4c9998a error fixes
+d12f455 add index.css with tailwind
+f43a7c6 Tracking & SOS: ensure map renders with viewer geolocation fallback; wire SOS button UX; add admin SOS dashboard, routes, controllers, and socket events; remove booking SMS sends; fix socket rooms for admin and emergencies.
+1fc4b5a add postcss config
+7abf855 Merge pull request #9 from mohanganesh3/sujal
+a82af29 add tailwind config
+5d3a2cc Merge pull request #7 from mohanganesh3/mybranch
+b370c88 Update ride search form with AJAX (XHR) functionality
+e87ab8a add tailwind dependencies
+d9c14ff Merge pull request #8 from mohanganesh3/ajax/changing
+0c13afb Merge branch 'main' into mybranch
+f2e268c Merge branch 'main' of https://github.com/mohanganesh3/LANE into sujal
+504a43a add basic App component
+936f043 geo fencing
+f533084 change show rides controller with filters
+4a8d315 modified controllers.js
+2c8bfb4 Add EJS partial for AJAX ride search results
+5f4b85d add main.jsx entry point
+ab283fc added real time tracking
+66885eb change show rides controller with filters
+8cf7e8a Merge branch 'main' of https://github.com/mohanganesh3/LANE into mybranch
+438f370 Render partial EJS for AJAX ride search requests
+db63fbd add index.html
+c19eac5 fixed code
+5af8310 change ajax in code
+f459ed0 Update bookingController.js
+dc69bce fixed code
+b9c1cfe Add XHR-based AJAX to ride search form
+8d707f0 add vite config
+6d82466 fix(sos): resolve critical emergency alert system issues - location tracking, notifications, and UI improvements
+d4417b7 Merge branch 'main' of https://github.com/mohanganesh3/LANE into ajax/changing
+064ea83 Merge pull request #4 from mohanganesh3/feature/showPostRideUpdate
+01e1cd4 fix(sos): resolve critical emergency alert system issues - location tracking, notifications, and UI improvements
+200e472 Merge pull request #1 from mohanganesh3/dinesh
+2b87550 init client folder with package.json
+d8a365c chore(ui): replace unread-count fetch with XHR polling
+b86ccbb add ajax funtinoality
+c1b6ace fix(sos): connect tracking page SOS button to proper location-aware handler
+a2a6e8f Refactored showPostRidePage logic without changing functionality
+e2f9c90 Update README.md
+0d8c481 chore(admin): make approval UI XHR-based in verification-details
+d4231e9 feat(permissions): add comprehensive permission manager with modal UI
+4f37cb7 chore(admin): make approve/reject XHR and add data-user-id
+1a5b652 fix(sos): add coordinate validation + logging to debug null location bug
+3d41e5e chore(auth): switch verify-otp to XMLHttpRequest (XHR)
+8f1417a fix(critical): fix SOS null coordinates bug by adding getCurrentLocation helper; enable driver location tracking for PICKUP_PENDING status
+ff4a5ef chore(auth): switch register form to XMLHttpRequest (XHR)
+d2664d2 feat(ui): show Live Track button on My Bookings and Booking Details for READY_FOR_PICKUP and other active states
+f829c73 chore(auth): switch login form to XMLHttpRequest (XHR)
+920024a feat(tracking): enable live tracking during READY_FOR_PICKUP state; compat socket handler; auto-start driver geolocation when ACTIVE/READY_FOR_PICKUP; allow booking lookup by rideId in READY_FOR_PICKUP

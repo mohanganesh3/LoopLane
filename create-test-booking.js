@@ -82,8 +82,6 @@ async function createTestData() {
                 availableSeats: 3,
                 totalEarnings: 0
             },
-            seatsAvailable: 3,
-            totalSeats: 4,
             status: 'IN_PROGRESS',
             tracking: {
                 isLive: true,
@@ -126,12 +124,32 @@ async function createTestData() {
             },
             seatsBooked: 1,
             totalPrice: 200,
-            status: 'IN_PROGRESS',
+            status: 'PICKUP_PENDING',
             payment: {
                 amount: 200,
+                rideFare: 180,
+                platformCommission: 20,
+                totalAmount: 200,
                 status: 'PAID',
                 method: 'CASH',
                 transactionId: `TEST_${Date.now()}`
+            },
+            verification: {
+                pickup: {
+                    code: '1234',
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+                },
+                dropoff: {
+                    code: '5678',
+                    expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000)
+                }
+            }
+        });
+
+        await Ride.findByIdAndUpdate(ride._id, {
+            $set: {
+                bookings: [booking._id],
+                'pricing.totalEarnings': booking.totalPrice
             }
         });
 
@@ -142,17 +160,18 @@ async function createTestData() {
         console.log('TEST URLs:');
         console.log('=' .repeat(60));
         console.log(`\n📍 Tracking (with booking ID):`);
-        console.log(`   http://localhost:3000/tracking/${booking._id}`);
-        console.log(`\n📍 Tracking (with ride ID - will find booking):`);
-        console.log(`   http://localhost:3000/tracking/${ride._id}`);
-        console.log(`\n💬 Chat (with booking ID - will create chat):`);
-        console.log(`   http://localhost:3000/chat/${booking._id}`);
-        console.log(`\n💬 Chat (with ride ID - will find booking & create chat):`);
-        console.log(`   http://localhost:3000/chat/${ride._id}`);
+        console.log(`   http://localhost:5173/tracking/${booking._id}`);
+        console.log(`\n🚨 Safety flow:`);
+        console.log(`   http://localhost:5173/tracking/${booking._id}/safety`);
+        console.log(`\n💬 Chat as passenger (talk to rider):`);
+        console.log(`   http://localhost:5173/chat/${rider._id}`);
+        console.log(`\n💬 Chat as rider (talk to passenger):`);
+        console.log(`   http://localhost:5173/chat/${passenger._id}`);
         console.log('\n' + '='.repeat(60));
         console.log('\n💡 Login as either:');
         console.log(`   Rider: ${rider.email}`);
         console.log(`   Passenger: ${passenger.email}`);
+        console.log('\n🔐 Test OTPs: pickup=1234, dropoff=5678');
         console.log('\n✅ Both users can access tracking and chat!\n');
 
         process.exit(0);

@@ -4,8 +4,32 @@ const fs = require('fs');
 const path = require('path');
 const { marked } = require('marked');
 
+const DEFAULT_MARKDOWN_CANDIDATES = [
+    path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.md'),
+    path.join(__dirname, 'PROJECT_DESCRIPTION.md'),
+    path.join(__dirname, 'README.md')
+];
+
+const resolveMarkdownPath = () => {
+    const providedPath = process.argv[2];
+    if (providedPath) {
+        const absolutePath = path.resolve(process.cwd(), providedPath);
+        if (!fs.existsSync(absolutePath)) {
+            throw new Error(`Markdown file not found: ${absolutePath}`);
+        }
+        return absolutePath;
+    }
+
+    const discoveredPath = DEFAULT_MARKDOWN_CANDIDATES.find((candidate) => fs.existsSync(candidate));
+    if (!discoveredPath) {
+        throw new Error('No markdown source found. Pass a file path: node generate-pdf.js <path-to-markdown>');
+    }
+
+    return discoveredPath;
+};
+
 // Read the markdown file
-const markdownPath = path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.md');
+const markdownPath = resolveMarkdownPath();
 const markdown = fs.readFileSync(markdownPath, 'utf-8');
 
 // Convert markdown to HTML
@@ -368,8 +392,8 @@ const html = `
 </html>
 `;
 
-// Save HTML file
-const htmlPath = path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.html');
+// Save HTML file alongside the input markdown file
+const htmlPath = markdownPath.replace(/\.md$/i, '.html');
 fs.writeFileSync(htmlPath, html);
 
 console.log('✅ HTML file generated successfully!');
@@ -382,4 +406,4 @@ console.log('   4. Adjust margins if needed');
 console.log('   5. Click "Save"');
 console.log('\nOr install puppeteer for automated PDF generation:');
 console.log('   npm install puppeteer');
-console.log('   node generate-pdf-puppeteer.js');
+console.log(`   node generate-pdf-puppeteer.js ${path.relative(process.cwd(), markdownPath)}`);

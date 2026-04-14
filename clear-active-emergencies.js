@@ -1,6 +1,6 @@
 /**
  * Clear All Active Emergencies
- * Useful for testing - sets all active emergencies to RESOLVED
+ * Useful for testing - sets all open emergencies to RESOLVED
  */
 
 const mongoose = require('mongoose');
@@ -15,9 +15,9 @@ async function clearActiveEmergencies() {
         const db = mongoose.connection.db;
         const collection = db.collection('emergencies');
 
-        // Find all active emergencies
+        // Find all open emergencies
         const activeEmergencies = await collection.find({
-            status: { $in: ['ACTIVE', 'IN_PROGRESS'] }
+            status: { $in: ['ACTIVE', 'ACKNOWLEDGED'] }
         }).toArray();
 
         console.log(`\n📋 Found ${activeEmergencies.length} active emergencies`);
@@ -29,7 +29,7 @@ async function clearActiveEmergencies() {
 
             console.log('\n🧹 Marking all as RESOLVED...');
             const result = await collection.updateMany(
-                { status: { $in: ['ACTIVE', 'IN_PROGRESS'] } },
+                { status: { $in: ['ACTIVE', 'ACKNOWLEDGED'] } },
                 { 
                     $set: { 
                         status: 'RESOLVED',

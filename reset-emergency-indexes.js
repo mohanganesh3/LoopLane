@@ -4,6 +4,7 @@
 
 const mongoose = require('mongoose');
 require('dotenv').config();
+const Emergency = require('./models/Emergency');
 
 async function resetIndexes() {
     try {
@@ -33,24 +34,10 @@ async function resetIndexes() {
             }
         }
 
-        // Now recreate the necessary indexes based on the model
-        console.log('\n🔧 Recreating indexes from model...');
-        
-        // Geospatial index
-        await collection.createIndex({ 'location.coordinates': '2dsphere' });
-        console.log('  ✅ Created: location.coordinates_2dsphere');
-        
-        // Status and time indexes
-        await collection.createIndex({ status: 1, triggeredAt: -1 });
-        console.log('  ✅ Created: status_1_triggeredAt_-1');
-        
-        // User and status
-        await collection.createIndex({ user: 1, status: 1 });
-        console.log('  ✅ Created: user_1_status_1');
-        
-        // Priority and status
-        await collection.createIndex({ priority: 1, status: 1 });
-        console.log('  ✅ Created: priority_1_status_1');
+        // Rebuild the current model-defined indexes instead of hardcoding stale ones.
+        console.log('\n🔧 Recreating indexes from current Emergency model...');
+        await Emergency.syncIndexes();
+        console.log('  ✅ Model indexes synced successfully');
 
         console.log('\n📋 Final indexes:');
         const finalIndexes = await collection.indexes();

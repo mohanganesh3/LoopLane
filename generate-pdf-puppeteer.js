@@ -5,11 +5,35 @@ const path = require('path');
 const { marked } = require('marked');
 const puppeteer = require('puppeteer');
 
+const DEFAULT_MARKDOWN_CANDIDATES = [
+    path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.md'),
+    path.join(__dirname, 'PROJECT_DESCRIPTION.md'),
+    path.join(__dirname, 'README.md')
+];
+
+const resolveMarkdownPath = () => {
+    const providedPath = process.argv[2];
+    if (providedPath) {
+        const absolutePath = path.resolve(process.cwd(), providedPath);
+        if (!fs.existsSync(absolutePath)) {
+            throw new Error(`Markdown file not found: ${absolutePath}`);
+        }
+        return absolutePath;
+    }
+
+    const discoveredPath = DEFAULT_MARKDOWN_CANDIDATES.find((candidate) => fs.existsSync(candidate));
+    if (!discoveredPath) {
+        throw new Error('No markdown source found. Pass a file path: node generate-pdf-puppeteer.js <path-to-markdown>');
+    }
+
+    return discoveredPath;
+};
+
 async function generatePDF() {
     console.log('🚀 Starting PDF generation...\n');
 
     // Read the markdown file
-    const markdownPath = path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.md');
+    const markdownPath = resolveMarkdownPath();
     const markdown = fs.readFileSync(markdownPath, 'utf-8');
 
     console.log('✅ Markdown file loaded');
@@ -334,7 +358,7 @@ async function generatePDF() {
     console.log('✅ Content loaded');
 
     // Generate PDF
-    const pdfPath = path.join(__dirname, 'midreview_submission', 'DOCUMENTATION.pdf');
+    const pdfPath = markdownPath.replace(/\.md$/i, '.pdf');
     
     await page.pdf({
         path: pdfPath,

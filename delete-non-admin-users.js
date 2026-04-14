@@ -6,6 +6,16 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
+const ADMIN_PANEL_ROLES = [
+  'ADMIN',
+  'SUPER_ADMIN',
+  'SUPPORT_AGENT',
+  'FINANCE_MANAGER',
+  'OPERATIONS_MANAGER',
+  'CONTENT_MODERATOR',
+  'FLEET_MANAGER'
+];
+
 const run = async () => {
   try {
     // Connect to MongoDB
@@ -20,17 +30,17 @@ const run = async () => {
 
     // Count users before deletion
     const totalBefore = await User.countDocuments({});
-    const adminCount = await User.countDocuments({ role: 'ADMIN' });
-    const nonAdminCount = await User.countDocuments({ role: { $ne: 'ADMIN' } });
+    const adminCount = await User.countDocuments({ role: { $in: ADMIN_PANEL_ROLES } });
+    const nonAdminCount = await User.countDocuments({ role: { $nin: ADMIN_PANEL_ROLES } });
 
     console.log('\n📊 Current User Stats:');
     console.log(`   Total users: ${totalBefore}`);
     console.log(`   Admin users: ${adminCount}`);
     console.log(`   Non-admin users: ${nonAdminCount}`);
 
-    // Delete all non-admin users
+    // Delete all non-admin-panel users
     console.log('\n🗑️  Deleting all non-admin users...');
-    const result = await User.deleteMany({ role: { $ne: 'ADMIN' } });
+    const result = await User.deleteMany({ role: { $nin: ADMIN_PANEL_ROLES } });
 
     console.log(`✅ Deleted ${result.deletedCount} non-admin users`);
 
@@ -39,59 +49,58 @@ const run = async () => {
     console.log(`\n📊 Remaining users: ${totalAfter} (all admins)`);
 
     // List remaining admin users
-    const admins = await User.find({ role: 'ADMIN' }).select('email profile.firstName profile.lastName');
+    const admins = await User.find({ role: { $in: ADMIN_PANEL_ROLES } }).select('email role profile.firstName profile.lastName');
     console.log('\n👤 Remaining Admin Accounts:');
     admins.forEach(admin => {
-      console.log(`   - ${admin.email} (${admin.profile?.firstName || 'N/A'} ${admin.profile?.lastName || ''})`);
+      console.log(`   - ${admin.email} [${admin.role}] (${admin.profile?.firstName || 'N/A'} ${admin.profile?.lastName || ''})`);
     });
 
     // Also clean up related data (optional but recommended)
     console.log('\n🧹 Cleaning up related data...');
-    
-    // Get IDs of deleted users (non-admin)
-    // Since they're already deleted, we'll clean orphaned data
     
     const Booking = require('./models/Booking');
     const Ride = require('./models/Ride');
     const Chat = require('./models/Chat');
     const Review = require('./models/Review');
     const Notification = require('./models/Notification');
+
+    const activeUserIds = await User.find().distinct('_id');
     
-    // Delete bookings where passenger or driver no longer exists
+    // Delete bookings where passenger or rider no longer exists
     const bookingsDeleted = await Booking.deleteMany({
       $or: [
-        { passengerId: { $nin: await User.find().distinct('_id') } },
-        { driverId: { $nin: await User.find().distinct('_id') } }
+        { passenger: { $nin: activeUserIds } },
+        { rider: { $nin: activeUserIds } }
       ]
     });
     console.log(`   Deleted ${bookingsDeleted.deletedCount} orphaned bookings`);
     
-    // Delete rides where driver no longer exists
+    // Delete rides where rider no longer exists
     const ridesDeleted = await Ride.deleteMany({
-      driverId: { $nin: await User.find().distinct('_id') }
+      rider: { $nin: activeUserIds }
     });
     console.log(`   Deleted ${ridesDeleted.deletedCount} orphaned rides`);
     
     // Delete chats with non-existent users
     const chatsDeleted = await Chat.deleteMany({
-      $or: [
-        { 'participants': { $nin: await User.find().distinct('_id') } }
-      ]
+      participants: {
+        $elemMatch: { $nin: activeUserIds }
+      }
     });
     console.log(`   Deleted ${chatsDeleted.deletedCount} orphaned chats`);
     
     // Delete reviews with non-existent users
     const reviewsDeleted = await Review.deleteMany({
       $or: [
-        { reviewer: { $nin: await User.find().distinct('_id') } },
-        { reviewed: { $nin: await User.find().distinct('_id') } }
+        { reviewer: { $nin: activeUserIds } },
+        { reviewee: { $nin: activeUserIds } }
       ]
     });
     console.log(`   Deleted ${reviewsDeleted.deletedCount} orphaned reviews`);
     
     // Delete notifications for non-existent users
     const notificationsDeleted = await Notification.deleteMany({
-      userId: { $nin: await User.find().distinct('_id') }
+      user: { $nin: activeUserIds }
     });
     console.log(`   Deleted ${notificationsDeleted.deletedCount} orphaned notifications`);
 

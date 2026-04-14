@@ -1,0 +1,27 @@
+looplane-client@1.0.0 /Users/mohanganesh/wbd/LoopLane/client
+├─┬ @react-google-maps/api@2.20.8
+│ └── react-dom@18.3.1 deduped
+├─┬ @react-three/drei@10.7.7
+│ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei
+├─┬ @react-three/fiber@9.5.0
+│ ├── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+│ └─┬ react-use-measure@2.1.7
+│   └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+├─┬ framer-motion@11.18.2
+│ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+├── react-dom@18.3.1 invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+├─┬ react-intersection-observer@10.0.3
+│ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+├─┬ react-leaflet@4.2.1
+│ ├─┬ @react-leaflet/core@2.1.0
+│ │ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+│ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+├─┬ react-router-dom@6.30.3
+│ └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+└─┬ recharts@2.15.4
+  ├── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+  └─┬ react-smooth@4.0.4
+    ├── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+    └─┬ react-transition-group@4.4.5
+      └── react-dom@18.3.1 deduped invalid: "^19" from node_modules/@react-three/drei, ">=19 <19.3" from node_modules/@react-three/fiber
+

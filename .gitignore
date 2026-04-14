@@ -47,6 +47,9 @@ tmp/
 temp/
 *.tmp
 
+# Local dev data
+.data/
+
 # Build files
 dist/
 build/

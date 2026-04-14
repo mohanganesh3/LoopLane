@@ -75,13 +75,14 @@ const seedSampleData = async () => {
             },
             vehicles: [
                 {
-                    type: 'SEDAN',
+                    vehicleType: 'SEDAN',
                     make: 'Honda',
                     model: 'City',
                     year: 2020,
                     licensePlate: 'MH01AB1234',
                     color: 'White',
                     seats: 4,
+                    isDefault: true,
                     status: 'APPROVED'
                 }
             ],
@@ -108,13 +109,14 @@ const seedSampleData = async () => {
             },
             vehicles: [
                 {
-                    type: 'SUV',
+                    vehicleType: 'SUV',
                     make: 'Toyota',
                     model: 'Fortuner',
                     year: 2021,
                     licensePlate: 'MH12CD5678',
                     color: 'Black',
                     seats: 6,
+                    isDefault: true,
                     status: 'APPROVED'
                 }
             ],
