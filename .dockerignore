@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+client/node_modules
+
+# Local builds
+client/dist
+coverage
+
+# Local data & logs
+.data
+logs
+*.log
+
+# Secrets
+.env
+.env.*
+
+# VCS
+.git
+.gitignore
+
+# OS/IDE
+.DS_Store
+.vscode
+.idea

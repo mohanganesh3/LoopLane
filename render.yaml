@@ -22,6 +22,10 @@ services:
         value: LANE
       - key: MONGODB_URI
         sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SOLR_URL
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_ACCESS_EXPIRY

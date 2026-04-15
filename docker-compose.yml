@@ -1,0 +1,49 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  solr:
+    image: solr:9
+    restart: unless-stopped
+    ports:
+      - "8983:8983"
+    volumes:
+      - solr_data:/var/solr
+    command:
+      - solr-precreate
+      - users
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mongo
+      - redis
+      - solr
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      BASE_URL: http://localhost:3000
+      ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      MONGODB_URI: mongodb://mongo:27017/lane-carpool
+      REDIS_URL: redis://redis:6379
+      SOLR_URL: http://solr:8983/solr
+      JWT_SECRET: dev_jwt_secret_32_chars_minimum_123456
+      COOKIE_SECRET: dev_cookie_secret
+
+volumes:
+  mongo_data:
+  solr_data:

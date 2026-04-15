@@ -25,7 +25,6 @@ function clearRequireCache(directories = ['models', 'controllers', 'middleware',
     });
 
     if (clearedCount > 0) {
-        console.log(`🧹 Cleared ${clearedCount} cached modules`);
     }
 }
 
@@ -48,14 +47,12 @@ function setupCacheWatcher() {
         if (fs.existsSync(dirPath)) {
             fs.watch(dirPath, { recursive: true }, (eventType, filename) => {
                 if (filename && filename.endsWith('.js')) {
-                    console.log(`📝 File changed: ${dir}/${filename}`);
                     clearRequireCache([dir]);
                 }
             });
         }
     });
 
-    console.log('👁️  File watcher active for:', watchDirs.join(', '));
 }
 
 module.exports = {
