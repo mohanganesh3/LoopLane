@@ -16,6 +16,10 @@ With Solr enabled, the controller:
 2. Fetches those users from MongoDB in the same order
 3. Falls back to the Mongo regex approach automatically if Solr is not configured/reachable
 
+The response now includes:
+
+- `X-Search-Backend: solr | mongo | mongo-fallback`
+
 ## Configuration
 
 Set:
@@ -49,5 +53,6 @@ Solr needs documents. Reindexing script:
 1. Create/seed some users
 2. Run the Solr reindex script
 3. Call `GET /api/admin/users?search=<name/email/phone>` and confirm results return quickly
+4. Confirm the response header is `X-Search-Backend: solr`
 
 > If Solr is down/misconfigured, the endpoint still works via MongoDB fallback.

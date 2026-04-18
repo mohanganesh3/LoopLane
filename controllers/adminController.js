@@ -1349,6 +1349,7 @@ exports.getUsers = asyncHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
+    let searchBackend = 'mongo';
 
     const requestedRole = req.query.role ? String(req.query.role).toUpperCase() : null;
     const requestedStatus = req.query.status ? String(req.query.status).toUpperCase() : null;
@@ -1378,6 +1379,8 @@ exports.getUsers = asyncHandler(async (req, res) => {
                     role: req.query.role,
                     status: req.query.status
                 });
+                searchBackend = 'solr';
+                res.set('X-Search-Backend', searchBackend);
 
                 if (!ids.length) {
                     return res.json({
@@ -1416,6 +1419,7 @@ exports.getUsers = asyncHandler(async (req, res) => {
             }
         } catch {
             // Solr not reachable/misconfigured — fall back to Mongo regex search.
+            searchBackend = 'mongo-fallback';
         }
 
         // Mongo regex fallback (escape to avoid invalid regex / ReDoS patterns)
@@ -1441,6 +1445,7 @@ exports.getUsers = asyncHandler(async (req, res) => {
         .limit(limit)
         .lean();
 
+    res.set('X-Search-Backend', searchBackend);
     res.json({
         success: true,
         users,

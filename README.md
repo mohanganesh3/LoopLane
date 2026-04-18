@@ -26,6 +26,27 @@ npm run dev
 ```
 Frontend runs at: http://localhost:5173
 
+## Verification Commands
+
+Use these before the review to produce repeatable proof that the app is healthy:
+
+```bash
+npm test -- --runInBand
+npm run build
+npm run verify:system
+BASE_URL=https://looplane.onrender.com npm run verify:system
+```
+
+`npm run verify:system` checks:
+
+- `/api/health`
+- admin login
+- protected Swagger JSON
+- `/api/admin/system-health`
+- `/api/admin/users`
+- cache behavior on `/api/route` (`MISS` then `HIT`)
+- admin search backend visibility via `X-Search-Backend`
+
 ## Option B: Run with Docker (Mongo + Redis + API)
 
 This brings up **MongoDB**, **Redis**, **Solr**, and the **LoopLane API** (serving the built client).

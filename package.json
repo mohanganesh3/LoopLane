@@ -9,6 +9,8 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "build": "cd client && npm install --legacy-peer-deps --include=dev && npm run build",
+    "verify:system": "node scripts/verify_system.js",
+    "verify:deployment": "BASE_URL=https://looplane.onrender.com node scripts/verify_system.js",
     "seed:admin": "node seed.js admin",
     "seed:sample": "node seed.js sample",
     "solr:reindex-users": "node scripts/solr/reindex-users.js",

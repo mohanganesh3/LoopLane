@@ -3,6 +3,8 @@ services:
     name: looplane
     runtime: node
     plan: free
+    autoDeployTrigger: commit
+    healthCheckPath: /api/health
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
@@ -27,6 +29,8 @@ services:
       - key: SOLR_URL
         sync: false
       - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
         sync: false
       - key: JWT_ACCESS_EXPIRY
         value: "15m"

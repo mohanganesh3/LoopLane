@@ -1,179 +1,213 @@
-const axios = require('axios');
-const mongoose = require('mongoose');
-const fs = require('fs');
+/* eslint-disable no-console */
+
+/**
+ * Current system smoke verification for LoopLane.
+ *
+ * Verifies:
+ * - API health
+ * - Admin login
+ * - Protected Swagger JSON
+ * - Admin system health
+ * - Admin user listing
+ * - Cache headers on a unique route request (MISS -> HIT)
+ *
+ * Usage:
+ *   node scripts/verify_system.js
+ *   BASE_URL=https://looplane.onrender.com node scripts/verify_system.js
+ */
+
 require('dotenv').config();
 
-const BASE_URL = 'http://localhost:3099/api';
-const LOG_FILE = '/tmp/verify_trace_final.log';
-const User = require('../models/User');
-const { hashToken } = require('../utils/crypto');
+const axios = require('axios');
 
-const log = (msg) => {
-    const entry = `[${new Date().toISOString()}] ${msg}\n`;
-    console.log(msg);
-    fs.appendFileSync(LOG_FILE, entry);
-};
+const BASE_URL = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+const API_BASE = `${BASE_URL}/api`;
+const ADMIN_EMAIL = process.env.VERIFY_ADMIN_EMAIL || 'admin@lanecarpool.com';
+const ADMIN_PASSWORD = process.env.VERIFY_ADMIN_PASSWORD || 'Admin@123';
+const SEARCH_TERM = process.env.VERIFY_SEARCH_TERM || 'karthik';
 
-process.on('uncaughtException', (err) => {
-    log(`FATAL: Uncaught Exception: ${err.message}\n${err.stack}`);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    log(`FATAL: Unhandled Rejection: ${reason}`);
-    process.exit(1);
-});
-
-async function injectOTP(email, otp = '123456') {
-    const hashed = hashToken(otp);
-    await User.updateOne({ email }, { otpCode: hashed, otpExpires: new Date(Date.now() + 600000) });
-    return otp;
+function log(step, message, data) {
+    const suffix = data ? ` ${JSON.stringify(data)}` : '';
+    console.log(`[${step}] ${message}${suffix}`);
 }
 
-async function waitForServer(retries = 15) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            await axios.get(`${BASE_URL}/health`);
-            log('Server is healthy and ready');
-            return true;
-        } catch (e) {
-            log(`Waiting for server at ${BASE_URL}... (attempt ${i + 1}/${retries})`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
-    }
-    throw new Error('Server did not become ready in time');
+function buildCookieHeader(setCookieHeaders = []) {
+    return setCookieHeaders
+        .map((entry) => String(entry).split(';')[0])
+        .filter(Boolean)
+        .join('; ');
 }
 
-async function runTest() {
+async function expectOk(label, fn) {
     try {
-        if (fs.existsSync(LOG_FILE)) fs.unlinkSync(LOG_FILE);
-        log('--- STARTING FULL SYSTEM VERIFICATION ---');
-        await waitForServer();
-
-        log('Connecting to DB...');
-        if (mongoose.connection.readyState !== 1) {
-            await mongoose.connect(process.env.MONGODB_URI);
-        }
-
-        log('Cleaning existing test users...');
-        await User.deleteMany({ email: { $in: ['p@test.com', 'r@test.com'] } });
-        log('Cleaned test users from DB');
-
-        const TEST_PASSWORD = 'Password123!';
-        const TEST_OTP = '123456';
-
-        // 1. REGISTER PASSENGER
-        log('Phase 1: Passenger Registration');
-        await axios.post(`${BASE_URL}/auth/register`, {
-            name: 'Test Passenger',
-            email: 'p@test.com',
-            phone: '1111111111',
-            password: TEST_PASSWORD,
-            confirmPassword: TEST_PASSWORD,
-            role: 'PASSENGER'
-        });
-        await injectOTP('p@test.com', TEST_OTP);
-        log(`Injected OTP ${TEST_OTP} for passenger`);
-
-        await axios.post(`${BASE_URL}/auth/verify-otp`, { email: 'p@test.com', otp: TEST_OTP });
-        const pLogin = await axios.post(`${BASE_URL}/auth/login`, { email: 'p@test.com', password: TEST_PASSWORD });
-        const pAuth = { Authorization: `Bearer ${pLogin.data.accessToken}` };
-        log('Passenger logged in');
-
-        // 2. REGISTER RIDER
-        log('Phase 2: Rider Registration');
-        await axios.post(`${BASE_URL}/auth/register`, {
-            name: 'Test Rider',
-            email: 'r@test.com',
-            phone: '2222222222',
-            password: TEST_PASSWORD,
-            confirmPassword: TEST_PASSWORD,
-            role: 'RIDER'
-        });
-        await injectOTP('r@test.com', TEST_OTP);
-        log(`Injected OTP ${TEST_OTP} for rider`);
-
-        await axios.post(`${BASE_URL}/auth/verify-otp`, { email: 'r@test.com', otp: TEST_OTP });
-        const rLogin = await axios.post(`${BASE_URL}/auth/login`, { email: 'r@test.com', password: TEST_PASSWORD });
-        const rAuth = { Authorization: `Bearer ${rLogin.data.accessToken}` };
-        log('Rider logged in');
-
-        // 3. ADMIN VERIFY RIDER
-        log('Phase 3: Admin Verification');
-        const aLogin = await axios.post(`${BASE_URL}/auth/login`, { email: 'admin@looplane.com', password: 'AdminPassword123!' });
-        const aAuth = { Authorization: `Bearer ${aLogin.data.accessToken}` };
-
-        const meR = await axios.get(`${BASE_URL}/auth/me`, { headers: rAuth });
-        const riderId = meR.data.user._id;
-
-        // Simulating document submission
-        await User.updateOne({ _id: riderId }, { verificationStatus: 'PENDING' });
-        log('Rider status set to PENDING for verification');
-
-        await axios.post(`${BASE_URL}/admin/verifications/${riderId}/verify`, {
-            notes: 'Verified by system test'
-        }, { headers: aAuth });
-        log('Rider verified by Admin');
-
-        // 4. POST RIDE
-        log('Phase 4: Ride Lifecycle');
-        log('Adding vehicle for rider...');
-        // Correct path for vehicle addition based on routes/user.js (singular)
-        await axios.post(`${BASE_URL}/user/vehicle`, {
-            make: 'Tesla', model: 'Model 3', year: 2024, color: 'White', licensePlate: `TEST-${Date.now()}`,
-            seats: 4, vehicleType: 'SEDAN'
-        }, { headers: rAuth });
-
-        const meR2 = await axios.get(`${BASE_URL}/auth/me`, { headers: rAuth });
-        const vehicleId = meR2.data.user.vehicles[0]._id;
-
-        // Simulating vehicle approval
-        await User.updateOne(
-            { _id: riderId, "vehicles._id": vehicleId },
-            { $set: { "vehicles.$.status": 'APPROVED' } }
-        );
-        log('Vehicle set to APPROVED for ride posting');
-
-        const rideResp = await axios.post(`${BASE_URL}/rides/post`, {
-            fromLocation: 'Koramangala, Bangalore', toLocation: 'Whitefield, Bangalore',
-            originCoordinates: { coordinates: [77.6296, 12.9352] },
-            destinationCoordinates: { coordinates: [77.7480, 12.9698] },
-            departureTime: new Date(Date.now() + 3600000).toISOString(),
-            availableSeats: 4,
-            pricePerSeat: 100,
-            vehicleId
-        }, { headers: rAuth });
-        const rideId = rideResp.data.ride._id;
-        log(`Ride posted: ${rideId}`);
-
-        // 5. BOOKING
-        log('Phase 5: Booking Lifecycle');
-        const bookResp = await axios.post(`${BASE_URL}/bookings/create/${rideId}`, {
-            seats: 1, pickupLocation: { name: 'Koramangala', coordinates: [77.6296, 12.9352] }
-        }, { headers: pAuth });
-        const bookingId = bookResp.data.booking._id;
-        log(`Booking created: ${bookingId}`);
-
-        log('Rider accepting booking...');
-        await axios.post(`${BASE_URL}/bookings/${bookingId}/accept`, {}, { headers: rAuth });
-        log('Booking accepted');
-
-        log('--- ALL PHASES SUCCESSFUL ---');
-        process.exit(0);
+        return await fn();
     } catch (error) {
-        log('--- TEST FAILED ---');
         if (error.response) {
-            log(`Status: ${error.response.status}`);
-            log(`Data: ${JSON.stringify(error.response.data)}`);
-            if (error.response.data.errorsByField) {
-                log(`Validation Errors: ${JSON.stringify(error.response.data.errorsByField)}`);
-            }
-        } else {
-            log(`Error: ${error.message}`);
-            log(error.stack);
+            throw new Error(
+                `${label} failed: ${error.response.status} ${JSON.stringify(error.response.data)}`
+            );
         }
-        process.exit(1);
+        throw new Error(`${label} failed: ${error.message}`);
     }
 }
 
-runTest();
+async function main() {
+    log('verify', 'starting', { baseUrl: BASE_URL });
+
+    const health = await expectOk('health', async () => {
+        const response = await axios.get(`${API_BASE}/health`, { timeout: 15000 });
+        return response.data;
+    });
+
+    log('health', 'ok', {
+        environment: health.environment || 'unknown',
+        message: health.message,
+        database: health.database || 'unknown'
+    });
+
+    const loginResponse = await expectOk('admin login', async () => {
+        return axios.post(
+            `${API_BASE}/auth/login`,
+            { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+            {
+                timeout: 20000,
+                validateStatus: (status) => status < 500
+            }
+        );
+    });
+
+    if (loginResponse.status !== 200 || !loginResponse.data?.success || !loginResponse.data?.accessToken) {
+        throw new Error(`admin login failed: ${loginResponse.status} ${JSON.stringify(loginResponse.data)}`);
+    }
+
+    const accessToken = loginResponse.data.accessToken;
+    const cookieHeader = buildCookieHeader(loginResponse.headers['set-cookie']);
+    const authHeaders = {
+        Authorization: `Bearer ${accessToken}`,
+        ...(cookieHeader ? { Cookie: cookieHeader } : {})
+    };
+
+    log('auth', 'ok', {
+        role: loginResponse.data.user?.role,
+        email: loginResponse.data.user?.email
+    });
+
+    const swagger = await expectOk('swagger json', async () => {
+        const response = await axios.get(`${API_BASE}/swagger.json`, {
+            headers: authHeaders,
+            timeout: 20000
+        });
+        return response.data;
+    });
+
+    log('swagger', 'ok', {
+        openapi: swagger.openapi,
+        title: swagger.info?.title,
+        version: swagger.info?.version,
+        pathCount: Object.keys(swagger.paths || {}).length,
+        tagCount: (swagger.tags || []).length
+    });
+
+    const systemHealth = await expectOk('admin system health', async () => {
+        const response = await axios.get(`${API_BASE}/admin/system-health`, {
+            headers: authHeaders,
+            timeout: 20000
+        });
+        return response.data;
+    });
+
+    if (!systemHealth?.success) {
+        throw new Error(`admin system health returned unexpected payload: ${JSON.stringify(systemHealth)}`);
+    }
+
+    log('admin', 'system health ok', {
+        status: systemHealth.health?.status,
+        database: systemHealth.health?.database?.status,
+        totalUsers: systemHealth.health?.counters?.totalUsers
+    });
+
+    const usersList = await expectOk('admin users', async () => {
+        const response = await axios.get(`${API_BASE}/admin/users?page=1&limit=2`, {
+            headers: authHeaders,
+            timeout: 20000
+        });
+        return response.data;
+    });
+
+    if (!usersList?.success || !Array.isArray(usersList.users)) {
+        throw new Error(`admin users returned unexpected payload: ${JSON.stringify(usersList)}`);
+    }
+
+    log('admin', 'users ok', {
+        count: usersList.users.length,
+        total: usersList.pagination?.total
+    });
+
+    const cacheNonce = (Date.now() % 100000) / 10000000;
+    const routePayload = {
+        origin: {
+            coordinates: [77.6296 + cacheNonce, 12.9352 + cacheNonce]
+        },
+        destination: {
+            coordinates: [77.748 + cacheNonce, 12.9698 + cacheNonce]
+        }
+    };
+
+    const routeMiss = await expectOk('route miss', async () => {
+        return axios.post(`${API_BASE}/route`, routePayload, {
+            headers: authHeaders,
+            timeout: 30000
+        });
+    });
+
+    const routeHit = await expectOk('route hit', async () => {
+        return axios.post(`${API_BASE}/route`, routePayload, {
+            headers: authHeaders,
+            timeout: 30000
+        });
+    });
+
+    const missCache = routeMiss.headers['x-cache'];
+    const hitCache = routeHit.headers['x-cache'];
+    const cacheStore = routeHit.headers['x-cache-store'] || routeMiss.headers['x-cache-store'] || 'unknown';
+
+    if (missCache !== 'MISS') {
+        throw new Error(`expected first route request to MISS cache, got ${missCache || 'none'}`);
+    }
+
+    if (hitCache !== 'HIT') {
+        throw new Error(`expected second route request to HIT cache, got ${hitCache || 'none'}`);
+    }
+
+    log('cache', 'ok', {
+        first: missCache,
+        second: hitCache,
+        store: cacheStore
+    });
+
+    const searchResponse = await expectOk('admin search', async () => {
+        return axios.get(`${API_BASE}/admin/users`, {
+            params: { page: 1, limit: 5, search: SEARCH_TERM },
+            headers: authHeaders,
+            timeout: 20000
+        });
+    });
+
+    const searchBackend = searchResponse.headers['x-search-backend'] || 'unknown';
+    if (!searchResponse.data?.success || !Array.isArray(searchResponse.data.users)) {
+        throw new Error(`admin search returned unexpected payload: ${JSON.stringify(searchResponse.data)}`);
+    }
+
+    log('search', 'ok', {
+        term: SEARCH_TERM,
+        backend: searchBackend,
+        count: searchResponse.data.users.length
+    });
+
+    log('verify', 'complete', { ok: true });
+}
+
+main().catch((error) => {
+    console.error(`[verify] FAILED ${error.message}`);
+    process.exit(1);
+});
