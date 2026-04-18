@@ -83,9 +83,34 @@ Environment knobs:
 - HIT avg: 0.2 ms (10 runs)
 - Speedup (MISS/HIT): 5594.1x
 
+## Results (latest managed Redis run)
+
+- Date / machine: 2026-04-18 — macOS (local app against managed Redis)
+- Redis URL type (local / hosted): hosted Upstash (`rediss://...`)
+
+### Nominatim geocode
+
+- MISS: 1089.5 ms
+- HIT avg: 45.4 ms (5 runs)
+- Speedup (MISS/HIT): 24.0x
+
+### OSRM route
+
+- MISS: 1027.3 ms
+- HIT avg: 35.9 ms (5 runs)
+- Speedup (MISS/HIT): 28.6x
+
+### Interpretation
+
+- Local Redis is the fastest option because it avoids network latency.
+- Managed Redis is slower than local Redis, but it still eliminates the expensive external API recomputation.
+- The deployment environment should use managed Redis because the cache survives across instances and materially improves response time over repeated misses.
+
 ## DB optimization note
 
 Indexes were added to support B2B/cohort queries:
 
 - `models/User.js`: index on `corporate.organization`
 - `models/Booking.js`: compound index on `(passenger, status, createdAt)`
+
+For the broader DB/index/query-plan evidence, see [DB_OPTIMIZATION_REPORT.md](/Users/mohanganesh/wbd/LoopLane/DB_OPTIMIZATION_REPORT.md).

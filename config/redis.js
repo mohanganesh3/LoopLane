@@ -7,6 +7,70 @@
  */
 
 let client = null;
+let connectPromise = null;
+
+function ensureRedisConnect(redis) {
+    if (!redis) return null;
+
+    if (!connectPromise) {
+        connectPromise = redis.connect()
+            .catch(() => {})
+            .finally(() => {
+                connectPromise = null;
+            });
+    }
+
+    return connectPromise;
+}
+
+async function waitForRedisReady(redis = getRedisClient(), timeoutMs = 1000) {
+    if (!redis) return false;
+    if (redis.status === 'ready') return true;
+
+    if (redis.status === 'wait') {
+        ensureRedisConnect(redis);
+    }
+
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+            cleanup();
+            resolve(redis.status === 'ready');
+        }, timeoutMs);
+
+        function cleanup() {
+            clearTimeout(timer);
+            redis.off('ready', onReady);
+            redis.off('error', onError);
+            redis.off('end', onEnd);
+            redis.off('close', onClose);
+        }
+
+        function onReady() {
+            cleanup();
+            resolve(true);
+        }
+
+        function onError() {
+            cleanup();
+            resolve(false);
+        }
+
+        function onEnd() {
+            cleanup();
+            resolve(false);
+        }
+
+        function onClose() {
+            cleanup();
+            resolve(false);
+        }
+
+        redis.once('ready', onReady);
+        redis.once('error', onError);
+        redis.once('end', onEnd);
+        redis.once('close', onClose);
+    });
+}
 
 function getRedisClient() {
     if (client) return client;
@@ -31,7 +95,7 @@ function getRedisClient() {
         });
 
         // Attempt connection but don't block startup
-        client.connect().catch(() => {});
+        ensureRedisConnect(client);
     } catch (err) {
         // ioredis not installed — return null sentinel
         console.warn('[Redis] ioredis not installed — Redis features disabled');
@@ -41,4 +105,4 @@ function getRedisClient() {
     return client;
 }
 
-module.exports = { getRedisClient };
+module.exports = { getRedisClient, waitForRedisReady };

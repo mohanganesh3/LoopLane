@@ -8,7 +8,10 @@
  */
 
 const crypto = require('crypto');
-const { getRedisClient } = require('../config/redis');
+const redisConfig = require('../config/redis');
+
+const { getRedisClient } = redisConfig;
+const waitForRedisReady = redisConfig.waitForRedisReady || (async () => true);
 
 const memoryCache = new Map();
 const DEFAULT_MEMORY_MAX_ENTRIES = 500;
@@ -66,6 +69,8 @@ async function getFromRedis(key) {
     if (!redis) return null;
 
     try {
+        const ready = await waitForRedisReady(redis, 1000);
+        if (!ready) return null;
         const raw = await redis.get(key);
         if (!raw) return null;
         return JSON.parse(raw);
@@ -79,6 +84,8 @@ async function setInRedis(key, value, ttlSeconds) {
     if (!redis) return false;
 
     try {
+        const ready = await waitForRedisReady(redis, 1000);
+        if (!ready) return false;
         if (!ttlSeconds || ttlSeconds <= 0) {
             await redis.set(key, JSON.stringify(value));
         } else {
@@ -97,6 +104,8 @@ async function invalidateCacheKey(key) {
     if (!redis) return;
 
     try {
+        const ready = await waitForRedisReady(redis, 1000);
+        if (!ready) return;
         await redis.del(key);
     } catch {
         // ignore

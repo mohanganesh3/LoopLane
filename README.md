@@ -47,6 +47,15 @@ BASE_URL=https://looplane.onrender.com npm run verify:system
 - cache behavior on `/api/route` (`MISS` then `HIT`)
 - admin search backend visibility via `X-Search-Backend`
 
+## Review Artifacts
+
+These files map directly to the evaluation checklist:
+
+- [END_REVIEW_GUIDE.md](/Users/mohanganesh/wbd/LoopLane/END_REVIEW_GUIDE.md)
+- [DB_OPTIMIZATION_REPORT.md](/Users/mohanganesh/wbd/LoopLane/DB_OPTIMIZATION_REPORT.md)
+- [REDIS_CACHING_REPORT.md](/Users/mohanganesh/wbd/LoopLane/REDIS_CACHING_REPORT.md)
+- [SOLR_SEARCH.md](/Users/mohanganesh/wbd/LoopLane/SOLR_SEARCH.md)
+
 ## Option B: Run with Docker (Mongo + Redis + API)
 
 This brings up **MongoDB**, **Redis**, **Solr**, and the **LoopLane API** (serving the built client).

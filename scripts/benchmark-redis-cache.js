@@ -10,7 +10,7 @@
 require('dotenv').config();
 
 const axios = require('axios');
-const { getRedisClient } = require('../config/redis');
+const { getRedisClient, waitForRedisReady } = require('../config/redis');
 const { buildCacheKey, getOrSetJson, invalidateCacheKey } = require('../utils/redisCache');
 
 const NOMINATIM_URL = process.env.NOMINATIM_API_URL || 'https://nominatim.openstreetmap.org';
@@ -22,59 +22,6 @@ function nowMs() {
     return Number(process.hrtime.bigint()) / 1e6;
 }
 
-async function waitForRedisReady(redis, timeoutMs = 2000) {
-    if (!redis) throw new Error('Redis client not available');
-    if (redis.status === 'ready') return;
-
-    // If the shared client was created with lazyConnect, ensure a connect attempt is in-flight.
-    if (redis.status === 'wait') {
-        try {
-            await redis.connect();
-        } catch {
-            // Ignore "already connecting/connected" style errors.
-        }
-    }
-
-    await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error(`Timed out waiting for Redis to become ready (status=${redis.status})`));
-        }, timeoutMs);
-
-        function cleanup() {
-            clearTimeout(timer);
-            redis.off('ready', onReady);
-            redis.off('error', onError);
-            redis.off('end', onEnd);
-            redis.off('close', onClose);
-        }
-
-        function onReady() {
-            cleanup();
-            resolve();
-        }
-
-        function onError(err) {
-            cleanup();
-            reject(err);
-        }
-
-        function onEnd() {
-            cleanup();
-            reject(new Error('Redis connection ended while waiting for ready'));
-        }
-
-        function onClose() {
-            cleanup();
-            reject(new Error('Redis connection closed while waiting for ready'));
-        }
-
-        redis.once('ready', onReady);
-        redis.once('error', onError);
-        redis.once('end', onEnd);
-        redis.once('close', onClose);
-    });
-}
-
 async function assertRedisReady() {
     const redis = getRedisClient();
     if (!redis) {
@@ -83,7 +30,10 @@ async function assertRedisReady() {
 
     // Our shared Redis client is configured to fail fast when not ready (enableOfflineQueue=false).
     // Wait for the underlying connection to be established before issuing PING.
-    await waitForRedisReady(redis, 3000);
+    const ready = await waitForRedisReady(redis, 3000);
+    if (!ready) {
+        throw new Error(`Timed out waiting for Redis to become ready (status=${redis.status})`);
+    }
 
     try {
         const pong = await redis.ping();
