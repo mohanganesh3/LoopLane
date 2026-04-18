@@ -31,13 +31,6 @@ function log(step, message, data) {
     console.log(`[${step}] ${message}${suffix}`);
 }
 
-function buildCookieHeader(setCookieHeaders = []) {
-    return setCookieHeaders
-        .map((entry) => String(entry).split(';')[0])
-        .filter(Boolean)
-        .join('; ');
-}
-
 async function expectOk(label, fn) {
     try {
         return await fn();
@@ -81,10 +74,8 @@ async function main() {
     }
 
     const accessToken = loginResponse.data.accessToken;
-    const cookieHeader = buildCookieHeader(loginResponse.headers['set-cookie']);
     const authHeaders = {
-        Authorization: `Bearer ${accessToken}`,
-        ...(cookieHeader ? { Cookie: cookieHeader } : {})
+        Authorization: `Bearer ${accessToken}`
     };
 
     log('auth', 'ok', {
