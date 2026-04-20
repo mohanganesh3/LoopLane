@@ -38,14 +38,7 @@ const getTransporter = () => {
                 console.log('✅ SMTP transporter verified — emails will send');
             })
             .catch((err) => {
-                console.warn(`⚠️  SMTP verification failed — emails will be logged to console instead. Reason: ${err.message}`);
-                // Replace with mock so no further connection attempts are made
-                _transporter = {
-                    sendMail: async (mailOptions) => {
-                        console.log('📧 [MOCK EMAIL - SMTP unavailable] To:', mailOptions.to, '| Subject:', mailOptions.subject);
-                        return { messageId: `mock-smtp-fail-${Date.now()}` };
-                    }
-                };
+                console.warn(`⚠️  SMTP verification warning — initial connection test failed, but will still attempt to send: ${err.message}`);
             });
 
         return _transporter;
