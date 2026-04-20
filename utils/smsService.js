@@ -6,7 +6,7 @@
 exports.sendSMS = async (phoneNumber, message) => {
     try {
         if (process.env.SMS_PROVIDER === 'twilio') {
-            const client = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+            const client = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
             const res = await client.messages.create({
                 body: message,
                 to: phoneNumber,
